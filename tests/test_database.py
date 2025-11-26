@@ -9,47 +9,16 @@ Tests database connection management including:
 
 from __future__ import annotations
 
-import logging
 from unittest.mock import AsyncMock, Mock, patch
 
 import asyncpg
 import pytest
 
-from github_metrics.config import DatabaseConfig, MetricsConfig
 from github_metrics.database import DatabaseManager, get_database_manager
 
 
 class TestDatabaseManager:
     """Tests for DatabaseManager class."""
-
-    @pytest.fixture
-    def db_config(self) -> DatabaseConfig:
-        """Create test database configuration."""
-        return DatabaseConfig(
-            host="localhost",
-            port=5432,
-            name="test_db",
-            user="test_user",
-            password="test_pass",  # pragma: allowlist secret
-            pool_size=10,
-        )
-
-    @pytest.fixture
-    def mock_logger(self) -> Mock:
-        """Create mock logger."""
-        return Mock(spec=logging.Logger)
-
-    @pytest.fixture
-    def mock_metrics_config(self, db_config: DatabaseConfig) -> Mock:
-        """Create mock MetricsConfig."""
-        config = Mock(spec=MetricsConfig)
-        config.database = db_config
-        return config
-
-    @pytest.fixture
-    def db_manager(self, mock_metrics_config: Mock, mock_logger: Mock) -> DatabaseManager:
-        """Create DatabaseManager instance with mocked dependencies."""
-        return DatabaseManager(config=mock_metrics_config, logger=mock_logger)
 
     async def test_connect_creates_pool(
         self,
@@ -282,44 +251,18 @@ class TestGetDatabaseManager:
         assert db_manager.logger is not None
 
     def test_get_database_manager_with_config(self) -> None:
-        """Test factory function uses configuration."""
+        """Test factory function uses configuration from environment variables."""
+        # Environment variables are already set by set_test_env_vars fixture in conftest.py
+        # which sets METRICS_DB_NAME=test_metrics and METRICS_DB_USER=test_user
         db_manager = get_database_manager()
 
+        # Verify the config was loaded from the environment variables
         assert db_manager.config.database.name == "test_metrics"
         assert db_manager.config.database.user == "test_user"
 
 
 class TestDatabaseManagerErrorHandling:
     """Additional tests for DatabaseManager error handling and edge cases."""
-
-    @pytest.fixture
-    def db_config(self) -> DatabaseConfig:
-        """Create test database configuration."""
-        return DatabaseConfig(
-            host="localhost",
-            port=5432,
-            name="test_db",
-            user="test_user",
-            password="test_pass",  # pragma: allowlist secret
-            pool_size=10,
-        )
-
-    @pytest.fixture
-    def mock_logger(self) -> Mock:
-        """Create mock logger."""
-        return Mock(spec=logging.Logger)
-
-    @pytest.fixture
-    def mock_metrics_config(self, db_config: DatabaseConfig) -> Mock:
-        """Create mock MetricsConfig."""
-        config = Mock(spec=MetricsConfig)
-        config.database = db_config
-        return config
-
-    @pytest.fixture
-    def db_manager(self, mock_metrics_config: Mock, mock_logger: Mock) -> DatabaseManager:
-        """Create DatabaseManager instance with mocked dependencies."""
-        return DatabaseManager(config=mock_metrics_config, logger=mock_logger)
 
     async def test_connect_connection_failure_logs_exception(
         self,
@@ -445,8 +388,7 @@ class TestDatabaseManagerErrorHandling:
 
         with patch("asyncpg.create_pool", new=AsyncMock(return_value=mock_pool)):
             with pytest.raises(Exception, match="Test error"):
-                async with db_manager as manager:
-                    assert manager.pool is mock_pool
+                async with db_manager:
                     raise Exception("Test error")
 
         # Pool should still be closed after exception

@@ -189,7 +189,9 @@ class MetricsTracker:
 
         except Exception:
             self.logger.exception(
-                f"Failed to track webhook event: delivery_id={delivery_id}, "
-                f"repository={repository}, event_type={event_type}"
+                "Failed to track webhook event: delivery_id=%s, repository=%s, event_type=%s",
+                delivery_id,
+                repository,
+                event_type,
             )
             raise

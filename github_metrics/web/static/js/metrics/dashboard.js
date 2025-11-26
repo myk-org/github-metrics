@@ -1829,13 +1829,17 @@ class MetricsDashboard {
      * Set up pagination event listeners
      */
     setupPaginationListeners() {
-        // Page size selectors
+        // Page size selectors - debounced to prevent rapid consecutive API calls
+        const debouncedPageSizeChange = window.MetricsUtils?.debounce((section, newSize) => {
+            this.changePageSize(section, newSize);
+        }, 300) || ((section, newSize) => this.changePageSize(section, newSize));
+
         document.addEventListener('change', (e) => {
             if (e.target.classList.contains('page-size-select')) {
                 const section = e.target.dataset.section; // kebab-case from HTML
                 const stateKey = this.toCamelCase(section); // Convert to camelCase
                 const newSize = parseInt(e.target.value, 10);
-                this.changePageSize(stateKey, newSize);
+                debouncedPageSizeChange(stateKey, newSize);
             }
         });
 

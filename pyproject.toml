@@ -69,11 +69,11 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [dependency-groups]
-dev = [
-  "ipdb>=0.13.13",
-  "ipython>=8.12.3",
-  "types-colorama>=0.4.15.20240311",
-  "types-pyyaml>=6.0.12.20250516",
-  "types-requests>=2.32.4.20250611",
+dev = ["ipdb>=0.13.13", "ipython>=8.12.3"]
+tests = [
+  "pytest-asyncio>=0.26.0",
+  "pytest-xdist>=3.7.0",
+  "pytest-cov>=6.0.0",
+  "pytest-mock>=3.14.0",
+  "pytest>=8.3.3",
 ]
-tests = ["psutil>=7.0.0", "pytest-asyncio>=0.26.0", "pytest-xdist>=3.7.0"]

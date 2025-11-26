@@ -73,9 +73,9 @@ async def setup_webhooks(
     # Create GitHub API client
     try:
         github_api = github.Github(auth=github.Auth.Token(config.github.token))
-    except github.GithubException as ex:
-        logger.exception(f"Failed to authenticate with GitHub: {ex}")
-        return {"error": (False, f"Failed to authenticate: {ex}")}
+    except github.GithubException:
+        logger.exception("Failed to authenticate with GitHub")
+        return {"error": (False, "Failed to authenticate with GitHub")}
 
     # Process each repository
     for repo_name in config.github.repositories:

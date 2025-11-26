@@ -11,9 +11,12 @@ import traceback
 from pathlib import Path
 
 import uvicorn
+from simple_logger.logger import get_logger
 
 from github_metrics.config import get_config
 from github_metrics.webhook_setup import setup_webhooks
+
+LOGGER = get_logger(name="github_metrics.entrypoint")
 
 
 def run_database_migrations() -> None:
@@ -63,7 +66,23 @@ if __name__ == "__main__":
     run_database_migrations()
 
     # Setup webhooks if METRICS_SETUP_WEBHOOK=true
-    asyncio.run(setup_webhooks())
+    webhook_results = asyncio.run(setup_webhooks())
+
+    # Log webhook setup results
+    if webhook_results:
+        success_count = sum(1 for success, _ in webhook_results.values() if success)
+        failure_count = len(webhook_results) - success_count
+        if failure_count > 0:
+            LOGGER.warning(
+                "Webhook setup completed with failures: %d succeeded, %d failed",
+                success_count,
+                failure_count,
+            )
+            for repo, (success, message) in webhook_results.items():
+                if not success:
+                    LOGGER.error("Webhook setup failed for %s: %s", repo, message)
+        else:
+            LOGGER.info("Webhook setup completed successfully for %d repositories", success_count)
 
     # Load configuration
     config = get_config()

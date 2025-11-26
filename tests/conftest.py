@@ -14,15 +14,17 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import os
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi.testclient import TestClient
 
 from github_metrics.app import app
-from github_metrics.config import MetricsConfig
+from github_metrics.config import DatabaseConfig, MetricsConfig
+from github_metrics.database import DatabaseManager
 
 
 # Set test environment variables before any imports
@@ -174,3 +176,37 @@ def test_client() -> TestClient:
     the database and other dependencies in app lifespan.
     """
     return TestClient(app)
+
+
+# Database test fixtures
+@pytest.fixture
+def db_config() -> DatabaseConfig:
+    """Create test database configuration."""
+    return DatabaseConfig(
+        host="localhost",
+        port=5432,
+        name="test_db",
+        user="test_user",
+        password="test_pass",  # pragma: allowlist secret
+        pool_size=10,
+    )
+
+
+@pytest.fixture
+def mock_logger() -> Mock:
+    """Create mock logger."""
+    return Mock(spec=logging.Logger)
+
+
+@pytest.fixture
+def mock_metrics_config(db_config: DatabaseConfig) -> Mock:
+    """Create mock MetricsConfig."""
+    config = Mock(spec=MetricsConfig)
+    config.database = db_config
+    return config
+
+
+@pytest.fixture
+def db_manager(mock_metrics_config: Mock, mock_logger: Mock) -> DatabaseManager:
+    """Create DatabaseManager instance with mocked dependencies."""
+    return DatabaseManager(config=mock_metrics_config, logger=mock_logger)

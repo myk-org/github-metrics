@@ -98,7 +98,7 @@ class GitHubConfig:
 
     token: str
     webhook_url: str
-    repositories: list[str]
+    repositories: tuple[str, ...]
 
     @property
     def has_token(self) -> bool:
@@ -163,7 +163,7 @@ class MetricsConfig:
         self.github = GitHubConfig(
             token=github_token.strip(),
             webhook_url=webhook_url,
-            repositories=[r.strip() for r in repositories_str.split(",") if r.strip()],
+            repositories=tuple(r.strip() for r in repositories_str.split(",") if r.strip()),
         )
 
 

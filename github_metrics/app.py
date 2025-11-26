@@ -274,7 +274,7 @@ async def receive_webhook(request: Request) -> dict[str, str]:
                 pr_number=pr_number,
             )
         except Exception:
-            LOGGER.exception(f"Failed to track webhook event: {delivery_id}")
+            LOGGER.exception("Failed to track webhook event", extra={"delivery_id": delivery_id})
             # Don't fail the webhook - just log the error
 
     LOGGER.info(

@@ -162,7 +162,12 @@ function formatNumber(num) {
         return '-';
     }
 
-    return num.toLocaleString('en-US');
+    try {
+        return num.toLocaleString();
+    } catch {
+        // Fallback to basic formatting if toLocaleString fails
+        return num.toString();
+    }
 }
 
 /**
@@ -399,6 +404,7 @@ function debounce(func, delay = 300) {
 function throttle(func, limit = 300) {
     let inThrottle;
     let lastRan;
+    let pendingTimeout;
 
     return function throttled(...args) {
         if (!inThrottle) {
@@ -409,13 +415,18 @@ function throttle(func, limit = 300) {
                 inThrottle = false;
             }, limit);
         } else {
+            // Clear any existing pending timeout to prevent duplicates
+            if (pendingTimeout) {
+                clearTimeout(pendingTimeout);
+            }
             // Schedule trailing call with remaining time
             const remaining = Math.max(0, limit - (Date.now() - lastRan));
-            setTimeout(() => {
+            pendingTimeout = setTimeout(() => {
                 if ((Date.now() - lastRan) >= limit) {
                     func.apply(this, args);
                     lastRan = Date.now();
                 }
+                pendingTimeout = null;
             }, remaining);
         }
     };

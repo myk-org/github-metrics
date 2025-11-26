@@ -88,13 +88,13 @@ class TestGitHubConfig:
         config = GitHubConfig(
             token="ghp_test123",
             webhook_url="https://example.com/webhook",
-            repositories=["org/repo"],
+            repositories=("org/repo",),
         )
         assert config.has_token is True
 
     def test_has_token_without_token(self) -> None:
         """Test has_token returns False without token."""
-        config = GitHubConfig(token="", webhook_url="", repositories=[])
+        config = GitHubConfig(token="", webhook_url="", repositories=())
         assert config.has_token is False
 
 
@@ -134,7 +134,7 @@ class TestMetricsConfig:
 
         try:
             config = MetricsConfig()
-            assert config.github.repositories == ["org1/repo1", "org2/repo2"]
+            assert config.github.repositories == ("org1/repo1", "org2/repo2")
         finally:
             # Clean up
             os.environ.pop("METRICS_REPOSITORIES", None)
