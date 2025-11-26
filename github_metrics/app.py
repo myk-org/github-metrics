@@ -92,7 +92,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
                 try:
                     ip_ranges.append(ipaddress.ip_network(ip_range))
                 except ValueError:
-                    LOGGER.warning(f"Invalid IP range from GitHub allowlist, skipping: {ip_range}")
+                    LOGGER.warning("Invalid IP range from GitHub allowlist, skipping", extra={"ip_range": ip_range})
             LOGGER.info(f"Loaded {len(github_ips)} GitHub IP ranges")
         except Exception:
             LOGGER.exception("Failed to load GitHub IP allowlist")
@@ -106,7 +106,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
                 try:
                     ip_ranges.append(ipaddress.ip_network(ip_range))
                 except ValueError:
-                    LOGGER.warning(f"Invalid IP range from Cloudflare allowlist, skipping: {ip_range}")
+                    LOGGER.warning("Invalid IP range from Cloudflare allowlist, skipping", extra={"ip_range": ip_range})
             LOGGER.info(f"Loaded {len(cloudflare_ips)} Cloudflare IP ranges")
         except Exception:
             LOGGER.exception("Failed to load Cloudflare IP allowlist")
@@ -114,7 +114,11 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
 
     allowed_ips = tuple(ip_ranges)
     LOGGER.info(
-        f"IP verification: github={config.webhook.verify_github_ips}, cloudflare={config.webhook.verify_cloudflare_ips}"
+        "IP verification configured",
+        extra={
+            "verify_github_ips": config.webhook.verify_github_ips,
+            "verify_cloudflare_ips": config.webhook.verify_cloudflare_ips,
+        },
     )
 
     # Initialize database manager
@@ -274,12 +278,25 @@ async def receive_webhook(request: Request) -> dict[str, str]:
                 pr_number=pr_number,
             )
         except Exception:
-            LOGGER.exception("Failed to track webhook event", extra={"delivery_id": delivery_id})
+            LOGGER.exception(
+                "Failed to track webhook event",
+                extra={
+                    "delivery_id": delivery_id,
+                    "repository": repository,
+                    "event_type": event_type,
+                    "action": action,
+                },
+            )
             # Don't fail the webhook - just log the error
 
     LOGGER.info(
-        f"Webhook received: delivery_id={delivery_id}, repository={repository}, "
-        f"event_type={event_type}, action={action}"
+        "Webhook received",
+        extra={
+            "delivery_id": delivery_id,
+            "repository": repository,
+            "event_type": event_type,
+            "action": action,
+        },
     )
 
     return {"status": "ok", "delivery_id": delivery_id}
