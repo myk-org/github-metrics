@@ -480,7 +480,7 @@ async def get_webhook_event_by_id(delivery_id: str) -> dict[str, Any]:
     except HTTPException:
         raise
     except Exception as ex:
-        LOGGER.exception(f"Failed to fetch webhook event {delivery_id}")
+        LOGGER.exception("Failed to fetch webhook event", extra={"delivery_id": delivery_id})
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch webhook event",

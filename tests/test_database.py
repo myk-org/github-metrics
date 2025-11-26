@@ -387,9 +387,9 @@ class TestDatabaseManagerErrorHandling:
         mock_pool = AsyncMock(spec=asyncpg.Pool)
 
         with patch("asyncpg.create_pool", new=AsyncMock(return_value=mock_pool)):
-            with pytest.raises(Exception, match="Test error"):
+            with pytest.raises(RuntimeError, match="Test error"):
                 async with db_manager:
-                    raise Exception("Test error")
+                    raise RuntimeError("Test error")
 
         # Pool should still be closed after exception
         mock_pool.close.assert_called_once()

@@ -34,6 +34,7 @@ from __future__ import annotations
 import os
 import threading
 from dataclasses import dataclass
+from urllib.parse import quote_plus
 
 
 def _parse_bool(value: str) -> bool:
@@ -66,12 +67,16 @@ class DatabaseConfig:
     @property
     def connection_url(self) -> str:
         """Build asyncpg connection URL."""
-        return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+        user = quote_plus(self.user)
+        password = quote_plus(self.password)
+        return f"postgresql://{user}:{password}@{self.host}:{self.port}/{self.name}"
 
     @property
     def sqlalchemy_url(self) -> str:
         """Build SQLAlchemy async connection URL."""
-        return f"postgresql+asyncpg://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+        user = quote_plus(self.user)
+        password = quote_plus(self.password)
+        return f"postgresql+asyncpg://{user}:{password}@{self.host}:{self.port}/{self.name}"
 
 
 @dataclass(frozen=True)
@@ -193,3 +198,9 @@ def get_config() -> MetricsConfig:
             if _config is None:
                 _config = MetricsConfig()
     return _config
+
+
+def _reset_config_for_testing() -> None:
+    """Reset config singleton for testing purposes only."""
+    global _config
+    _config = None

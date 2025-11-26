@@ -34,7 +34,7 @@ class TestSetupWebhooks:
         config.github = GitHubConfig(
             token="ghp_test_token_123",  # pragma: allowlist secret
             webhook_url="https://example.com/webhook",
-            repositories=["testorg/repo1", "testorg/repo2"],
+            repositories=("testorg/repo1", "testorg/repo2"),
         )
         config.webhook = WebhookConfig(
             secret="webhook_secret",  # pragma: allowlist secret
@@ -95,7 +95,7 @@ class TestSetupWebhooks:
     ) -> None:
         """Test webhook setup fails without GitHub token."""
         config = Mock(spec=MetricsConfig)
-        config.github = GitHubConfig(token="", webhook_url="", repositories=[])
+        config.github = GitHubConfig(token="", webhook_url="", repositories=())
         config.webhook = WebhookConfig(secret="", verify_github_ips=False, verify_cloudflare_ips=False)
 
         os.environ["METRICS_SETUP_WEBHOOK"] = "true"
@@ -119,7 +119,7 @@ class TestSetupWebhooks:
         config.github = GitHubConfig(
             token="ghp_test_token",  # pragma: allowlist secret
             webhook_url="",
-            repositories=["testorg/repo1"],
+            repositories=("testorg/repo1",),
         )
         config.webhook = WebhookConfig(secret="", verify_github_ips=False, verify_cloudflare_ips=False)
 
@@ -144,7 +144,7 @@ class TestSetupWebhooks:
         config.github = GitHubConfig(
             token="ghp_test_token",  # pragma: allowlist secret
             webhook_url="https://example.com/webhook",
-            repositories=[],
+            repositories=(),
         )
         config.webhook = WebhookConfig(secret="", verify_github_ips=False, verify_cloudflare_ips=False)
 

@@ -13,13 +13,13 @@ import os
 
 import pytest
 
-import github_metrics.config
 from github_metrics.config import (
     DatabaseConfig,
     GitHubConfig,
     MetricsConfig,
     ServerConfig,
     WebhookConfig,
+    _reset_config_for_testing,
     get_config,
 )
 
@@ -165,7 +165,7 @@ class TestGetConfig:
     def test_get_config_returns_singleton(self) -> None:
         """Test get_config returns same instance on multiple calls."""
         # Reset singleton
-        github_metrics.config._config = None
+        _reset_config_for_testing()
 
         config1 = get_config()
         config2 = get_config()
