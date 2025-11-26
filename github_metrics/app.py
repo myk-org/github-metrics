@@ -1213,7 +1213,8 @@ async def get_metrics_contributors(
     # Count query for PR Creators
     pr_creators_count_query = f"""
         WITH pr_creators AS (
-            SELECT DISTINCT ON (pr_number)
+            SELECT DISTINCT ON (repository, pr_number)
+                repository,
                 pr_number,
                 CASE event_type
                     WHEN 'pull_request' THEN payload->'pull_request'->'user'->>'login'
@@ -1235,7 +1236,7 @@ async def get_metrics_contributors(
               )
               {time_filter}
               {repository_filter}
-            ORDER BY pr_number, created_at ASC
+            ORDER BY repository, pr_number, created_at ASC
         )
         SELECT COUNT(DISTINCT pr_creator) as total
         FROM pr_creators
@@ -1245,7 +1246,8 @@ async def get_metrics_contributors(
     # Query PR Creators (from any event with pr_number)
     pr_creators_query = f"""
         WITH pr_creators AS (
-            SELECT DISTINCT ON (pr_number)
+            SELECT DISTINCT ON (repository, pr_number)
+                repository,
                 pr_number,
                 CASE event_type
                     WHEN 'pull_request' THEN payload->'pull_request'->'user'->>'login'
@@ -1267,7 +1269,7 @@ async def get_metrics_contributors(
               )
               {time_filter}
               {repository_filter}
-            ORDER BY pr_number, created_at ASC
+            ORDER BY repository, pr_number, created_at ASC
         ),
         user_prs AS (
             SELECT
@@ -1280,7 +1282,7 @@ async def get_metrics_contributors(
                     AND w.payload->'pull_request'->>'merged' = 'false'
                 ) as is_closed
             FROM webhooks w
-            INNER JOIN pr_creators pc ON w.pr_number = pc.pr_number
+            INNER JOIN pr_creators pc ON w.repository = pc.repository AND w.pr_number = pc.pr_number
             WHERE w.pr_number IS NOT NULL
               {time_filter}
               {repository_filter}
@@ -1527,12 +1529,12 @@ async def get_metrics_contributors(
         raise
     except HTTPException:
         raise
-    except Exception:
+    except Exception as ex:
         LOGGER.exception("Failed to fetch contributor metrics from database")
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch contributor metrics",
-        ) from None
+        ) from ex
 
 
 @app.get("/api/metrics/user-prs", operation_id="get_user_pull_requests")
@@ -1720,12 +1722,12 @@ async def get_user_pull_requests(
     except asyncio.CancelledError:
         LOGGER.debug("User pull requests request was cancelled")
         raise
-    except Exception:
+    except Exception as ex:
         LOGGER.exception("Failed to fetch user pull requests from database")
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch user pull requests",
-        ) from None
+        ) from ex
 
 
 @app.get("/api/metrics/trends", operation_id="get_metrics_trends")
