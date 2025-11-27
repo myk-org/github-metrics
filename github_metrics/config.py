@@ -111,6 +111,13 @@ class GitHubConfig:
         return bool(self.token)
 
 
+@dataclass(frozen=True)
+class MCPConfig:
+    """MCP server configuration."""
+
+    enabled: bool
+
+
 class MetricsConfig:
     """
     Configuration for GitHub Metrics service.
@@ -169,6 +176,11 @@ class MetricsConfig:
             token=github_token.strip(),
             webhook_url=webhook_url,
             repositories=tuple(r.strip() for r in repositories_str.split(",") if r.strip()),
+        )
+
+        # MCP server configuration
+        self.mcp = MCPConfig(
+            enabled=_parse_bool(os.environ.get("METRICS_MCP_ENABLED", "true")),
         )
 
 

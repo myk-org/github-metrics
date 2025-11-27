@@ -15,6 +15,7 @@ GitHub Metrics is a FastAPI-based service that receives GitHub webhooks, stores 
 - **CI/CD Monitoring**: Monitor check runs, test results, and pipeline execution
 - **API Usage Tracking**: Track GitHub API rate limit consumption and optimization
 - **REST API**: Query metrics programmatically with filtering and pagination
+- **MCP Server**: Expose API endpoints as MCP tools for LLM integration (Claude, etc.)
 - **Security**: IP allowlist verification (GitHub/Cloudflare), webhook signature validation (HMAC SHA256)
 - **Automatic Webhook Setup**: Optionally auto-create webhooks on startup for configured repositories
 
@@ -47,6 +48,7 @@ http://localhost:8080/dashboard
 ```
 
 The service will automatically:
+
 - Run database migrations
 - Start the metrics server on port 8080
 
@@ -61,7 +63,7 @@ services:
     environment:
       - POSTGRES_DB=github_metrics
       - POSTGRES_USER=metrics
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}  # Set in .env file
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD} # Set in .env file
     volumes:
       - "./postgres-data:/var/lib/postgresql/data"
     ports:
@@ -113,51 +115,57 @@ All configuration is done via environment variables. No configuration files are 
 
 ### Required Environment Variables
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `METRICS_DB_NAME` | PostgreSQL database name | `github_metrics` |
-| `METRICS_DB_USER` | PostgreSQL username | `metrics` |
-| `METRICS_DB_PASSWORD` | PostgreSQL password | `secure-password` |
+| Variable              | Description              | Example           |
+| --------------------- | ------------------------ | ----------------- |
+| `METRICS_DB_NAME`     | PostgreSQL database name | `github_metrics`  |
+| `METRICS_DB_USER`     | PostgreSQL username      | `metrics`         |
+| `METRICS_DB_PASSWORD` | PostgreSQL password      | `secure-password` |
 
 ### Database Configuration
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `METRICS_DB_HOST` | Database host | `localhost` |
-| `METRICS_DB_PORT` | Database port | `5432` |
-| `METRICS_DB_POOL_SIZE` | Connection pool size | `20` |
+| Variable               | Description          | Default     |
+| ---------------------- | -------------------- | ----------- |
+| `METRICS_DB_HOST`      | Database host        | `localhost` |
+| `METRICS_DB_PORT`      | Database port        | `5432`      |
+| `METRICS_DB_POOL_SIZE` | Connection pool size | `20`        |
 
 ### Server Configuration
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `METRICS_SERVER_HOST` | Server bind host | `0.0.0.0` |
-| `METRICS_SERVER_PORT` | Server bind port | `8080` |
-| `METRICS_SERVER_WORKERS` | Uvicorn workers | `4` |
+| Variable                 | Description      | Default   |
+| ------------------------ | ---------------- | --------- |
+| `METRICS_SERVER_HOST`    | Server bind host | `0.0.0.0` |
+| `METRICS_SERVER_PORT`    | Server bind port | `8080`    |
+| `METRICS_SERVER_WORKERS` | Uvicorn workers  | `4`       |
+
+### MCP Server Configuration
+
+| Variable              | Description                           | Default |
+| --------------------- | ------------------------------------- | ------- |
+| `METRICS_MCP_ENABLED` | Enable MCP server for LLM integration | `true`  |
 
 ### Security Configuration
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `METRICS_API_KEYS` | Comma-separated API keys for authentication | Empty (no auth) |
-| `METRICS_CORS_ORIGINS` | Comma-separated CORS origins | Empty |
+| Variable               | Description                                 | Default         |
+| ---------------------- | ------------------------------------------- | --------------- |
+| `METRICS_API_KEYS`     | Comma-separated API keys for authentication | Empty (no auth) |
+| `METRICS_CORS_ORIGINS` | Comma-separated CORS origins                | Empty           |
 
 ### Webhook Security Configuration
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `METRICS_WEBHOOK_SECRET` | Secret for validating webhook signatures (HMAC SHA256) | Empty (no validation) |
-| `METRICS_VERIFY_GITHUB_IPS` | Verify requests from GitHub IP allowlist | `false` |
-| `METRICS_VERIFY_CLOUDFLARE_IPS` | Verify requests from Cloudflare IP allowlist | `false` |
+| Variable                        | Description                                            | Default               |
+| ------------------------------- | ------------------------------------------------------ | --------------------- |
+| `METRICS_WEBHOOK_SECRET`        | Secret for validating webhook signatures (HMAC SHA256) | Empty (no validation) |
+| `METRICS_VERIFY_GITHUB_IPS`     | Verify requests from GitHub IP allowlist               | `false`               |
+| `METRICS_VERIFY_CLOUDFLARE_IPS` | Verify requests from Cloudflare IP allowlist           | `false`               |
 
 ### Webhook Setup Configuration
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `METRICS_SETUP_WEBHOOK` | Enable automatic webhook creation on startup | `false` |
-| `METRICS_GITHUB_TOKEN` | GitHub token for API access (requires repo admin permissions) | Empty |
-| `METRICS_WEBHOOK_URL` | URL where webhooks will be delivered | Empty |
-| `METRICS_REPOSITORIES` | Comma-separated list of repositories (org/repo format) | Empty |
+| Variable                | Description                                                   | Default |
+| ----------------------- | ------------------------------------------------------------- | ------- |
+| `METRICS_SETUP_WEBHOOK` | Enable automatic webhook creation on startup                  | `false` |
+| `METRICS_GITHUB_TOKEN`  | GitHub token for API access (requires repo admin permissions) | Empty   |
+| `METRICS_WEBHOOK_URL`   | URL where webhooks will be delivered                          | Empty   |
+| `METRICS_REPOSITORIES`  | Comma-separated list of repositories (org/repo format)        | Empty   |
 
 ## API Endpoints
 
@@ -170,6 +178,7 @@ GET /health
 Returns service health status and database connectivity.
 
 **Response:**
+
 ```json
 {
   "status": "healthy",
@@ -187,11 +196,13 @@ POST /metrics
 Receives GitHub webhook events. Verifies IP allowlist (if configured) and signature, then stores event metrics.
 
 **Headers:**
+
 - `X-GitHub-Delivery`: Unique webhook delivery ID
 - `X-GitHub-Event`: Event type (pull_request, issue_comment, etc.)
 - `X-Hub-Signature-256`: HMAC SHA256 signature (if METRICS_WEBHOOK_SECRET is set)
 
 **Response:**
+
 ```json
 {
   "status": "ok",
@@ -216,6 +227,7 @@ WS /metrics/ws?repository=org/repo&event_type=pull_request&status=success
 Real-time metrics streaming with optional filtering.
 
 **Query Parameters:**
+
 - `repository`: Filter by repository (org/repo format)
 - `event_type`: Filter by event type
 - `status`: Filter by status (success, error, partial)
@@ -231,6 +243,7 @@ GET /api/metrics/webhooks
 Retrieve webhook events with filtering and pagination.
 
 **Query Parameters:**
+
 - `repository`: Filter by repository (org/repo format)
 - `event_type`: Filter by event type
 - `status`: Filter by status (success, error, partial)
@@ -240,6 +253,7 @@ Retrieve webhook events with filtering and pagination.
 - `page_size`: Items per page (1-1000, default: 100)
 
 **Response:**
+
 ```json
 {
   "data": [
@@ -280,6 +294,7 @@ GET /api/metrics/webhooks/{delivery_id}
 Get specific webhook event details including full payload.
 
 **Response:**
+
 ```json
 {
   "delivery_id": "12345678-1234-1234-1234-123456789abc",
@@ -314,12 +329,14 @@ GET /api/metrics/repositories
 Get aggregated statistics per repository.
 
 **Query Parameters:**
+
 - `start_time`: Start time in ISO 8601 format
 - `end_time`: End time in ISO 8601 format
 - `page`: Page number (1-indexed, default: 1)
 - `page_size`: Items per page (1-100, default: 10)
 
 **Response:**
+
 ```json
 {
   "time_range": {
@@ -358,10 +375,12 @@ GET /api/metrics/summary
 Get overall metrics summary across all repositories.
 
 **Query Parameters:**
+
 - `start_time`: Start time in ISO 8601 format
 - `end_time`: End time in ISO 8601 format
 
 **Response:**
+
 ```json
 {
   "time_range": {
@@ -380,6 +399,62 @@ Get overall metrics summary across all repositories.
     "unique_senders": 100
   }
 }
+```
+
+## MCP Server
+
+GitHub Metrics includes an embedded MCP (Model Context Protocol) server that exposes metrics endpoints as tools for LLM integration.
+
+### Overview
+
+The MCP server allows AI assistants like Claude to query metrics data directly using natural language. The server is mounted at `/mcp` and automatically exposes all REST API endpoints as MCP tools.
+
+### Available MCP Tools
+
+| Tool                        | Description                                             |
+| --------------------------- | ------------------------------------------------------- |
+| `health_check`              | Check service health and database connectivity          |
+| `get_webhook_events`        | Retrieve webhook events with filtering and pagination   |
+| `get_webhook_event_by_id`   | Get specific webhook event details including payload    |
+| `get_repository_statistics` | Get aggregated statistics per repository                |
+| `get_metrics_summary`       | Get overall metrics summary (events, trends, top repos) |
+| `get_metrics_contributors`  | Get PR contributor analytics                            |
+| `get_user_pull_requests`    | Get user's PR details with commit info                  |
+| `get_metrics_trends`        | Get time-series event trends                            |
+
+### Configuration
+
+| Variable              | Description               | Default |
+| --------------------- | ------------------------- | ------- |
+| `METRICS_MCP_ENABLED` | Enable/disable MCP server | `true`  |
+
+### Usage with MCP Clients
+
+Add to your MCP client configuration:
+
+```json
+{
+  "mcpServers": {
+    "github-metrics": {
+      "url": "http://localhost:8080/mcp"
+    }
+  }
+}
+```
+
+Example queries:
+
+- "Get metrics for the last 24 hours"
+- "Show repository statistics for myakove/github-metrics"
+- "Who are the top PR contributors this month?"
+- "What's the metrics success rate for the last week?"
+
+### Disabling MCP Server
+
+To disable the MCP server, set the environment variable:
+
+```bash
+METRICS_MCP_ENABLED=false
 ```
 
 ## Webhook Setup
@@ -406,6 +481,7 @@ METRICS_WEBHOOK_SECRET=your-webhook-secret
 ```
 
 The service will:
+
 1. Check if webhooks already exist for each repository
 2. Create new webhooks if they don't exist
 3. Configure webhooks to send all events (`["*"]`)
@@ -438,6 +514,7 @@ METRICS_VERIFY_CLOUDFLARE_IPS=true
 ```
 
 The service fetches IP ranges from:
+
 - GitHub: `https://api.github.com/meta` (hooks field)
 - Cloudflare: `https://www.cloudflare.com/ips-v4` and `ips-v6`
 

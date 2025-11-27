@@ -112,7 +112,7 @@ class TestMetricsConfig:
         assert test_config.database.host == "localhost"
         assert test_config.database.port == 5432
         assert test_config.database.pool_size == 10
-        assert test_config.server.host == "0.0.0.0"
+        assert test_config.server.host == "127.0.0.1"  # Set in conftest.py for test environment
         assert test_config.server.port == 8080
         assert test_config.server.workers == 1
 
