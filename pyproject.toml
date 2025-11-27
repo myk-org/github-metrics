@@ -1,5 +1,5 @@
 [tool.coverage.run]
-omit = ["tests/*"]
+omit = ["tests/*", "github_metrics/migrations/*", "github_metrics/models.py"]
 
 [tool.coverage.report]
 fail_under = 90

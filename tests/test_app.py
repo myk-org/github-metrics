@@ -13,9 +13,7 @@ import asyncio
 import hashlib
 import hmac
 import json
-from collections.abc import AsyncGenerator
 from concurrent.futures import CancelledError
-from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
@@ -568,17 +566,10 @@ class TestLifespanContext:
     async def test_lifespan_loads_github_ips(self) -> None:
         """Test lifespan loads GitHub IP allowlist when verification enabled."""
 
-        # Create a proper async context manager mock for engine.begin()
-        @asynccontextmanager
-        async def mock_begin_context() -> AsyncGenerator[Any]:
-            mock_conn = AsyncMock()
-            yield mock_conn
-
         with (
             patch("github_metrics.app.get_config") as mock_config,
             patch("github_metrics.app.get_database_manager") as mock_db_manager_factory,
             patch("github_metrics.app.get_logger") as mock_logger_factory,
-            patch("github_metrics.app.create_async_engine") as mock_engine_factory,
             patch("github_metrics.app.httpx.AsyncClient") as mock_http_client_class,
             patch("github_metrics.app.get_github_allowlist") as mock_get_github,
             patch("github_metrics.app.get_cloudflare_allowlist") as mock_get_cloudflare,
@@ -587,19 +578,12 @@ class TestLifespanContext:
             config_mock = Mock()
             config_mock.webhook.verify_github_ips = True
             config_mock.webhook.verify_cloudflare_ips = False
-            config_mock.database.sqlalchemy_url = "postgresql+asyncpg://test"
             mock_config.return_value = config_mock
 
             mock_db = AsyncMock()
             mock_db_manager_factory.return_value = mock_db
 
             mock_logger_factory.return_value = Mock()
-
-            mock_engine = AsyncMock()
-            mock_engine_factory.return_value = mock_engine
-            # Use the proper async context manager
-            mock_engine.begin = mock_begin_context
-            mock_engine.dispose = AsyncMock()
 
             mock_http_client = AsyncMock()
             mock_http_client_class.return_value = mock_http_client
@@ -618,17 +602,10 @@ class TestLifespanContext:
     async def test_lifespan_loads_cloudflare_ips(self) -> None:
         """Test lifespan loads Cloudflare IP allowlist when verification enabled."""
 
-        # Create a proper async context manager mock for engine.begin()
-        @asynccontextmanager
-        async def mock_begin_context() -> AsyncGenerator[Any]:
-            mock_conn = AsyncMock()
-            yield mock_conn
-
         with (
             patch("github_metrics.app.get_config") as mock_config,
             patch("github_metrics.app.get_database_manager") as mock_db_manager_factory,
             patch("github_metrics.app.get_logger") as mock_logger_factory,
-            patch("github_metrics.app.create_async_engine") as mock_engine_factory,
             patch("github_metrics.app.httpx.AsyncClient") as mock_http_client_class,
             patch("github_metrics.app.get_github_allowlist") as mock_get_github,
             patch("github_metrics.app.get_cloudflare_allowlist") as mock_get_cloudflare,
@@ -637,19 +614,12 @@ class TestLifespanContext:
             config_mock = Mock()
             config_mock.webhook.verify_github_ips = False
             config_mock.webhook.verify_cloudflare_ips = True
-            config_mock.database.sqlalchemy_url = "postgresql+asyncpg://test"
             mock_config.return_value = config_mock
 
             mock_db = AsyncMock()
             mock_db_manager_factory.return_value = mock_db
 
             mock_logger_factory.return_value = Mock()
-
-            mock_engine = AsyncMock()
-            mock_engine_factory.return_value = mock_engine
-            # Use the proper async context manager
-            mock_engine.begin = mock_begin_context
-            mock_engine.dispose = AsyncMock()
 
             mock_http_client = AsyncMock()
             mock_http_client_class.return_value = mock_http_client

@@ -24,12 +24,10 @@ from fastapi import status as http_status
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from simple_logger.logger import get_logger
-from sqlalchemy.ext.asyncio import create_async_engine
 
 from github_metrics.config import get_config
 from github_metrics.database import DatabaseManager, get_database_manager
 from github_metrics.metrics_tracker import MetricsTracker
-from github_metrics.models import Base
 from github_metrics.utils.security import (
     get_cloudflare_allowlist,
     get_github_allowlist,
@@ -126,13 +124,8 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     await db_manager.connect()
     LOGGER.info("Database connection established")
 
-    # Create tables if they don't exist
-    LOGGER.info("Ensuring database tables exist...")
-    engine = create_async_engine(config.database.sqlalchemy_url)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    await engine.dispose()
-    LOGGER.info("Database tables verified")
+    # Database schema is managed by Alembic migrations
+    LOGGER.info("Database schema managed by Alembic migrations")
 
     # Initialize metrics tracker
     metrics_logger = get_logger(name="github_metrics.tracker")
