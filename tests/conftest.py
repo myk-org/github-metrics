@@ -48,16 +48,6 @@ os.environ.update({
 from github_metrics.app import app  # noqa: E402
 
 
-@pytest.fixture(scope="session", autouse=True)
-def set_test_env_vars() -> None:
-    """
-    Ensure test environment variables remain set throughout test session.
-
-    Note: Primary environment setup happens at module level (above imports)
-    to ensure proper initialization of app.py configuration.
-    """
-
-
 @pytest.fixture
 def test_config() -> MetricsConfig:
     """Create test configuration instance."""
