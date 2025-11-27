@@ -25,6 +25,11 @@ class ComboBox {
      * @param {Function} config.onInput - Callback when input value changes
      */
     constructor(config) {
+        // Guard against missing config object
+        if (!config) {
+            throw new Error('ComboBox: config object is required');
+        }
+
         // Validate container
         if (!config.container || !(config.container instanceof HTMLElement)) {
             throw new Error('ComboBox: config.container must be a valid DOM element');
@@ -68,6 +73,11 @@ class ComboBox {
         this.input = document.getElementById(this.inputId);
         if (!this.input) {
             throw new Error(`ComboBox: Input element not found: ${this.inputId}`);
+        }
+
+        // Validate container contains input element
+        if (!this.container.contains(this.input)) {
+            throw new Error(`ComboBox: container must contain input element #${this.inputId}`);
         }
 
         // Set placeholder
@@ -390,6 +400,7 @@ class ComboBox {
         });
 
         this.input.value = option.label;
+        this.input.removeAttribute('aria-activedescendant');
         this.onSelect(option.value);
         this.close();
     }
@@ -444,6 +455,7 @@ class ComboBox {
         this.isOpen = false;
         this.container.classList.remove('open');
         this.input.setAttribute('aria-expanded', 'false');
+        this.input.removeAttribute('aria-activedescendant');
         this.highlightedIndex = -1;
 
         // Remove scroll/resize listeners
@@ -490,6 +502,18 @@ class ComboBox {
      */
     getValue() {
         return this.input.value;
+    }
+
+    /**
+     * Get selected option value
+     * Returns the underlying value of the selected option by searching for
+     * an option whose label matches the current input value.
+     * @returns {string|null} The selected option's value, or null if no option matches
+     */
+    getSelectedValue() {
+        const currentValue = this.input.value;
+        const matchedOption = this.options.find(opt => opt.label === currentValue);
+        return matchedOption ? matchedOption.value : null;
     }
 
     /**
