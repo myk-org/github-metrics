@@ -18,6 +18,7 @@ export default [
         clearTimeout: "readonly",
         AbortController: "readonly",
         Blob: "readonly",
+        HTMLElement: "readonly",
         // Chart.js
         Chart: "readonly",
         // Module/CommonJS (for compatibility checks)

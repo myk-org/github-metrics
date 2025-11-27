@@ -20,15 +20,22 @@ class ComboBox {
      * @param {string} config.placeholder - Placeholder text for the input
      * @param {Array<{value: string, label: string}>} config.options - Array of options
      * @param {boolean} config.allowFreeText - Allow free text input (default: true)
+     * @param {boolean} config.debug - Enable debug logging (default: false)
      * @param {Function} config.onSelect - Callback when option is selected
      * @param {Function} config.onInput - Callback when input value changes
      */
     constructor(config) {
+        // Validate container
+        if (!config.container || !(config.container instanceof HTMLElement)) {
+            throw new Error('ComboBox: config.container must be a valid DOM element');
+        }
+
         this.container = config.container;
         this.inputId = config.inputId;
         this.placeholder = config.placeholder || '';
         this.options = config.options || [];
         this.allowFreeText = config.allowFreeText !== false;
+        this.debug = config.debug || false;
         this.onSelect = config.onSelect || (() => {});
         this.onInput = config.onInput || (() => {});
 
@@ -84,7 +91,9 @@ class ComboBox {
         // Set up event listeners
         this._setupEventListeners();
 
-        console.log(`[ComboBox] Initialized for input #${this.inputId}`);
+        if (this.debug) {
+            console.log(`[ComboBox] Initialized for input #${this.inputId}`);
+        }
         this._isInitialized = true;
     }
 
@@ -101,8 +110,8 @@ class ComboBox {
         // Set ARIA relationship
         this.input.setAttribute('aria-controls', this.dropdown.id);
 
-        // Insert dropdown after input
-        this.input.parentNode.appendChild(this.dropdown);
+        // Append dropdown to container
+        this.container.appendChild(this.dropdown);
     }
 
     /**
@@ -271,15 +280,17 @@ class ComboBox {
             optionElement.setAttribute('role', 'option');
             optionElement.setAttribute('data-value', option.value);
             optionElement.setAttribute('data-index', index);
+            optionElement.id = `${this.inputId}-option-${index}`;
 
             // Highlight if selected
             const isSelected = option.value === this.input.value || option.label === this.input.value;
             if (isSelected) {
                 optionElement.classList.add('selected');
+                // Set aria-selected only for currently selected value
+                optionElement.setAttribute('aria-selected', 'true');
+            } else {
+                optionElement.setAttribute('aria-selected', 'false');
             }
-
-            // Set aria-selected for accessibility
-            optionElement.setAttribute('aria-selected', isSelected ? 'true' : 'false');
 
             // Click handler
             optionElement.addEventListener('mousedown', (e) => {
@@ -321,19 +332,29 @@ class ComboBox {
      */
     _updateHighlight() {
         const options = this.dropdown.querySelectorAll('.combo-box-option');
-        options.forEach((opt, idx) => {
-            if (idx === this.highlightedIndex) {
-                opt.classList.add('highlighted');
-                opt.scrollIntoView({ block: 'nearest' });
-                opt.setAttribute('aria-selected', 'true');
-            } else {
-                opt.classList.remove('highlighted');
-                // Restore original aria-selected state based on whether it matches input value
-                const dataValue = opt.getAttribute('data-value');
-                const isSelected = dataValue === this.input.value || opt.textContent === this.input.value;
-                opt.setAttribute('aria-selected', isSelected ? 'true' : 'false');
-            }
-        });
+
+        if (this.highlightedIndex >= 0 && this.highlightedIndex < options.length) {
+            const highlightedOption = options[this.highlightedIndex];
+
+            // Update aria-activedescendant on input
+            this.input.setAttribute('aria-activedescendant', highlightedOption.id);
+
+            // Add visual highlight class
+            options.forEach((opt, idx) => {
+                if (idx === this.highlightedIndex) {
+                    opt.classList.add('highlighted');
+                    opt.scrollIntoView({ block: 'nearest' });
+                } else {
+                    opt.classList.remove('highlighted');
+                }
+            });
+        } else {
+            // Clear aria-activedescendant when no highlight
+            this.input.removeAttribute('aria-activedescendant');
+
+            // Remove all highlights
+            options.forEach(opt => opt.classList.remove('highlighted'));
+        }
     }
 
     /**
@@ -359,7 +380,13 @@ class ComboBox {
         const options = this.dropdown.querySelectorAll('.combo-box-option');
         options.forEach((opt) => {
             const dataValue = opt.getAttribute('data-value');
-            opt.setAttribute('aria-selected', dataValue === option.value ? 'true' : 'false');
+            if (dataValue === option.value) {
+                opt.setAttribute('aria-selected', 'true');
+                opt.classList.add('selected');
+            } else {
+                opt.setAttribute('aria-selected', 'false');
+                opt.classList.remove('selected');
+            }
         });
 
         this.input.value = option.label;
@@ -542,7 +569,12 @@ class ComboBox {
             clearTimeout(this.blurTimeout);
         }
 
-        console.log(`[ComboBox] Destroyed for input #${this.inputId}`);
+        if (this.debug) {
+            console.log(`[ComboBox] Destroyed for input #${this.inputId}`);
+        }
+
+        // Reset initialization flag
+        this._isInitialized = false;
     }
 }
 
