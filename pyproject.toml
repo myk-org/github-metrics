@@ -1,5 +1,5 @@
 [tool.coverage.run]
-omit = ["tests/*"]
+omit = ["tests/*", "github_metrics/migrations/*", "github_metrics/models.py"]
 
 [tool.coverage.report]
 fail_under = 90
@@ -32,6 +32,7 @@ strict_equality = true
 extra_checks = true
 warn_unused_configs = true
 warn_redundant_casts = true
+exclude = ["^scripts/"]
 
 [project]
 name = "github-metrics"

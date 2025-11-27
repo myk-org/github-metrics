@@ -48,7 +48,6 @@ http://localhost:8080/dashboard
 
 The service will automatically:
 - Run database migrations
-- Create required database tables
 - Start the metrics server on port 8080
 
 ### Docker Compose Configuration
@@ -542,6 +541,26 @@ uv run --group tests pytest tests/test_app.py -v
 ```
 
 ### Database Migrations
+
+Migrations are automatically applied on container startup. For manual operations:
+
+#### Using Docker (Production/Container)
+
+```bash
+# Apply migrations (automatic on container start, or manual)
+docker exec -it github-metrics alembic upgrade head
+
+# Rollback last migration
+docker exec -it github-metrics alembic downgrade -1
+
+# Show migration history
+docker exec -it github-metrics alembic history
+
+# Mark existing database as migrated (one-time for existing DBs)
+docker exec -it github-metrics alembic stamp head
+```
+
+#### Local Development
 
 ```bash
 # Create new migration

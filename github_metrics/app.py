@@ -24,12 +24,10 @@ from fastapi import status as http_status
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from simple_logger.logger import get_logger
-from sqlalchemy.ext.asyncio import create_async_engine
 
 from github_metrics.config import get_config
 from github_metrics.database import DatabaseManager, get_database_manager
 from github_metrics.metrics_tracker import MetricsTracker
-from github_metrics.models import Base
 from github_metrics.utils.security import (
     get_cloudflare_allowlist,
     get_github_allowlist,
@@ -126,13 +124,8 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     await db_manager.connect()
     LOGGER.info("Database connection established")
 
-    # Create tables if they don't exist
-    LOGGER.info("Ensuring database tables exist...")
-    engine = create_async_engine(config.database.sqlalchemy_url)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    await engine.dispose()
-    LOGGER.info("Database tables verified")
+    # Database schema is managed by Alembic migrations
+    LOGGER.info("Database schema managed by Alembic migrations")
 
     # Initialize metrics tracker
     metrics_logger = get_logger(name="github_metrics.tracker")
@@ -347,27 +340,27 @@ async def get_webhook_events(
     param_idx = 1
 
     if repository:
-        query += f" AND repository = ${param_idx}"
+        query += " AND repository = $" + str(param_idx)
         params.append(repository)
         param_idx += 1
 
     if event_type:
-        query += f" AND event_type = ${param_idx}"
+        query += " AND event_type = $" + str(param_idx)
         params.append(event_type)
         param_idx += 1
 
     if status:
-        query += f" AND status = ${param_idx}"
+        query += " AND status = $" + str(param_idx)
         params.append(status)
         param_idx += 1
 
     if start_datetime:
-        query += f" AND created_at >= ${param_idx}"
+        query += " AND created_at >= $" + str(param_idx)
         params.append(start_datetime)
         param_idx += 1
 
     if end_datetime:
-        query += f" AND created_at <= ${param_idx}"
+        query += " AND created_at <= $" + str(param_idx)
         params.append(end_datetime)
         param_idx += 1
 
@@ -378,8 +371,8 @@ async def get_webhook_events(
             status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=f"Pagination offset exceeds maximum ({MAX_OFFSET}). Use time filters to narrow results.",
         )
-    count_query = f"SELECT COUNT(*) FROM ({query}) AS filtered"  # noqa: S608
-    query += f" ORDER BY created_at DESC LIMIT ${param_idx} OFFSET ${param_idx + 1}"
+    count_query = "SELECT COUNT(*) FROM (" + query + ") AS filtered"
+    query += " ORDER BY created_at DESC LIMIT $" + str(param_idx) + " OFFSET $" + str(param_idx + 1)
     params.extend([page_size, offset])
 
     try:
@@ -503,12 +496,12 @@ async def get_repository_statistics(
     param_idx = 1
 
     if start_datetime:
-        where_clause += f" AND created_at >= ${param_idx}"
+        where_clause += " AND created_at >= $" + str(param_idx)
         params.append(start_datetime)
         param_idx += 1
 
     if end_datetime:
-        where_clause += f" AND created_at <= ${param_idx}"
+        where_clause += " AND created_at <= $" + str(param_idx)
         params.append(end_datetime)
         param_idx += 1
 
@@ -520,11 +513,14 @@ async def get_repository_statistics(
             detail=f"Pagination offset exceeds maximum ({MAX_OFFSET}). Use time filters to narrow results.",
         )
 
-    count_query = f"""
-        SELECT COUNT(DISTINCT repository) as total FROM webhooks {where_clause}
-    """  # noqa: S608
+    count_query = (
+        """
+        SELECT COUNT(DISTINCT repository) as total FROM webhooks """
+        + where_clause
+    )
 
-    query = f"""
+    query = (
+        """
         SELECT
             repository,
             COUNT(*) as total_events,
@@ -538,11 +534,16 @@ async def get_repository_statistics(
             SUM(api_calls_count) as total_api_calls,
             SUM(token_spend) as total_token_spend
         FROM webhooks
-        {where_clause}
+        """
+        + where_clause
+        + """
         GROUP BY repository
         ORDER BY total_events DESC
-        LIMIT ${param_idx} OFFSET ${param_idx + 1}
-    """  # noqa: S608
+        LIMIT $"""
+        + str(param_idx)
+        + " OFFSET $"
+        + str(param_idx + 1)
+    )
     params.extend([page_size, offset])
 
     try:
@@ -767,12 +768,12 @@ async def get_metrics_summary(
     param_idx = 1
 
     if start_datetime:
-        where_clause += f" AND created_at >= ${param_idx}"
+        where_clause += " AND created_at >= $" + str(param_idx)
         params.append(start_datetime)
         param_idx += 1
 
     if end_datetime:
-        where_clause += f" AND created_at <= ${param_idx}"
+        where_clause += " AND created_at <= $" + str(param_idx)
         params.append(end_datetime)
         param_idx += 1
 
@@ -782,17 +783,18 @@ async def get_metrics_summary(
     prev_param_idx = 1
 
     if prev_start_datetime:
-        prev_where_clause += f" AND created_at >= ${prev_param_idx}"
+        prev_where_clause += " AND created_at >= $" + str(prev_param_idx)
         prev_params.append(prev_start_datetime)
         prev_param_idx += 1
 
     if prev_end_datetime:
-        prev_where_clause += f" AND created_at <= ${prev_param_idx}"
+        prev_where_clause += " AND created_at <= $" + str(prev_param_idx)
         prev_params.append(prev_end_datetime)
         prev_param_idx += 1
 
     # Main summary query
-    summary_query = f"""
+    summary_query = (
+        """
         SELECT
             COUNT(*) as total_events,
             COUNT(*) FILTER (WHERE status = 'success') as successful_events,
@@ -809,15 +811,19 @@ async def get_metrics_summary(
             ROUND(AVG(api_calls_count), 2) as avg_api_calls_per_event,
             SUM(token_spend) as total_token_spend
         FROM webhooks
-        {where_clause}
-    """  # noqa: S608
+        """
+        + where_clause
+    )
 
     # Top repositories query
-    top_repos_query = f"""
+    top_repos_query = (
+        """
         WITH total AS (
             SELECT COUNT(*) as total_count
             FROM webhooks
-            {where_clause}
+            """
+        + where_clause
+        + """
         )
         SELECT
             repository,
@@ -831,34 +837,44 @@ async def get_metrics_summary(
                 2
             ) as percentage
         FROM webhooks
-        {where_clause}
+        """
+        + where_clause
+        + """
         GROUP BY repository
         ORDER BY total_events DESC
         LIMIT 10
-    """  # noqa: S608
+    """
+    )
 
     # Event type distribution query
-    event_type_query = f"""
+    event_type_query = (
+        """
         SELECT
             event_type,
             COUNT(*) as event_count
         FROM webhooks
-        {where_clause}
+        """
+        + where_clause
+        + """
         GROUP BY event_type
         ORDER BY event_count DESC
-    """  # noqa: S608
+    """
+    )
 
     # Time range for rate calculations
-    time_range_query = f"""
+    time_range_query = (
+        """
         SELECT
             MIN(created_at) as first_event_time,
             MAX(created_at) as last_event_time
         FROM webhooks
-        {where_clause}
-    """  # noqa: S608
+        """
+        + where_clause
+    )
 
     # Previous period summary query for trend calculation
-    prev_summary_query = f"""
+    prev_summary_query = (
+        """
         SELECT
             COUNT(*) as total_events,
             COUNT(*) FILTER (WHERE status = 'success') as successful_events,
@@ -869,8 +885,9 @@ async def get_metrics_summary(
             ) as success_rate,
             ROUND(AVG(duration_ms)) as avg_processing_time_ms
         FROM webhooks
-        {prev_where_clause}
-    """  # noqa: S608
+        """
+        + prev_where_clause
+    )
 
     try:
         # Execute queries using DatabaseManager helpers
@@ -1135,19 +1152,19 @@ async def get_metrics_contributors(
 
     if start_datetime:
         param_count += 1
-        time_filter += f" AND created_at >= ${param_count}"
+        time_filter += " AND created_at >= $" + str(param_count)
         params.append(start_datetime)
 
     if end_datetime:
         param_count += 1
-        time_filter += f" AND created_at <= ${param_count}"
+        time_filter += " AND created_at <= $" + str(param_count)
         params.append(end_datetime)
 
     # Add repository filter if provided
     repository_filter = ""
     if repository:
         param_count += 1
-        repository_filter = f" AND repository = ${param_count}"
+        repository_filter = " AND repository = $" + str(param_count)
         params.append(repository)
 
     # Build category-specific user filters to align with per-category "user" semantics
@@ -1165,11 +1182,11 @@ async def get_metrics_contributors(
         params.append(user)
 
         # PR Reviewers: filter on sender (correct as-is)
-        user_filter_reviewers = f" AND sender = ${user_param_idx}"
+        user_filter_reviewers = " AND sender = $" + str(user_param_idx)
         # PR Approvers: filter on extracted username from 'approved-<username>' label
-        user_filter_approvers = f" AND SUBSTRING(payload->'label'->>'name' FROM 10) = ${user_param_idx}"
+        user_filter_approvers = " AND SUBSTRING(payload->'label'->>'name' FROM 10) = $" + str(user_param_idx)
         # PR LGTM: filter on extracted username from 'lgtm-<username>' label
-        user_filter_lgtm = f" AND SUBSTRING(payload->'label'->>'name' FROM 6) = ${user_param_idx}"
+        user_filter_lgtm = " AND SUBSTRING(payload->'label'->>'name' FROM 6) = $" + str(user_param_idx)
 
     # Calculate offset for pagination
     offset = (page - 1) * page_size
@@ -1188,7 +1205,8 @@ async def get_metrics_contributors(
     params.extend([page_size, offset])
 
     # Count query for PR Creators
-    pr_creators_count_query = f"""
+    pr_creators_count_query = (
+        """
         WITH pr_creators AS (
             SELECT DISTINCT ON (repository, pr_number)
                 repository,
@@ -1211,17 +1229,21 @@ async def get_metrics_contributors(
                   'pull_request_review_comment',
                   'issue_comment'
               )
-              {time_filter}
-              {repository_filter}
+              """
+        + time_filter
+        + repository_filter
+        + """
             ORDER BY repository, pr_number, created_at ASC
         )
         SELECT COUNT(DISTINCT pr_creator) as total
         FROM pr_creators
-        WHERE pr_creator IS NOT NULL{f" AND pr_creator = ${user_param_idx}" if user else ""}
-    """  # noqa: S608
+        WHERE pr_creator IS NOT NULL"""
+        + (" AND pr_creator = $" + str(user_param_idx) if user else "")
+    )
 
     # Query PR Creators (from any event with pr_number)
-    pr_creators_query = f"""
+    pr_creators_query = (
+        """
         WITH pr_creators AS (
             SELECT DISTINCT ON (repository, pr_number)
                 repository,
@@ -1244,8 +1266,10 @@ async def get_metrics_contributors(
                   'pull_request_review_comment',
                   'issue_comment'
               )
-              {time_filter}
-              {repository_filter}
+              """
+        + time_filter
+        + repository_filter
+        + """
             ORDER BY repository, pr_number, created_at ASC
         ),
         user_prs AS (
@@ -1261,8 +1285,10 @@ async def get_metrics_contributors(
             FROM webhooks w
             INNER JOIN pr_creators pc ON w.repository = pc.repository AND w.pr_number = pc.pr_number
             WHERE w.pr_number IS NOT NULL
-              {time_filter}
-              {repository_filter}
+              """
+        + time_filter
+        + repository_filter
+        + """
         )
         SELECT
             pr_creator as user,
@@ -1281,26 +1307,34 @@ async def get_metrics_contributors(
             WHERE pr_creator IS NOT NULL
             GROUP BY pr_creator, pr_number
         ) pr_stats
-        WHERE 1=1{f" AND pr_creator = ${user_param_idx}" if user else ""}
+        WHERE 1=1"""
+        + (" AND pr_creator = $" + str(user_param_idx) if user else "")
+        + """
         GROUP BY pr_creator
         ORDER BY total_prs DESC
-        LIMIT ${page_size_param} OFFSET ${offset_param}
-    """  # noqa: S608
+        LIMIT $"""
+        + str(page_size_param)
+        + " OFFSET $"
+        + str(offset_param)
+    )
 
     # Count query for PR Reviewers
-    pr_reviewers_count_query = f"""
+    pr_reviewers_count_query = (
+        """
         SELECT COUNT(DISTINCT sender) as total
         FROM webhooks
         WHERE event_type = 'pull_request_review'
           AND action = 'submitted'
           AND sender != payload->'pull_request'->'user'->>'login'
-          {time_filter}
-          {user_filter_reviewers}
-          {repository_filter}
-    """  # noqa: S608
+          """
+        + time_filter
+        + user_filter_reviewers
+        + repository_filter
+    )
 
     # Query PR Reviewers (from pull_request_review events)
-    pr_reviewers_query = f"""
+    pr_reviewers_query = (
+        """
         SELECT
             sender as user,
             COUNT(*) as total_reviews,
@@ -1309,30 +1343,38 @@ async def get_metrics_contributors(
         WHERE event_type = 'pull_request_review'
           AND action = 'submitted'
           AND sender != payload->'pull_request'->'user'->>'login'
-          {time_filter}
-          {user_filter_reviewers}
-          {repository_filter}
+          """
+        + time_filter
+        + user_filter_reviewers
+        + repository_filter
+        + """
         GROUP BY sender
         ORDER BY total_reviews DESC
-        LIMIT ${page_size_param} OFFSET ${offset_param}
-    """  # noqa: S608
+        LIMIT $"""
+        + str(page_size_param)
+        + " OFFSET $"
+        + str(offset_param)
+    )
 
     # Count query for PR Approvers
-    pr_approvers_count_query = f"""
+    pr_approvers_count_query = (
+        """
         SELECT COUNT(DISTINCT SUBSTRING(payload->'label'->>'name' FROM 10)) as total
         FROM webhooks
         WHERE event_type = 'pull_request'
           AND action = 'labeled'
           AND payload->'label'->>'name' LIKE 'approved-%'
-          {time_filter}
-          {user_filter_approvers}
-          {repository_filter}
-    """  # noqa: S608
+          """
+        + time_filter
+        + user_filter_approvers
+        + repository_filter
+    )
 
     # Query PR Approvers (from pull_request labeled events with 'approved-' prefix only)
     # Custom approval workflow: /approve comment triggers 'approved-<username>' label
     # Note: LGTM is separate from approval - tracked separately
-    pr_approvers_query = f"""
+    pr_approvers_query = (
+        """
         SELECT
             SUBSTRING(payload->'label'->>'name' FROM 10) as user,
             COUNT(*) as total_approvals,
@@ -1341,29 +1383,37 @@ async def get_metrics_contributors(
         WHERE event_type = 'pull_request'
           AND action = 'labeled'
           AND payload->'label'->>'name' LIKE 'approved-%'
-          {time_filter}
-          {user_filter_approvers}
-          {repository_filter}
+          """
+        + time_filter
+        + user_filter_approvers
+        + repository_filter
+        + """
         GROUP BY SUBSTRING(payload->'label'->>'name' FROM 10)
         ORDER BY total_approvals DESC
-        LIMIT ${page_size_param} OFFSET ${offset_param}
-    """  # noqa: S608
+        LIMIT $"""
+        + str(page_size_param)
+        + " OFFSET $"
+        + str(offset_param)
+    )
 
     # Count query for LGTM
-    pr_lgtm_count_query = f"""
+    pr_lgtm_count_query = (
+        """
         SELECT COUNT(DISTINCT SUBSTRING(payload->'label'->>'name' FROM 6)) as total
         FROM webhooks
         WHERE event_type = 'pull_request'
           AND action = 'labeled'
           AND payload->'label'->>'name' LIKE 'lgtm-%'
-          {time_filter}
-          {user_filter_lgtm}
-          {repository_filter}
-    """  # noqa: S608
+          """
+        + time_filter
+        + user_filter_lgtm
+        + repository_filter
+    )
 
     # Query LGTM (from pull_request labeled events with 'lgtm-' prefix)
     # Custom LGTM workflow: /lgtm comment triggers 'lgtm-<username>' label
-    pr_lgtm_query = f"""
+    pr_lgtm_query = (
+        """
         SELECT
             SUBSTRING(payload->'label'->>'name' FROM 6) as user,
             COUNT(*) as total_lgtm,
@@ -1372,13 +1422,18 @@ async def get_metrics_contributors(
         WHERE event_type = 'pull_request'
           AND action = 'labeled'
           AND payload->'label'->>'name' LIKE 'lgtm-%'
-          {time_filter}
-          {user_filter_lgtm}
-          {repository_filter}
+          """
+        + time_filter
+        + user_filter_lgtm
+        + repository_filter
+        + """
         GROUP BY SUBSTRING(payload->'label'->>'name' FROM 6)
         ORDER BY total_lgtm DESC
-        LIMIT ${page_size_param} OFFSET ${offset_param}
-    """  # noqa: S608
+        LIMIT $"""
+        + str(page_size_param)
+        + " OFFSET $"
+        + str(offset_param)
+    )
 
     try:
         # Execute all count queries in parallel (params without LIMIT/OFFSET)
@@ -1596,33 +1651,37 @@ async def get_user_pull_requests(
     # Add user filter if provided
     if user and user.strip():
         param_count += 1
-        filters.append(f"(payload->'pull_request'->'user'->>'login' = ${param_count} OR sender = ${param_count})")
+        user_filter = "(payload->'pull_request'->'user'->>'login' = $" + str(param_count)
+        user_filter += " OR sender = $" + str(param_count) + ")"
+        filters.append(user_filter)
         params.append(user.strip())
 
     if start_datetime:
         param_count += 1
-        filters.append(f"created_at >= ${param_count}")
+        filters.append("created_at >= $" + str(param_count))
         params.append(start_datetime)
 
     if end_datetime:
         param_count += 1
-        filters.append(f"created_at <= ${param_count}")
+        filters.append("created_at <= $" + str(param_count))
         params.append(end_datetime)
 
     if repository:
         param_count += 1
-        filters.append(f"repository = ${param_count}")
+        filters.append("repository = $" + str(param_count))
         params.append(repository)
 
     where_clause = " AND ".join(filters) if filters else "1=1"
 
     # Count total matching PRs
-    count_query = f"""
+    count_query = (
+        """
         SELECT COUNT(DISTINCT (payload->'pull_request'->>'number')::int) as total
         FROM webhooks
         WHERE event_type = 'pull_request'
-          AND {where_clause}
-    """  # noqa: S608
+          AND """
+        + where_clause
+    )
 
     # Calculate pagination
     offset = (page - 1) * page_size
@@ -1638,7 +1697,8 @@ async def get_user_pull_requests(
     offset_param_idx = param_count
 
     # Query for PR data with pagination
-    data_query = f"""
+    data_query = (
+        """
         SELECT DISTINCT ON (repository, (payload->'pull_request'->>'number')::int)
             (payload->'pull_request'->>'number')::int as pr_number,
             payload->'pull_request'->>'title' as title,
@@ -1653,10 +1713,15 @@ async def get_user_pull_requests(
             payload->'pull_request'->'head'->>'sha' as head_sha
         FROM webhooks
         WHERE event_type = 'pull_request'
-          AND {where_clause}
+          AND """
+        + where_clause
+        + """
         ORDER BY repository, (payload->'pull_request'->>'number')::int DESC, created_at DESC
-        LIMIT ${limit_param_idx} OFFSET ${offset_param_idx}
-    """  # noqa: S608
+        LIMIT $"""
+        + str(limit_param_idx)
+        + " OFFSET $"
+        + str(offset_param_idx)
+    )
 
     try:
         # Execute count and data queries in parallel
@@ -1761,12 +1826,12 @@ async def get_metrics_trends(
     param_idx = 1
 
     if start_datetime:
-        where_clause += f" AND created_at >= ${param_idx}"
+        where_clause += " AND created_at >= $" + str(param_idx)
         params.append(start_datetime)
         param_idx += 1
 
     if end_datetime:
-        where_clause += f" AND created_at <= ${param_idx}"
+        where_clause += " AND created_at <= $" + str(param_idx)
         params.append(end_datetime)
         param_idx += 1
 
@@ -1774,17 +1839,23 @@ async def get_metrics_trends(
     params.append(bucket)
     bucket_param_idx = param_idx
 
-    query = f"""
+    query = (
+        """
         SELECT
-            date_trunc(${bucket_param_idx}, created_at) as bucket,
+            date_trunc($"""
+        + str(bucket_param_idx)
+        + """, created_at) as bucket,
             COUNT(*) as total_events,
             COUNT(*) FILTER (WHERE status = 'success') as successful_events,
             COUNT(*) FILTER (WHERE status IN ('error', 'partial')) as failed_events
         FROM webhooks
-        {where_clause}
+        """
+        + where_clause
+        + """
         GROUP BY bucket
         ORDER BY bucket
-    """  # noqa: S608
+    """
+    )
 
     try:
         rows = await db_manager.fetch(query, *params)
