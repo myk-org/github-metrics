@@ -40,9 +40,38 @@ from github_metrics.utils.security import (
 )
 from github_metrics.web.dashboard import MetricsDashboardController
 
-# Suppress noisy MCP library errors (known bug: https://github.com/modelcontextprotocol/python-sdk/issues/1219)
-# The ClosedResourceError in message_router is logged but doesn't affect functionality
-logging.getLogger("mcp.server.streamable_http").setLevel(logging.CRITICAL)
+
+class MCPClosedResourceErrorFilter(logging.Filter):
+    """Filter to suppress known ClosedResourceError from MCP library.
+
+    This filter only suppresses ClosedResourceError messages while allowing all other
+    log records through normally. The error occurs in the MCP library's message router
+    but doesn't affect functionality.
+
+    TODO: Remove this filter when upstream issue is fixed:
+    https://github.com/modelcontextprotocol/python-sdk/issues/1219
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Filter out ClosedResourceError log records.
+
+        Args:
+            record: The log record to evaluate.
+
+        Returns:
+            False to suppress the record, True to allow it through.
+        """
+        # Check if ClosedResourceError appears in the message or exception info
+        if "ClosedResourceError" in str(record.msg):
+            return False
+        if record.exc_info and "ClosedResourceError" in str(record.exc_info):
+            return False
+        return True
+
+
+# Add filter to MCP logger to suppress specific known errors while allowing other logs
+_mcp_logger = logging.getLogger("mcp.server.streamable_http")
+_mcp_logger.addFilter(MCPClosedResourceErrorFilter())
 
 # Type alias for IP networks (avoiding private type)
 IPNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
@@ -151,16 +180,22 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     LOGGER.info("Dashboard controller initialized")
 
     # Initialize MCP session manager if enabled
-    # Note: fastapi-mcp 0.4.0 doesn't expose stateless mode via mount_http(),
-    # so we manually configure the session manager with stateless=True
-    # to avoid session ID requirements for MCP clients
+    # Note: We manually configure the session manager instead of using the library's
+    # _ensure_session_manager_started() helper because:
+    # 1. We require stateless=True to avoid session ID requirements for MCP clients
+    # 2. The library's helper hardcodes stateless=False (as of fastapi-mcp 0.4.0)
+    # 3. We need the session manager started during application startup, not lazily on first request
+    #
+    # This approach is acceptable per fastapi-mcp design - the library exposes
+    # _session_manager, _manager_task, and _manager_started for manual management.
+    # We use the library's shutdown() method for proper cleanup (see shutdown section below).
     if config.mcp.enabled and http_transport is not None and mcp_instance is not None:
         if http_transport._session_manager is None:
             http_transport._session_manager = StreamableHTTPSessionManager(
                 app=mcp_instance.server,
                 event_store=http_transport.event_store,
                 json_response=True,
-                stateless=True,
+                stateless=True,  # Required: avoid session ID requirements
             )
 
             async def run_manager() -> None:
@@ -178,12 +213,9 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     LOGGER.info("Shutting down GitHub Metrics service...")
 
     # Shutdown MCP session manager first (before other resources)
-    if http_transport is not None and http_transport._manager_task is not None:
-        http_transport._manager_task.cancel()
-        try:
-            await http_transport._manager_task
-        except asyncio.CancelledError:
-            pass
+    # Use library-provided shutdown() method for proper cleanup
+    if http_transport is not None:
+        await http_transport.shutdown()
         LOGGER.debug("MCP session manager shutdown complete")
 
     if dashboard_controller is not None:
@@ -1934,6 +1966,18 @@ async def get_metrics_trends(
 # MCP Integration - Setup AFTER all routes are registered
 # Note: We use manual HTTP transport setup because fastapi-mcp 0.4.0's mount_http()
 # doesn't support stateless mode configuration, which is required for our use case
+#
+# STARTUP-ONLY CONFIGURATION:
+# - METRICS_MCP_ENABLED is evaluated at import time (module load)
+# - This is a startup-only switch - changing the environment variable at runtime has NO effect
+# - The application process MUST be restarted for METRICS_MCP_ENABLED changes to take effect
+# - This block executes during module import, creating routes and handlers immediately
+#
+# FUTURE CONSIDERATION:
+# - If dynamic enable/disable of MCP is ever required, this block should be:
+#   1. Moved into the lifespan context manager, OR
+#   2. Wrapped in a factory function called conditionally at startup
+# - Current design prioritizes simplicity: MCP is either on or off at startup
 _mcp_config = get_config()
 if _mcp_config.mcp.enabled:
     # Create MCP instance with the main app

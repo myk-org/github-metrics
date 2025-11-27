@@ -40,14 +40,9 @@ class TestMCPConfig:
         config = get_config()
         assert config.mcp.enabled is True
 
-    def test_mcp_config_disabled_via_env(self, mcp_disabled_env: Generator[None]) -> None:
-        """Test MCP can be disabled via environment.
-
-        Args:
-            mcp_disabled_env: Fixture that sets METRICS_MCP_ENABLED=false for this test
-        """
-        # Fixture is used for its side effect (setting env var)
-        _ = mcp_disabled_env
+    @pytest.mark.usefixtures("mcp_disabled_env")
+    def test_mcp_config_disabled_via_env(self) -> None:
+        """Test MCP can be disabled via environment."""
         config = get_config()
         assert config.mcp.enabled is False
 

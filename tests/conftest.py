@@ -34,7 +34,7 @@ os.environ.update({
     "METRICS_DB_HOST": "localhost",
     "METRICS_DB_PORT": "5432",
     "METRICS_DB_POOL_SIZE": "10",
-    "METRICS_SERVER_HOST": "0.0.0.0",
+    "METRICS_SERVER_HOST": "127.0.0.1",
     "METRICS_SERVER_PORT": "8080",
     "METRICS_SERVER_WORKERS": "1",
     "METRICS_WEBHOOK_SECRET": "test_webhook_secret",  # pragma: allowlist secret
