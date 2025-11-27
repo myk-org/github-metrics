@@ -1,55 +1,37 @@
-import json
-import shlex
+import os
 import subprocess
 import sys
 from collections import OrderedDict
 
 
-def json_line(line: str) -> dict:
-    """
-    Format str line to str that can be parsed with json.
-
-    In case line is not formatted for json for example:
-    '{"title": "Revert "feat: Use git cliff to generate the change log. (#2322)" '
-    '(#2324)", "commit": "137331fd", "author": "Meni Yakove", "date": "2025-02-16"}'
-    title have `"` inside the external `"` `"Revert "feat: Use git cliff to '
-    'generate the change log. (#2322)" (#2324)"`
-    """
-    try:
-        return json.loads(line)
-    except json.JSONDecodeError:
-        # split line like by `,`
-        # '{"title": "Revert "feat: Use git cliff to generate the change log. '
-        # '(#2322)" (#2324)", "commit": "137331fd", "author": "Meni Yakove", '
-        # '"date": "2025-02-16"}'
-        line_split = line.split(",")
-
-        # Pop and save `title key` and `title body` from '{"title": "Revert '
-        # '"feat: Use git cliff to generate the change log. (#2322)" (#2324)"'
-        title_key, title_body = line_split.pop(0).split(":", 1)
-
-        if title_body.count('"') > 2:
-            # reconstruct the `title_body` without the extra `"`
-            # "Revert "feat: Use git cliff to generate the change log. (#2322)" (#2324)"'
-            # replace all `"` with empty char and add `"` char to the beginning and the end of the string
-            stripted_body = title_body.replace('"', "")
-            title_body = f'"{stripted_body}"'
-
-            line_split.append(f"{title_key}: {title_body.strip()}")
-            line = ",".join(line_split)
-
-        return json.loads(line)
-
-
 def execute_git_log(from_tag: str, to_tag: str) -> str:
     """Executes git log and returns the output, or raises an exception on error."""
-    _format: str = '{"title": "%s", "commit": "%h", "author": "%an", "date": "%as"}'
+    # Use unit separator (ASCII 0x1f) as delimiter to avoid issues with commas/quotes
+    delimiter = "\x1f"
+    _format = f"%s{delimiter}%h{delimiter}%an{delimiter}%as"
 
     try:
-        command = f"git log --pretty=format:'{_format}' {from_tag}...{to_tag}"
+        # Handle empty from_tag (first release)
+        if not from_tag:
+            # Get root commit
+            root_proc = subprocess.run(
+                ["git", "rev-list", "--max-parents=0", "HEAD"],
+                stdout=subprocess.PIPE,
+                text=True,
+                check=True,
+            )
+            root_commit = root_proc.stdout.strip()
+            git_range = root_commit if root_commit else "HEAD"
+        else:
+            git_range = f"{from_tag}...{to_tag}"
+
+        # Use explicit argument list instead of shlex.split
         proc = subprocess.run(
-            shlex.split(command), stdout=subprocess.PIPE, text=True, check=True
-        )  # Use check=True to raise an exception for non-zero return codes
+            ["git", "log", f"--pretty=format:{_format}", git_range],
+            stdout=subprocess.PIPE,
+            text=True,
+            check=True,
+        )
         return proc.stdout
     except subprocess.CalledProcessError as ex:
         print(f"Error executing git log: {ex}")
@@ -59,12 +41,21 @@ def execute_git_log(from_tag: str, to_tag: str) -> str:
         sys.exit(1)
 
 
-def parse_commit_line(line: str) -> dict:
-    """Parses a single JSON formatted git log line."""
+def parse_commit_line(line: str, delimiter: str = "\x1f") -> dict:
+    """Parses a single delimiter-separated git log line."""
     try:
-        return json_line(line=line)
-    except json.decoder.JSONDecodeError as ex:
-        print(f"Error parsing JSON: {line} - {ex}")
+        parts = line.split(delimiter)
+        if len(parts) != 4:
+            print(f"Warning: Unexpected line format: {line}")
+            return {}
+        return {
+            "title": parts[0],
+            "commit": parts[1],
+            "author": parts[2],
+            "date": parts[3],
+        }
+    except Exception as ex:
+        print(f"Error parsing line: {line} - {ex}")
         return {}
 
 
@@ -87,6 +78,10 @@ def format_changelog_entry(change: dict, section: str) -> str:
 
 
 def main(from_tag: str, to_tag: str) -> str:
+    # Handle empty from_tag (first release)
+    if not from_tag:
+        return "## What's Changed\n\nInitial release\n"
+
     title_to_type_map: dict[str, str] = {
         "ci": "CI:",
         "docs": "Docs:",
@@ -119,7 +114,8 @@ def main(from_tag: str, to_tag: str) -> str:
         commit = parse_commit_line(line=line)
         if commit:
             category = categorize_commit(commit=commit, title_to_type_map=title_to_type_map)
-            changelog_dict[category].append(commit)
+            # Use defensive get with fallback to "Other Changes:"
+            changelog_dict.get(category, changelog_dict["Other Changes:"]).append(commit)
 
     for section, changes in changelog_dict.items():
         if not changes:
@@ -130,9 +126,9 @@ def main(from_tag: str, to_tag: str) -> str:
             changelog += format_changelog_entry(change, section)
         changelog += "\n"
 
-    changelog += (
-        f"**Full Changelog**: https://github.com/RedHatQE/openshift-python-wrapper/compare/{from_tag}...{to_tag}"
-    )
+    # Use GITHUB_REPOSITORY env var with fallback to myk-org/github-metrics
+    repo = os.environ.get("GITHUB_REPOSITORY", "myk-org/github-metrics")
+    changelog += f"**Full Changelog**: https://github.com/{repo}/compare/{from_tag}...{to_tag}"
 
     return changelog
 
@@ -153,10 +149,12 @@ if __name__ == "__main__":
 
     Generate a changelog between two tags, output as markdown
 
-    Usage: python generate-changelog.py <from_tag> <to_tag>
+    Usage: python generate_changelog.py <from_tag> <to_tag>
+    Note: Use empty string "" for from_tag for first release
     """
     if len(sys.argv) != 3:
-        print("Usage: python generate-changelog.py <from_tag> <to_tag>")
+        print("Usage: python generate_changelog.py <from_tag> <to_tag>")
+        print('Note: Use empty string "" for from_tag for first release')
         sys.exit(1)
 
     print(main(from_tag=sys.argv[1], to_tag=sys.argv[2]))

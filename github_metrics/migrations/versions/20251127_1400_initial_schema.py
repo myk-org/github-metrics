@@ -141,7 +141,7 @@ def upgrade() -> None:
     )
 
     # Create indexes for webhooks table
-    op.create_index("ix_webhooks_delivery_id", "webhooks", ["delivery_id"], unique=True)
+    # Note: delivery_id unique index is already created by UniqueConstraint above
     op.create_index("ix_webhooks_repository", "webhooks", ["repository"], unique=False)
     op.create_index("ix_webhooks_event_type", "webhooks", ["event_type"], unique=False)
     op.create_index("ix_webhooks_pr_number", "webhooks", ["pr_number"], unique=False)
