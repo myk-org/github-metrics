@@ -42,6 +42,7 @@ class ComboBox {
         // Bound event handlers for cleanup
         this.scrollHandler = null;
         this.resizeHandler = null;
+        this._boundHandleClickOutside = null;
 
         this._initialize();
     }
@@ -116,8 +117,9 @@ class ComboBox {
         // Keyboard navigation
         this.input.addEventListener('keydown', (e) => this._handleKeydown(e));
 
-        // Click outside to close
-        document.addEventListener('click', (e) => this._handleClickOutside(e));
+        // Click outside to close - capture bound handler for cleanup
+        this._boundHandleClickOutside = (e) => this._handleClickOutside(e);
+        document.addEventListener('click', this._boundHandleClickOutside);
     }
 
     /**
@@ -260,9 +262,13 @@ class ComboBox {
             optionElement.setAttribute('data-index', index);
 
             // Highlight if selected
-            if (option.value === this.input.value || option.label === this.input.value) {
+            const isSelected = option.value === this.input.value || option.label === this.input.value;
+            if (isSelected) {
                 optionElement.classList.add('selected');
             }
+
+            // Set aria-selected for accessibility
+            optionElement.setAttribute('aria-selected', isSelected ? 'true' : 'false');
 
             // Click handler
             optionElement.addEventListener('mousedown', (e) => {
@@ -308,8 +314,13 @@ class ComboBox {
             if (idx === this.highlightedIndex) {
                 opt.classList.add('highlighted');
                 opt.scrollIntoView({ block: 'nearest' });
+                opt.setAttribute('aria-selected', 'true');
             } else {
                 opt.classList.remove('highlighted');
+                // Restore original aria-selected state based on whether it matches input value
+                const dataValue = opt.getAttribute('data-value');
+                const isSelected = dataValue === this.input.value || opt.textContent === this.input.value;
+                opt.setAttribute('aria-selected', isSelected ? 'true' : 'false');
             }
         });
     }
@@ -333,6 +344,13 @@ class ComboBox {
      * @private
      */
     _selectOption(option) {
+        // Update all options' aria-selected state
+        const options = this.dropdown.querySelectorAll('.combo-box-option');
+        options.forEach((opt) => {
+            const dataValue = opt.getAttribute('data-value');
+            opt.setAttribute('aria-selected', dataValue === option.value ? 'true' : 'false');
+        });
+
         this.input.value = option.label;
         this.onSelect(option.value);
         this.close();
@@ -455,6 +473,12 @@ class ComboBox {
     destroy() {
         // Close to clean up event listeners
         this.close();
+
+        // Remove click outside listener
+        if (this._boundHandleClickOutside) {
+            document.removeEventListener('click', this._boundHandleClickOutside);
+            this._boundHandleClickOutside = null;
+        }
 
         // Remove dropdown
         if (this.dropdown && this.dropdown.parentNode) {

@@ -154,7 +154,7 @@ Current test coverage: **61% overall**
 | `utils/security.py` | 91% |
 | `database.py` | 82% |
 | `app.py` | 62% |
-| `web/dashboard.py` | 14% (needs more tests) |
+| `web/dashboard.py` | 100% |
 | `webhook_setup.py` | 0% (needs tests) |
 
 ## Test Patterns

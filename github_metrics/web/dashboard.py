@@ -8,8 +8,6 @@ from pathlib import Path
 from fastapi import HTTPException
 from fastapi.responses import HTMLResponse
 
-from github_metrics.database import DatabaseManager
-
 
 class MetricsDashboardController:
     """
@@ -18,23 +16,20 @@ class MetricsDashboardController:
     Provides serving of the metrics dashboard HTML page.
 
     Example:
-        controller = MetricsDashboardController(db_manager, logger)
+        controller = MetricsDashboardController(logger)
         html_response = controller.get_dashboard_page()
     """
 
-    def __init__(self, db_manager: DatabaseManager, logger: logging.Logger) -> None:
+    def __init__(self, logger: logging.Logger) -> None:
         """
         Initialize the metrics dashboard controller.
 
         Args:
-            db_manager: DatabaseManager instance for query execution
             logger: Logger instance for this controller
 
         Architecture guarantees:
-        - db_manager is ALWAYS provided (required parameter) - no defensive checks needed
         - logger is ALWAYS provided (required parameter) - no defensive checks needed
         """
-        self.db_manager = db_manager
         self.logger = logger
 
     async def shutdown(self) -> None:

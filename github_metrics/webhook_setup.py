@@ -77,33 +77,37 @@ async def setup_webhooks(
         logger.exception("Failed to authenticate with GitHub")
         return {"error": (False, "Failed to authenticate with GitHub")}
 
-    # Create tasks for all repositories
-    tasks = [
-        _create_webhook_for_repository(
-            repository_name=repo_name,
-            github_api=github_api,
-            webhook_url=config.github.webhook_url,
-            webhook_secret=config.webhook.secret or None,
-            logger=logger,
-        )
-        for repo_name in config.github.repositories
-    ]
+    # Create bounded semaphore to limit concurrent GitHub API calls
+    semaphore = asyncio.Semaphore(10)
 
-    # Run all tasks in parallel
+    async def _bounded_create(repo_name: str) -> tuple[bool, str]:
+        async with semaphore:
+            return await _create_webhook_for_repository(
+                repository_name=repo_name,
+                github_api=github_api,
+                webhook_url=config.github.webhook_url,
+                webhook_secret=config.webhook.secret or None,
+                logger=logger,
+            )
+
+    # Create tasks for all repositories with bounded concurrency
+    tasks = [_bounded_create(repo_name) for repo_name in config.github.repositories]
+
+    # Run all tasks in parallel (max 10 concurrent)
     task_results = await asyncio.gather(*tasks, return_exceptions=True)
 
     # Process results
     for repo_name, result in zip(config.github.repositories, task_results, strict=True):
         if isinstance(result, Exception):
             results[repo_name] = (False, f"Exception: {result}")
-            logger.error(f"{repo_name}: {result}")
+            logger.error("%s: %s", repo_name, result)
         elif isinstance(result, tuple):
             success, message = result
             results[repo_name] = (success, message)
             if success:
-                logger.info(message)
+                logger.info("%s", message)
             else:
-                logger.error(message)
+                logger.error("%s", message)
 
     return results
 
@@ -155,7 +159,7 @@ async def _create_webhook_for_repository(
             return True, f"{repository_name}: Webhook already exists"
 
     # Create new webhook
-    logger.info(f"Creating webhook for {repository_name}: {webhook_url}")
+    logger.info("Creating webhook for %s: %s", repository_name, webhook_url)
     try:
         await asyncio.to_thread(
             repo.create_hook,

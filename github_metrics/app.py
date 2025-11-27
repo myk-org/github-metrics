@@ -141,7 +141,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
 
     # Initialize dashboard controller
     dashboard_logger = get_logger(name="github_metrics.dashboard")
-    dashboard_controller = MetricsDashboardController(db_manager, dashboard_logger)
+    dashboard_controller = MetricsDashboardController(dashboard_logger)
     LOGGER.info("Dashboard controller initialized")
 
     yield

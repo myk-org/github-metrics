@@ -9,8 +9,7 @@ Tests dashboard functionality including:
 
 from __future__ import annotations
 
-import logging
-from unittest.mock import AsyncMock, Mock, mock_open, patch
+from unittest.mock import Mock, mock_open, patch
 
 import pytest
 from fastapi import HTTPException
@@ -22,25 +21,12 @@ class TestMetricsDashboardController:
     """Tests for MetricsDashboardController class."""
 
     @pytest.fixture
-    def mock_db_manager(self) -> Mock:
-        """Create mock database manager."""
-        mock = AsyncMock()
-        mock.fetch = AsyncMock(return_value=[])
-        return mock
-
-    @pytest.fixture
-    def mock_logger(self) -> Mock:
-        """Create mock logger."""
-        return Mock(spec=logging.Logger)
-
-    @pytest.fixture
     def dashboard_controller(
         self,
-        mock_db_manager: Mock,
         mock_logger: Mock,
     ) -> MetricsDashboardController:
         """Create MetricsDashboardController instance."""
-        return MetricsDashboardController(db_manager=mock_db_manager, logger=mock_logger)
+        return MetricsDashboardController(logger=mock_logger)
 
     async def test_shutdown_completes_successfully(
         self,
