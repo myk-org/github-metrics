@@ -54,7 +54,7 @@ def parse_commit_line(line: str, delimiter: str = "\x1f") -> dict:
             "author": parts[2],
             "date": parts[3],
         }
-    except Exception as ex:
+    except ValueError as ex:
         print(f"Error parsing line: {line} - {ex}")
         return {}
 
@@ -64,16 +64,17 @@ def categorize_commit(commit: dict, title_to_type_map: dict, default_category: s
     if not commit or "title" not in commit:
         return default_category
     title = commit["title"]
-    try:
-        prefix = title.split(":", 1)[0].lower()  # Extract the prefix before the first colon
-        return title_to_type_map.get(prefix, default_category)
-    except IndexError:
-        return default_category
+    prefix = title.split(":", 1)[0].lower()
+    return title_to_type_map.get(prefix, default_category)
 
 
 def format_changelog_entry(change: dict, section: str) -> str:
     """Formats a single changelog entry."""
-    title = change["title"].split(":", 1)[1] if section != "Other Changes:" else change["title"]
+    if section != "Other Changes:":
+        _, _, after_colon = change["title"].partition(":")
+        title = after_colon.strip() if after_colon else change["title"]
+    else:
+        title = change["title"]
     return f"- {title} ({change['commit']}) by {change['author']} on {change['date']}\n"
 
 
