@@ -262,9 +262,9 @@ uv run pytest tests/ --cov=github_metrics
 
 Areas that need additional test coverage:
 
-1. **Dashboard Controller** (`web/dashboard.py`) - Currently 100% coverage
-   - Dashboard rendering
-   - HTML template loading
+1. **Dashboard Controller** (`web/dashboard.py`) - Consider adding edge-case tests
+   - Error handling for corrupted template files
+   - Mutation testing to validate robustness
 
 2. **Webhook Setup** (`webhook_setup.py`) - Currently 0% coverage
    - GitHub API integration

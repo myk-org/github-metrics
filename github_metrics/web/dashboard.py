@@ -1,4 +1,4 @@
-"""Metrics dashboard controller for real-time webhook metrics streaming and visualization."""
+"""Metrics dashboard controller for serving the dashboard HTML page."""
 
 from __future__ import annotations
 

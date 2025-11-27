@@ -25,6 +25,9 @@ from simple_logger.logger import get_logger
 
 from github_metrics.config import MetricsConfig, get_config
 
+# Maximum number of concurrent webhook setup operations
+MAX_CONCURRENT_WEBHOOKS = 10
+
 
 async def setup_webhooks(
     config: MetricsConfig | None = None,
@@ -78,7 +81,7 @@ async def setup_webhooks(
         return {"error": (False, "Failed to authenticate with GitHub")}
 
     # Create bounded semaphore to limit concurrent GitHub API calls
-    semaphore = asyncio.Semaphore(10)
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_WEBHOOKS)
 
     async def _bounded_create(repo_name: str) -> tuple[bool, str]:
         async with semaphore:
@@ -108,6 +111,10 @@ async def setup_webhooks(
                 logger.info("%s", message)
             else:
                 logger.error("%s", message)
+        else:
+            # Unexpected return type - should not happen but handle gracefully
+            results[repo_name] = (False, f"Unexpected result type: {type(result).__name__}")
+            logger.error("%s: Unexpected result type: %s", repo_name, type(result).__name__)
 
     return results
 

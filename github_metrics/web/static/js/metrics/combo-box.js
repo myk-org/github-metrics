@@ -38,11 +38,16 @@ class ComboBox {
         this.filteredOptions = [];
         this.isOpen = false;
         this.blurTimeout = null;
+        this._isInitialized = false;
 
         // Bound event handlers for cleanup
         this.scrollHandler = null;
         this.resizeHandler = null;
         this._boundHandleClickOutside = null;
+        this._boundHandleFocus = null;
+        this._boundHandleInput = null;
+        this._boundHandleBlur = null;
+        this._boundHandleKeydown = null;
 
         this._initialize();
     }
@@ -55,8 +60,7 @@ class ComboBox {
         // Find the input element
         this.input = document.getElementById(this.inputId);
         if (!this.input) {
-            console.error(`[ComboBox] Input element with ID "${this.inputId}" not found`);
-            return;
+            throw new Error(`ComboBox: Input element not found: ${this.inputId}`);
         }
 
         // Set placeholder
@@ -81,6 +85,7 @@ class ComboBox {
         this._setupEventListeners();
 
         console.log(`[ComboBox] Initialized for input #${this.inputId}`);
+        this._isInitialized = true;
     }
 
     /**
@@ -105,17 +110,23 @@ class ComboBox {
      * @private
      */
     _setupEventListeners() {
+        // Create and store bound handlers
+        this._boundHandleFocus = () => this._handleFocus();
+        this._boundHandleInput = (e) => this._handleInput(e);
+        this._boundHandleBlur = () => this._handleBlur();
+        this._boundHandleKeydown = (e) => this._handleKeydown(e);
+
         // Focus: Open dropdown
-        this.input.addEventListener('focus', () => this._handleFocus());
+        this.input.addEventListener('focus', this._boundHandleFocus);
 
         // Input: Filter options
-        this.input.addEventListener('input', (e) => this._handleInput(e));
+        this.input.addEventListener('input', this._boundHandleInput);
 
         // Blur: Close dropdown (with delay for click handling)
-        this.input.addEventListener('blur', () => this._handleBlur());
+        this.input.addEventListener('blur', this._boundHandleBlur);
 
         // Keyboard navigation
-        this.input.addEventListener('keydown', (e) => this._handleKeydown(e));
+        this.input.addEventListener('keydown', this._boundHandleKeydown);
 
         // Click outside to close - capture bound handler for cleanup
         this._boundHandleClickOutside = (e) => this._handleClickOutside(e);
@@ -439,6 +450,14 @@ class ComboBox {
     }
 
     /**
+     * Get initialization status
+     * @returns {boolean} True if initialized successfully
+     */
+    get isInitialized() {
+        return this._isInitialized;
+    }
+
+    /**
      * Get current value
      * @returns {string} Current input value
      */
@@ -474,6 +493,26 @@ class ComboBox {
         // Close to clean up event listeners
         this.close();
 
+        // Remove input event listeners
+        if (this.input) {
+            if (this._boundHandleFocus) {
+                this.input.removeEventListener('focus', this._boundHandleFocus);
+                this._boundHandleFocus = null;
+            }
+            if (this._boundHandleInput) {
+                this.input.removeEventListener('input', this._boundHandleInput);
+                this._boundHandleInput = null;
+            }
+            if (this._boundHandleBlur) {
+                this.input.removeEventListener('blur', this._boundHandleBlur);
+                this._boundHandleBlur = null;
+            }
+            if (this._boundHandleKeydown) {
+                this.input.removeEventListener('keydown', this._boundHandleKeydown);
+                this._boundHandleKeydown = null;
+            }
+        }
+
         // Remove click outside listener
         if (this._boundHandleClickOutside) {
             document.removeEventListener('click', this._boundHandleClickOutside);
@@ -487,14 +526,16 @@ class ComboBox {
 
         // Remove classes
         this.container.classList.remove('combo-box', 'open');
-        this.input.classList.remove('combo-box-input');
+        if (this.input) {
+            this.input.classList.remove('combo-box-input');
 
-        // Remove ARIA attributes
-        this.input.removeAttribute('role');
-        this.input.removeAttribute('aria-autocomplete');
-        this.input.removeAttribute('aria-expanded');
-        this.input.removeAttribute('aria-haspopup');
-        this.input.removeAttribute('aria-controls');
+            // Remove ARIA attributes
+            this.input.removeAttribute('role');
+            this.input.removeAttribute('aria-autocomplete');
+            this.input.removeAttribute('aria-expanded');
+            this.input.removeAttribute('aria-haspopup');
+            this.input.removeAttribute('aria-controls');
+        }
 
         // Clear timeout
         if (this.blurTimeout) {
