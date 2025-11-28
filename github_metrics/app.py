@@ -1793,7 +1793,7 @@ async def get_user_pull_requests(
           AND """
         + where_clause
         + """
-        ORDER BY repository, (payload->'pull_request'->>'number')::int DESC, created_at DESC
+        ORDER BY repository, (payload->'pull_request'->>'number')::int DESC, webhooks.created_at DESC
         LIMIT $"""
         + str(limit_param_idx)
         + " OFFSET $"
