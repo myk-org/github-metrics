@@ -41,23 +41,32 @@ class TestValidateServerHost:
 
     def test_validate_server_host_rejects_wildcard_without_opt_in(self) -> None:
         """Test that wildcard addresses are rejected without opt-in."""
-        # Ensure opt-in flag is not set
-        os.environ.pop("METRICS_SERVER_ALLOW_ALL_HOSTS", None)
+        # Save original value and ensure opt-in flag is not set
+        original_value = os.environ.pop("METRICS_SERVER_ALLOW_ALL_HOSTS", None)
 
-        with pytest.raises(ValueError, match="Security warning.*0.0.0.0"):
-            _validate_server_host("0.0.0.0")
+        try:
+            with pytest.raises(ValueError, match=r"Security warning.*0\.0\.0\.0"):
+                _validate_server_host("0.0.0.0")
 
-        with pytest.raises(ValueError, match="Security warning.*::"):
-            _validate_server_host("::")
+            with pytest.raises(ValueError, match=r"Security warning.*::"):
+                _validate_server_host("::")
+        finally:
+            # Restore original value
+            if original_value is not None:
+                os.environ["METRICS_SERVER_ALLOW_ALL_HOSTS"] = original_value
 
     def test_validate_server_host_allows_wildcard_with_opt_in(self) -> None:
         """Test that wildcard addresses are allowed with explicit opt-in."""
+        original_value = os.environ.get("METRICS_SERVER_ALLOW_ALL_HOSTS")
         os.environ["METRICS_SERVER_ALLOW_ALL_HOSTS"] = "true"
         try:
             assert _validate_server_host("0.0.0.0") == "0.0.0.0"
             assert _validate_server_host("::") == "::"
         finally:
-            os.environ.pop("METRICS_SERVER_ALLOW_ALL_HOSTS", None)
+            if original_value is not None:
+                os.environ["METRICS_SERVER_ALLOW_ALL_HOSTS"] = original_value
+            else:
+                os.environ.pop("METRICS_SERVER_ALLOW_ALL_HOSTS", None)
 
 
 class TestDatabaseConfig:
@@ -197,19 +206,32 @@ class TestMetricsConfig:
 
     def test_config_rejects_wildcard_host_without_opt_in(self) -> None:
         """Test that MetricsConfig rejects wildcard server host without opt-in."""
+        # Save original values
+        original_host = os.environ.get("METRICS_SERVER_HOST")
+        original_allow = os.environ.get("METRICS_SERVER_ALLOW_ALL_HOSTS")
+
         # Set wildcard host without opt-in flag
         os.environ["METRICS_SERVER_HOST"] = "0.0.0.0"
         os.environ.pop("METRICS_SERVER_ALLOW_ALL_HOSTS", None)
 
         try:
-            with pytest.raises(ValueError, match="Security warning.*0.0.0.0"):
+            with pytest.raises(ValueError, match=r"Security warning.*0\.0\.0\.0"):
                 MetricsConfig()
         finally:
-            # Clean up - restore safe default
-            os.environ["METRICS_SERVER_HOST"] = "127.0.0.1"
+            # Restore original values
+            if original_host is not None:
+                os.environ["METRICS_SERVER_HOST"] = original_host
+            else:
+                os.environ.pop("METRICS_SERVER_HOST", None)
+            if original_allow is not None:
+                os.environ["METRICS_SERVER_ALLOW_ALL_HOSTS"] = original_allow
 
     def test_config_allows_wildcard_host_with_opt_in(self) -> None:
         """Test that MetricsConfig allows wildcard server host with explicit opt-in."""
+        # Save original values
+        original_host = os.environ.get("METRICS_SERVER_HOST")
+        original_allow = os.environ.get("METRICS_SERVER_ALLOW_ALL_HOSTS")
+
         os.environ["METRICS_SERVER_HOST"] = "0.0.0.0"
         os.environ["METRICS_SERVER_ALLOW_ALL_HOSTS"] = "true"
 
@@ -217,9 +239,15 @@ class TestMetricsConfig:
             config = MetricsConfig()
             assert config.server.host == "0.0.0.0"
         finally:
-            # Clean up
-            os.environ["METRICS_SERVER_HOST"] = "127.0.0.1"
-            os.environ.pop("METRICS_SERVER_ALLOW_ALL_HOSTS", None)
+            # Restore original values
+            if original_host is not None:
+                os.environ["METRICS_SERVER_HOST"] = original_host
+            else:
+                os.environ.pop("METRICS_SERVER_HOST", None)
+            if original_allow is not None:
+                os.environ["METRICS_SERVER_ALLOW_ALL_HOSTS"] = original_allow
+            else:
+                os.environ.pop("METRICS_SERVER_ALLOW_ALL_HOSTS", None)
 
 
 class TestGetConfig:

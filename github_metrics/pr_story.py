@@ -660,6 +660,9 @@ async def get_pr_story(
             # For queued/in_progress checks, conclusion is None (pending)
             # This is valid and should be shown
             # Key by (name, head_sha) - later events overwrite earlier ones
+            # Skip events without valid head SHA
+            if not check_head_sha:
+                continue
             key = (check_name, check_head_sha)
             seen_check_runs[key] = {
                 "created_at": row["created_at"],
@@ -667,7 +670,7 @@ async def get_pr_story(
                 "name": check_name,
                 "status": status,
                 "conclusion": conclusion,
-                "head_sha": check_head_sha[:7] if check_head_sha else "",
+                "head_sha": check_head_sha[:7],
             }
 
         # Process status events and merge them into seen_check_runs
@@ -686,6 +689,10 @@ async def get_pr_story(
             else:
                 conclusion = None  # pending
 
+            # Skip status events without valid SHA
+            if not sha:
+                continue
+
             # Use the same key structure as check_runs: (name, head_sha)
             key = (context, sha)
 
@@ -700,7 +707,7 @@ async def get_pr_story(
                         "name": context,
                         "status": "completed" if state in ("success", "failure", "error") else "pending",
                         "conclusion": conclusion,
-                        "head_sha": sha[:7] if sha else "",
+                        "head_sha": sha[:7],
                     }
             else:
                 # Add new status event
@@ -710,7 +717,7 @@ async def get_pr_story(
                     "name": context,
                     "status": "completed" if state in ("success", "failure", "error") else "pending",
                     "conclusion": conclusion,
-                    "head_sha": sha[:7] if sha else "",
+                    "head_sha": sha[:7],
                 }
 
         # Group all check_runs (both from check_run events and status events) by head_sha

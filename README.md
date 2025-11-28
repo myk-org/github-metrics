@@ -540,6 +540,35 @@ The service validates webhook signatures using HMAC SHA256 (`X-Hub-Signature-256
 - Never expose PostgreSQL port to public internet (bind to 127.0.0.1 only)
 - Use strong database passwords (generated, not dictionary words)
 
+### Server Binding Security
+
+**IMPORTANT:** By default, binding to wildcard addresses (`0.0.0.0` or `::`) requires explicit opt-in for security.
+
+**Production recommendation:**
+```bash
+# Option 1: Bind to specific interface (most secure)
+METRICS_SERVER_HOST=127.0.0.1  # Localhost only - use with reverse proxy
+
+# Option 2: Bind to all interfaces (requires opt-in)
+METRICS_SERVER_HOST=0.0.0.0
+METRICS_SERVER_ALLOW_ALL_HOSTS=true  # Explicit security acknowledgment
+```
+
+**Why this matters:**
+- Binding to `0.0.0.0` exposes the service on ALL network interfaces
+- In containerized deployments, you typically want `0.0.0.0` (with proper network isolation)
+- For local development or single-host deployments, `127.0.0.1` is safer
+- The explicit opt-in prevents accidental exposure to unintended networks
+
+**Container deployment:**
+When deploying with Docker/Podman, you'll typically use:
+- `METRICS_SERVER_HOST=0.0.0.0` (listens inside container)
+- `METRICS_SERVER_ALLOW_ALL_HOSTS=true` (explicit acknowledgment)
+- Port mapping controls external access (e.g., `8080:8080` or `127.0.0.1:8080:8080`)
+
+**Development:**
+The `dev/run.sh` script automatically sets `METRICS_SERVER_ALLOW_ALL_HOSTS=true` for convenience.
+
 ## Development
 
 ### Requirements

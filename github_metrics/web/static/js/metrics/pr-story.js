@@ -902,8 +902,10 @@ class PRStoryModal {
         const header = document.getElementById('prStoryHeader');
         if (!header) return;
 
-        const stateClass = pr.merged ? 'merged' : pr.state;
-        const stateLabel = pr.merged ? 'merged' : pr.state;
+        // Whitelist approach for state class to ensure safe CSS class names
+        const stateMap = { 'open': 'open', 'closed': 'closed' };
+        const stateClass = pr.merged ? 'merged' : (stateMap[pr.state] || 'open');
+        const stateLabel = pr.merged ? 'merged' : this.escapeHtml(pr.state);
 
         // Two-line header:
         // Line 1: #number: title
@@ -992,7 +994,7 @@ class PRStoryModal {
                            data-event-type="${eventType}"
                            ${isChecked ? 'checked' : ''}>
                     <span class="pr-story-filter-option-icon">${config.icon}</span>
-                    <span class="pr-story-filter-option-label">${config.label}</span>
+                    <span class="pr-story-filter-option-label">${this.escapeHtml(config.label)}</span>
                 </label>
             `;
         }).join('');
@@ -1000,9 +1002,12 @@ class PRStoryModal {
         // Get toggle button text
         const selectedCount = this.selectedEventTypes.size;
         const totalCount = sortedEventTypes.length;
-        const toggleText = selectedCount === 0 || selectedCount === totalCount
-            ? 'All Events'
-            : `${selectedCount}/${totalCount}`;
+        const toggleText =
+            selectedCount === totalCount
+                ? 'All Events'
+                : selectedCount === 0
+                    ? 'None'
+                    : `${selectedCount}/${totalCount}`;
 
         filterEl.innerHTML = `
             <div class="pr-story-filter-dropdown">
@@ -1073,9 +1078,12 @@ class PRStoryModal {
         if (toggleBtn) {
             const totalCount = document.querySelectorAll('#prStoryFilter input[type="checkbox"]').length;
             const selectedCount = this.selectedEventTypes.size;
-            toggleBtn.textContent = selectedCount === 0 || selectedCount === totalCount
-                ? 'All Events'
-                : `${selectedCount}/${totalCount}`;
+            toggleBtn.textContent =
+                selectedCount === totalCount
+                    ? 'All Events'
+                    : selectedCount === 0
+                        ? 'None'
+                        : `${selectedCount}/${totalCount}`;
         }
 
         // Re-render timeline with filter
@@ -1144,7 +1152,7 @@ class PRStoryModal {
                 <div class="timeline-event-content">
                     <div class="timeline-event-header">
                         <span class="timeline-event-icon">${config.icon}</span>
-                        <span class="timeline-event-title">${config.label}</span>
+                        <span class="timeline-event-title">${this.escapeHtml(config.label)}</span>
                         <span class="timeline-event-time">
                             ${relativeTime} (${absoluteTime})
                         </span>
@@ -1185,7 +1193,7 @@ class PRStoryModal {
                             <span class="timeline-event-group-expand"></span>
                             <span class="timeline-event-icon">${config.icon}</span>
                             <span class="timeline-event-title">
-                                ${childCount} ${config.label}${childCount !== 1 ? 's' : ''}
+                                ${childCount} ${this.escapeHtml(config.label)}${childCount !== 1 ? 's' : ''}
                                 (${successCount} ✓, ${failureCount} ✗${pendingInfo})${commitInfo}
                             </span>
                             <span class="timeline-event-time">

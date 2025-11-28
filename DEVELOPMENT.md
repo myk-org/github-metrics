@@ -48,6 +48,7 @@ All variables have sensible defaults for development. Override by creating `.env
 | `METRICS_DB_PORT` | `15432` | Database port (non-default to avoid conflicts) |
 | `METRICS_SERVER_HOST` | `0.0.0.0` | Server bind host |
 | `METRICS_SERVER_PORT` | `8765` | Server port (non-default to avoid conflicts) |
+| `METRICS_SERVER_ALLOW_ALL_HOSTS` | `true` | Allow binding to 0.0.0.0 (set by dev/run.sh) |
 | `METRICS_VERIFY_GITHUB_IPS` | `false` | Skip GitHub IP verification in dev |
 | `METRICS_VERIFY_CLOUDFLARE_IPS` | `false` | Skip Cloudflare IP verification in dev |
 
