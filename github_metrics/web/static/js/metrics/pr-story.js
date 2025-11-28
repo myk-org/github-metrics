@@ -786,6 +786,14 @@ class PRStoryModal {
             return;
         }
 
+        // Reset modal position to center (fixes issue #13: wrong placement when opening 2nd PR story)
+        const modalContent = modal.querySelector('.modal-content.pr-story-modal');
+        if (modalContent) {
+            modalContent.style.transform = '';
+            modalContent.style.left = '';
+            modalContent.style.top = '';
+        }
+
         modal.classList.add('show');
         document.body.style.overflow = 'hidden';
 
@@ -809,9 +817,9 @@ class PRStoryModal {
             // Reset modal position to center
             const modalContent = modal.querySelector('.modal-content.pr-story-modal');
             if (modalContent) {
-                modalContent.style.transform = 'translate(-50%, -50%)';
-                modalContent.style.left = '50%';
-                modalContent.style.top = '50%';
+                modalContent.style.transform = '';
+                modalContent.style.left = '';
+                modalContent.style.top = '';
             }
         }
         document.body.style.overflow = '';

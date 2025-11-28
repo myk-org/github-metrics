@@ -375,6 +375,7 @@ class MetricsDashboard {
                 pr_reviewers: data.contributors.pr_reviewers?.data || data.contributors.pr_reviewers || [],
                 pr_approvers: data.contributors.pr_approvers?.data || data.contributors.pr_approvers || []
             } : null,
+            userPrs: data.userPrs,
             eventTypeDistribution: data.eventTypeDistribution
         };
 
@@ -445,6 +446,24 @@ class MetricsDashboard {
             console.log(`[Dashboard] Filtered by user: ${filteredContributors.pr_creators.length} creators, ${filteredContributors.pr_reviewers.length} reviewers, ${filteredContributors.pr_approvers.length} approvers`);
         }
 
+        // Apply user filter to User PRs (filter by owner field)
+        let filteredUserPrs = workingData.userPrs;
+        if (this.userFilter && filteredUserPrs) {
+            const userPrsData = filteredUserPrs.data || filteredUserPrs;
+            const filteredPRsData = Array.isArray(userPrsData)
+                ? userPrsData.filter(pr => {
+                    const owner = (pr.owner || '').toLowerCase();
+                    return owner === this.userFilter.toLowerCase();
+                })
+                : [];
+
+            filteredUserPrs = filteredUserPrs.data
+                ? { ...filteredUserPrs, data: filteredPRsData }
+                : filteredPRsData;
+
+            console.log(`[Dashboard] Filtered User PRs by owner: ${filteredPRsData.length} PRs`);
+        }
+
         // ALWAYS update KPI tooltip (whether filtered or not)
         this.updateKPITooltip(filteredSummary);
 
@@ -493,6 +512,11 @@ class MetricsDashboard {
                         : filteredContributors.pr_approvers
                 };
                 this.updateContributorsTables(contributorsForTable);
+            }
+
+            // Update User PRs Table with filtered data
+            if (filteredUserPrs) {
+                this.updateUserPRsTable(filteredUserPrs);
             }
 
             console.log('[Dashboard] Charts updated');
