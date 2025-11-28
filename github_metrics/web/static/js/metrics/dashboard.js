@@ -376,7 +376,7 @@ class MetricsDashboard {
                 pr_approvers: data.contributors.pr_approvers?.data || data.contributors.pr_approvers || []
             } : null,
             userPrs: data.userPrs,
-            eventTypeDistribution: data.eventTypeDistribution
+            eventTypeDistribution: data.eventTypeDistribution,
         };
 
         const summary = workingData.summary;
