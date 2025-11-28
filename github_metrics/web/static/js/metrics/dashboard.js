@@ -176,7 +176,7 @@ class MetricsDashboard {
             console.log('[Dashboard] Initial data loaded:', this.currentData);
 
             // Update UI with loaded data
-            this.updateKPICards(summaryData.summary || summaryData);
+            this.updateKPITooltip(summaryData.summary || summaryData);
             this.updateCharts(this.currentData);
 
             // Update User PRs table
@@ -255,114 +255,80 @@ class MetricsDashboard {
     }
 
     /**
-     * Update KPI cards with new data.
+     * Update KPI tooltip with new data.
      *
      * @param {Object} summary - Summary data
      */
-    updateKPICards(summary) {
+    updateKPITooltip(summary) {
         if (!summary) {
-            console.warn('[Dashboard] No summary data to update KPI cards');
+            console.warn('[Dashboard] No summary data to update KPI tooltip');
             return;
         }
 
-        // Total Events - use 0 as fallback, not undefined
-        this.updateKPICard('total-events', {
+        // Total Events
+        this.updateTooltipMetric('tooltipTotalEvents', 'tooltipTotalEventsTrend', {
             value: summary.total_events ?? 0,
             trend: summary.total_events_trend ?? 0
         });
 
-        // Success Rate - calculate from available data
+        // Success Rate
         const successRate = summary.success_rate ??
             (summary.total_events > 0 ? (summary.successful_events / summary.total_events * 100) : 0);
-        this.updateKPICard('success-rate', {
+        this.updateTooltipMetric('tooltipSuccessRate', 'tooltipSuccessRateTrend', {
             value: `${successRate.toFixed(2)}%`,
             trend: summary.success_rate_trend ?? 0
         });
 
         // Failed Events
-        this.updateKPICard('failed-events', {
+        this.updateTooltipMetric('tooltipFailedEvents', 'tooltipFailedEventsTrend', {
             value: summary.failed_events ?? 0,
             trend: summary.failed_events_trend ?? 0
         });
 
         // Average Duration
         const avgDuration = summary.avg_duration_ms ?? summary.avg_processing_time_ms ?? 0;
-        this.updateKPICard('avg-duration', {
+        this.updateTooltipMetric('tooltipAvgDuration', 'tooltipAvgDurationTrend', {
             value: window.MetricsUtils.formatDuration(avgDuration),
             trend: summary.avg_duration_trend ?? 0
         });
 
-        console.log('[Dashboard] KPI cards updated');
+        console.log('[Dashboard] KPI tooltip updated');
     }
 
     /**
-     * Update individual KPI card.
+     * Update individual metric in tooltip.
      *
-     * @param {string} cardId - KPI card element ID
-     * @param {Object} data - Card data
+     * @param {string} valueId - Value element ID
+     * @param {string} trendId - Trend element ID
+     * @param {Object} data - Metric data
      */
-    updateKPICard(cardId, data) {
-        const cardElement = document.getElementById(cardId);
-        if (!cardElement) {
-            console.warn(`[Dashboard] KPI card not found: ${cardId}`);
-            return;
-        }
+    updateTooltipMetric(valueId, trendId, data) {
+        const valueElement = document.getElementById(valueId);
+        const trendElement = document.getElementById(trendId);
 
-        // Update value
-        const valueElement = cardElement.querySelector('.kpi-value');
         if (valueElement) {
             valueElement.textContent = data.value;
         }
 
-        // Update trend
-        const trendElement = cardElement.querySelector('.kpi-trend');
         if (trendElement) {
             const trend = data.trend || 0;
             const trendClass = trend > 0 ? 'positive' : trend < 0 ? 'negative' : 'neutral';
             const trendIcon = trend > 0 ? '↑' : trend < 0 ? '↓' : '→';
 
-            trendElement.className = `kpi-trend ${trendClass}`;
-            trendElement.innerHTML = `
-                <span class="trend-icon">${trendIcon}</span>
-                <span class="trend-value">${Math.abs(trend).toFixed(1)}%</span>
-                <span class="trend-period">vs last period</span>
-            `;
+            trendElement.className = `kpi-trend-text ${trendClass}`;
+            trendElement.textContent = `(${trendIcon} ${Math.abs(trend).toFixed(1)}% vs last period)`;
         }
     }
 
     /**
      * Initialize all charts (calls functions from charts.js).
+     * Note: Chart sections have been removed from the dashboard for simplification.
+     * This method is kept for backward compatibility but does nothing.
      */
     initializeCharts() {
-        console.log('[Dashboard] Initializing charts...');
-
-        if (!window.MetricsCharts) {
-            console.error('[Dashboard] MetricsCharts library not loaded');
-            return;
-        }
-
-        if (!this.currentData.summary || !this.currentData.webhooks || !this.currentData.repositories) {
-            console.warn('[Dashboard] Missing data for chart initialization');
-            return;
-        }
-
-        try {
-            // Event Trends Chart (line chart)
-            this.charts.eventTrends = window.MetricsCharts.createEventTrendsChart('eventTrendsChart');
-
-            // Event Distribution Pie Chart
-            this.charts.eventDistribution = window.MetricsCharts.createEventDistributionChart('eventDistributionChart');
-
-            // API Usage Chart (bar chart)
-            this.charts.apiUsage = window.MetricsCharts.createAPIUsageChart('apiUsageChart');
-
-            // Initial chart update with data
-            this.updateCharts(this.currentData);
-
-            console.log('[Dashboard] Charts initialized:', Object.keys(this.charts));
-        } catch (error) {
-            console.error('[Dashboard] Error initializing charts:', error);
-        }
+        console.log('[Dashboard] Chart initialization skipped (charts removed from UI)');
+        // Charts have been removed from the dashboard
+        // Keeping this method to avoid breaking existing code references
     }
 
     /**
@@ -479,8 +445,8 @@ class MetricsDashboard {
             console.log(`[Dashboard] Filtered by user: ${filteredContributors.pr_creators.length} creators, ${filteredContributors.pr_reviewers.length} reviewers, ${filteredContributors.pr_approvers.length} approvers`);
         }
 
-        // ALWAYS update KPI cards (whether filtered or not)
-        this.updateKPICards(filteredSummary);
+        // ALWAYS update KPI tooltip (whether filtered or not)
+        this.updateKPITooltip(filteredSummary);
 
         // Use filtered data for chart updates
         webhooks = filteredWebhooks;
@@ -490,68 +456,7 @@ class MetricsDashboard {
         }
 
         try {
-            // Update Event Trends Chart (line chart)
-            if (this.charts.eventTrends) {
-                let trendsData;
-
-                // When filtering by repository, always use filtered webhooks
-                if (this.repositoryFilter) {
-                    // Use filtered webhooks to calculate trends
-                    trendsData = this.prepareEventTrendsData(webhooks);
-                    console.log('[Dashboard] Event Trends using filtered webhooks data:', {
-                        totalEvents: webhooks.length,
-                        errors: trendsData.errors.reduce((a, b) => a + b, 0),
-                        success: trendsData.success.reduce((a, b) => a + b, 0)
-                    });
-                } else if (trends && trends.length > 0) {
-                    // Use aggregated trends data from API
-                    trendsData = this.processTrendsData(trends);
-                    console.log('[Dashboard] Event Trends using API trends data:', {
-                        buckets: trends.length,
-                        totalFailed: trends.reduce((sum, t) => sum + t.failed_events, 0),
-                        totalSuccess: trends.reduce((sum, t) => sum + t.successful_events, 0)
-                    });
-                } else if (webhooks) {
-                    // Fallback to calculating from webhooks list (less accurate)
-                    trendsData = this.prepareEventTrendsData(webhooks);
-                    console.log('[Dashboard] Event Trends using fallback webhooks data:', {
-                        totalEvents: webhooks.length,
-                        errors: trendsData.errors.reduce((a, b) => a + b, 0),
-                        success: trendsData.success.reduce((a, b) => a + b, 0)
-                    });
-                }
-
-                if (trendsData) {
-                    window.MetricsCharts.updateEventTrendsChart(this.charts.eventTrends, trendsData);
-                    console.log('[Dashboard] Event Trends chart data:', {
-                        totalErrors: trendsData.errors.reduce((a, b) => a + b, 0),
-                        totalSuccess: trendsData.success.reduce((a, b) => a + b, 0),
-                        totalTotal: trendsData.total.reduce((a, b) => a + b, 0)
-                    });
-                }
-            }
-
-            // Update Event Distribution Chart (pie chart)
-            if (this.charts.eventDistribution && summary) {
-                const eventDist = workingData.eventTypeDistribution || summary.event_type_distribution || {};
-
-                if (eventDist && Object.keys(eventDist).length > 0) {
-                    const distData = {
-                        labels: Object.keys(eventDist),
-                        values: Object.values(eventDist)
-                    };
-                    window.MetricsCharts.updateEventDistributionChart(this.charts.eventDistribution, distData);
-                    console.log('[Dashboard] Event distribution chart updated');
-                } else {
-                    console.warn('[Dashboard] No event type distribution data available');
-                }
-            }
-
-            // Update API Usage Chart (bar chart)
-            if (this.charts.apiUsage && repositories) {
-                const apiData = this.prepareAPIUsageData(repositories);
-                window.MetricsCharts.updateAPIUsageChart(this.charts.apiUsage, apiData);
-            }
+            // Note: Chart update logic has been removed as charts are no longer in the UI
 
             // Update Repository Table with top repositories from summary (has percentage field)
             if (data.topRepositories && data.topRepositories.length > 0) {
@@ -598,28 +503,14 @@ class MetricsDashboard {
 
     /**
      * Process trends data from API for chart.
+     * Note: This method is kept for backward compatibility but is no longer used.
      * @param {Array} trends - Trends data from API
      * @returns {Object} Chart data
      */
     processTrendsData(trends) {
-        // Sort by bucket time
-        const sortedTrends = [...trends].sort((a, b) => new Date(a.bucket) - new Date(b.bucket));
-
-        // Format labels based on bucket granularity
-        const labels = sortedTrends.map(t => {
-            const date = new Date(t.bucket);
-            // Simple heuristic: if buckets are < 24h apart, show time, else date
-            // For now just use local time string
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) +
-                   (this.timeRange !== '1h' && this.timeRange !== '24h' ? ` ${date.getMonth() + 1}/${date.getDate()}` : '');
-        });
-
-        return {
-            labels: labels,
-            success: sortedTrends.map(t => t.successful_events),
-            errors: sortedTrends.map(t => t.failed_events),
-            total: sortedTrends.map(t => t.total_events)
-        };
+        // Method kept for backward compatibility
+        // Charts have been removed from the dashboard
+        return { labels: [], success: [], errors: [], total: [] };
     }
 
     /**
@@ -961,54 +852,7 @@ class MetricsDashboard {
         // Collapse buttons
         this.setupCollapseButtons();
 
-        // Chart settings buttons
-        const eventTrendsSettings = document.getElementById('eventTrendsSettings');
-        if (eventTrendsSettings) {
-            eventTrendsSettings.addEventListener('click', () => this.openModal('eventTrendsModal'));
-        }
-
-        const apiUsageSettings = document.getElementById('apiUsageSettings');
-        if (apiUsageSettings) {
-            apiUsageSettings.addEventListener('click', () => this.openModal('apiUsageModal'));
-        }
-
-        // Close modal buttons
-        document.querySelectorAll('.close-modal').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const modal = e.target.closest('.modal');
-                if (modal) this.closeModal(modal.id);
-            });
-        });
-
-        // Click outside modal to close
-        document.querySelectorAll('.modal').forEach(modal => {
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) this.closeModal(modal.id);
-            });
-        });
-
-        // Event Trends settings
-        document.getElementById('showSuccess')?.addEventListener('change', () => this.updateTrendsVisibility());
-        document.getElementById('showErrors')?.addEventListener('change', () => this.updateTrendsVisibility());
-        document.getElementById('showTotal')?.addEventListener('change', () => this.updateTrendsVisibility());
-        document.querySelectorAll('input[name="trendChartType"]').forEach(radio => {
-            radio.addEventListener('change', (e) => this.changeTrendsChartType(e.target.value));
-        });
-        document.getElementById('exportTrendsCsv')?.addEventListener('click', () => this.exportTrendsData('csv'));
-        document.getElementById('exportTrendsJson')?.addEventListener('click', () => this.exportTrendsData('json'));
-        document.getElementById('downloadTrendsChart')?.addEventListener('click', () => this.downloadChart('eventTrendsChart'));
-
-        // API Usage settings
-        document.getElementById('apiTopN')?.addEventListener('change', (e) => this.updateApiTopN(parseInt(e.target.value, 10)));
-        document.querySelectorAll('input[name="apiSortOrder"]').forEach(radio => {
-            radio.addEventListener('change', (e) => this.updateApiSortOrder(e.target.value));
-        });
-        document.querySelectorAll('input[name="apiChartType"]').forEach(radio => {
-            radio.addEventListener('change', (e) => this.changeApiChartType(e.target.value));
-        });
-        document.getElementById('exportApiCsv')?.addEventListener('click', () => this.exportApiData('csv'));
-        document.getElementById('exportApiJson')?.addEventListener('click', () => this.exportApiData('json'));
-        document.getElementById('downloadApiChart')?.addEventListener('click', () => this.downloadChart('apiUsageChart'));
+        // Note: Chart settings event listeners have been removed as charts are no longer in the UI
 
         console.log('[Dashboard] Event listeners set up');
     }
@@ -1444,121 +1288,20 @@ class MetricsDashboard {
 
     /**
      * Prepare event trends data for line chart.
-     * Groups events by time buckets based on the selected time range.
+     * Note: This method is kept for backward compatibility but is no longer used.
      *
      * @param {Array} events - Array of webhook events
      * @returns {Object} Chart data with labels, success, errors, and total arrays
      */
     prepareEventTrendsData(events) {
-        if (!events || !Array.isArray(events)) {
-            return { labels: [], success: [], errors: [], total: [] };
-        }
-
-        // Use selected range end time as anchor instead of "now"
-        const { endTime } = this.getTimeRangeDates(this.timeRange);
-        const anchor = new Date(endTime);
-        const labels = [];
-        const successCounts = [];
-        const errorCounts = [];
-        const totalCounts = [];
-
-        // Determine bucket configuration based on time range
-        let bucketCount;
-        let bucketSize; // in milliseconds
-        let labelFormatter;
-
-        switch (this.timeRange) {
-            case '1h':
-                // 12 buckets of 5 minutes each
-                bucketCount = 12;
-                bucketSize = 5 * 60 * 1000; // 5 minutes
-                labelFormatter = (date) => date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-                break;
-            case '24h':
-                // 24 hourly buckets
-                bucketCount = 24;
-                bucketSize = 60 * 60 * 1000; // 1 hour
-                labelFormatter = (date) => date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-                break;
-            case '7d':
-                // 7 daily buckets
-                bucketCount = 7;
-                bucketSize = 24 * 60 * 60 * 1000; // 1 day
-                labelFormatter = (date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                break;
-            case '30d':
-                // 30 daily buckets
-                bucketCount = 30;
-                bucketSize = 24 * 60 * 60 * 1000; // 1 day
-                labelFormatter = (date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                break;
-            case 'custom': {
-                // For custom ranges, derive buckets from date range
-                const customRange = this.getTimeRangeDates('custom');
-                const start = new Date(customRange.startTime);
-                const end = new Date(customRange.endTime);
-                const rangeDuration = end - start;
-
-                // Choose bucket size based on range duration
-                if (rangeDuration <= 2 * 60 * 60 * 1000) { // <= 2 hours
-                    bucketCount = 12;
-                    bucketSize = Math.ceil(rangeDuration / 12);
-                    labelFormatter = (date) => date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-                } else if (rangeDuration <= 48 * 60 * 60 * 1000) { // <= 48 hours
-                    bucketCount = Math.ceil(rangeDuration / (60 * 60 * 1000)); // hourly buckets
-                    bucketSize = 60 * 60 * 1000;
-                    labelFormatter = (date) => date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-                } else {
-                    bucketCount = Math.min(30, Math.ceil(rangeDuration / (24 * 60 * 60 * 1000))); // daily buckets, max 30
-                    bucketSize = 24 * 60 * 60 * 1000;
-                    labelFormatter = (date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                }
-                break;
-            }
-            default:
-                // Fallback to 24 hourly buckets
-                bucketCount = 24;
-                bucketSize = 60 * 60 * 1000;
-                labelFormatter = (date) => date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-        }
-
-        // Create time buckets
-        for (let i = bucketCount - 1; i >= 0; i--) {
-            const bucketTime = new Date(anchor.getTime() - i * bucketSize);
-            labels.push(labelFormatter(bucketTime));
-            successCounts.push(0);
-            errorCounts.push(0);
-            totalCounts.push(0);
-        }
-
-        // Count events in each bucket
-        events.forEach(event => {
-            const eventTime = new Date(event.created_at);
-            const timeDiff = anchor - eventTime;
-            const bucketIndex = Math.floor(timeDiff / bucketSize);
-
-            if (bucketIndex >= 0 && bucketIndex < bucketCount) {
-                const index = bucketCount - 1 - bucketIndex;
-                totalCounts[index]++;
-                if (event.status === 'success') {
-                    successCounts[index]++;
-                } else if (event.status === 'error') {
-                    errorCounts[index]++;
-                }
-            }
-        });
-
-        return {
-            labels,
-            success: successCounts,
-            errors: errorCounts,
-            total: totalCounts
-        };
+        // Method kept for backward compatibility
+        // Charts have been removed from the dashboard
+        return { labels: [], success: [], errors: [], total: [] };
     }
 
     /**
      * Prepare API usage data for bar chart.
-     * Shows top N repositories by API usage.
+     * Note: This method is kept for backward compatibility but is no longer used.
      *
      * @param {Array} repositories - Array of repository statistics
      * @param {number} topN - Number of top repositories to show (default: 7)
@@ -1566,181 +1309,16 @@ class MetricsDashboard {
      * @returns {Object} Chart data with labels and values arrays
      */
     prepareAPIUsageData(repositories, topN = 7, sortOrder = 'desc') {
-        if (!repositories || !Array.isArray(repositories)) {
-            return { labels: [], values: [] };
-        }
-
-        // Filter and sort by total_api_calls
-        let sorted = repositories.filter(r => r.total_api_calls > 0);
-
-        if (sortOrder === 'asc') {
-            sorted.sort((a, b) => a.total_api_calls - b.total_api_calls);
-        } else {
-            sorted.sort((a, b) => b.total_api_calls - a.total_api_calls);
-        }
-
-        // Take top N
-        sorted = sorted.slice(0, topN);
-
-        return {
-            labels: sorted.map(r => r.repository?.split('/')[1] || r.repository || 'Unknown'),
-            values: sorted.map(r => r.total_api_calls || 0)
-        };
+        // Method kept for backward compatibility
+        // Charts have been removed from the dashboard
+        return { labels: [], values: [] };
     }
 
     /**
-     * Open a modal dialog.
-     * @param {string} modalId - The ID of the modal to open
+     * Note: Modal and chart customization functions have been removed
+     * as charts are no longer part of the dashboard UI.
+     * These methods were kept for backward compatibility in the codebase.
      */
-    openModal(modalId) {
-        const modal = document.getElementById(modalId);
-        if (modal) {
-            modal.classList.add('show');
-            console.log(`[Dashboard] Opened modal: ${modalId}`);
-        }
-    }
-
-    /**
-     * Close a modal dialog.
-     * @param {string} modalId - The ID of the modal to close
-     */
-    closeModal(modalId) {
-        const modal = document.getElementById(modalId);
-        if (modal) {
-            modal.classList.remove('show');
-            console.log(`[Dashboard] Closed modal: ${modalId}`);
-        }
-    }
-
-    /**
-     * Update Event Trends chart dataset visibility.
-     */
-    updateTrendsVisibility() {
-        const showSuccess = document.getElementById('showSuccess')?.checked;
-        const showErrors = document.getElementById('showErrors')?.checked;
-        const showTotal = document.getElementById('showTotal')?.checked;
-
-        const chart = this.charts.eventTrends;
-        if (chart && chart.data.datasets) {
-            // Datasets: [0] Success, [1] Errors, [2] Total
-            chart.data.datasets[0].hidden = !showSuccess;
-            chart.data.datasets[1].hidden = !showErrors;
-            chart.data.datasets[2].hidden = !showTotal;
-            chart.update();
-            console.log('[Dashboard] Updated Event Trends visibility');
-        }
-    }
-
-    /**
-     * Change Event Trends chart type.
-     * @param {string} type - Chart type ('line', 'area', 'bar')
-     */
-    changeTrendsChartType(type) {
-        const chart = this.charts.eventTrends;
-        if (chart && chart.data.datasets) {
-            chart.data.datasets.forEach(dataset => {
-                if (type === 'area') {
-                    dataset.fill = true;
-                    dataset.type = 'line';
-                } else if (type === 'bar') {
-                    dataset.fill = false;
-                    dataset.type = 'bar';
-                } else {
-                    dataset.fill = false;
-                    dataset.type = 'line';
-                }
-            });
-            chart.update();
-            console.log(`[Dashboard] Changed Event Trends chart type to: ${type}`);
-        }
-    }
-
-    /**
-     * Update API Usage chart top N repositories.
-     * @param {number} n - Number of top repositories to show
-     */
-    updateApiTopN(n) {
-        if (this.currentData && this.currentData.repositories) {
-            const repositories = this.normalizeRepositories(this.currentData.repositories);
-            const apiData = this.prepareAPIUsageData(repositories, n);
-            if (this.charts.apiUsage) {
-                window.MetricsCharts.updateAPIUsageChart(this.charts.apiUsage, apiData);
-                console.log(`[Dashboard] Updated API Usage to show top ${n} repositories`);
-            }
-        }
-    }
-
-    /**
-     * Update API Usage chart sort order.
-     * @param {string} order - Sort order ('asc' or 'desc')
-     */
-    updateApiSortOrder(order) {
-        console.log(`[Dashboard] API sort order changed to: ${order}`);
-        // Re-render with new sort order
-        if (this.currentData && this.currentData.repositories) {
-            const repositories = this.normalizeRepositories(this.currentData.repositories);
-            const apiData = this.prepareAPIUsageData(repositories, undefined, order);
-            if (this.charts.apiUsage) {
-                window.MetricsCharts.updateAPIUsageChart(this.charts.apiUsage, apiData);
-            }
-        }
-    }
-
-    /**
-     * Change API Usage chart type.
-     * @param {string} type - Chart type ('bar', 'horizontalBar', 'line')
-     */
-    changeApiChartType(type) {
-        const chart = this.charts.apiUsage;
-        if (chart) {
-            if (type === 'horizontalBar') {
-                chart.config.options.indexAxis = 'y';
-                chart.config.type = 'bar';
-            } else if (type === 'line') {
-                chart.config.options.indexAxis = 'x';
-                chart.config.type = 'line';
-            } else {
-                chart.config.options.indexAxis = 'x';
-                chart.config.type = 'bar';
-            }
-            chart.update();
-            console.log(`[Dashboard] Changed API Usage chart type to: ${type}`);
-        }
-    }
-
-    /**
-     * Export Event Trends data.
-     * @param {string} format - Export format ('csv' or 'json')
-     */
-    exportTrendsData(format) {
-        const data = this.currentData.trends || [];
-        if (data.length === 0) {
-            console.warn('[Dashboard] No trends data to export');
-            return;
-        }
-        this.downloadData(data, `event-trends.${format}`, format);
-        console.log(`[Dashboard] Exported Event Trends data as ${format}`);
-    }
-
-    /**
-     * Export API Usage data.
-     * @param {string} format - Export format ('csv' or 'json')
-     */
-    exportApiData(format) {
-        // Guard: ensure repositories data exists
-        if (!this.currentData.repositories) {
-            console.warn('[Dashboard] No repositories data available to export');
-            return;
-        }
-
-        const repositories = this.normalizeRepositories(this.currentData.repositories);
-        if (repositories.length === 0) {
-            console.warn('[Dashboard] No API usage data to export');
-            return;
-        }
-        this.downloadData(repositories, `api-usage.${format}`, format);
-        console.log(`[Dashboard] Exported API Usage data as ${format}`);
-    }
 
     /**
      * Escape a CSV value by wrapping in quotes if needed and escaping internal quotes.
@@ -1797,24 +1375,6 @@ class MetricsDashboard {
         URL.revokeObjectURL(url);
     }
 
-    /**
-     * Download chart as PNG image.
-     * @param {string} chartId - Canvas element ID
-     */
-    downloadChart(chartId) {
-        const canvas = document.getElementById(chartId);
-        if (!canvas) {
-            console.warn(`[Dashboard] Canvas not found: ${chartId}`);
-            return;
-        }
-
-        const url = canvas.toDataURL('image/png');
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${chartId}.png`;
-        a.click();
-        console.log(`[Dashboard] Downloaded chart: ${chartId}`);
-    }
 
     /**
      * Convert kebab-case to camelCase for pagination state keys

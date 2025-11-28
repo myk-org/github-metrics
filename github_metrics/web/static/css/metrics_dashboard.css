@@ -177,7 +177,8 @@ h3 {
   gap: 8px;
   transition: all 0.3s ease;
   position: relative;
-  overflow: hidden;
+  overflow: visible; /* Changed from hidden to visible for tooltip */
+  cursor: help; /* Indicate hoverable element */
 }
 
 .status.connected {
@@ -297,8 +298,18 @@ h3 {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 15px;
-  margin-bottom: 20px;
   overflow: visible;
+  align-items: end;
+}
+
+/* Button filter group - aligns button with other inputs */
+.filter-group-button {
+  width: fit-content;
+}
+
+.filter-group-button .btn {
+  padding: 8px 12px;
+  font-size: 0.8rem;
 }
 
 .filter-group {
@@ -422,19 +433,6 @@ h3 {
   font-style: italic;
 }
 
-.controls-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-top: 1px solid var(--border-color);
-  padding-top: 15px;
-}
-
-.controls-actions {
-  display: flex;
-  gap: 10px;
-}
-
 /* Toggle switch */
 .toggle-group {
   display: flex;
@@ -487,57 +485,71 @@ h3 {
   transform: translateX(20px);
 }
 
-/* KPI Grid */
-.kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 15px;
-  margin-bottom: 20px;
-}
-
-/* KPI Card */
-.kpi-card {
-  background: var(--container-bg);
+/* Status Tooltip - Metrics Overview */
+.status-tooltip {
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 8px;
+  width: 350px;
+  max-width: 90vw;
+  background-color: var(--container-bg);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 15px;
-  box-shadow: var(--card-shadow);
-  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
-.kpi-card:hover {
-  box-shadow: var(--card-shadow-hover);
-  transform: translateY(-2px);
+[data-theme="dark"] .status-tooltip {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
-.kpi-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  letter-spacing: 0.5px;
-  margin-bottom: 5px;
+.status:hover .status-tooltip {
+  visibility: visible;
+  opacity: 1;
 }
 
-.kpi-value {
-  font-size: 1.5rem;
-  font-weight: 700;
+.status-tooltip-content p {
+  margin: 0 0 10px 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
   color: var(--text-color);
-  margin-bottom: 5px;
-  font-family: 'Monaco', 'Courier New', monospace;
 }
 
-.kpi-trend {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.75rem;
-  font-weight: 500;
+.status-tooltip-content p:last-child {
+  margin-bottom: 0;
 }
 
-.kpi-trend.positive { color: var(--success-color); }
-.kpi-trend.negative { color: var(--error-color); }
-.kpi-trend.neutral { color: var(--text-secondary); }
+.status-tooltip-content strong {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.status-tooltip-note {
+  padding-top: 10px;
+  margin-top: 10px;
+  border-top: 1px solid var(--border-color);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.status-tooltip-note em {
+  font-style: italic;
+}
+
+/* KPI Trend Text in Tooltip */
+.kpi-trend-text {
+  font-size: 0.8rem;
+  margin-left: 8px;
+}
+
+.kpi-trend-text.positive { color: var(--success-color); }
+.kpi-trend-text.negative { color: var(--error-color); }
+.kpi-trend-text.neutral { color: var(--text-secondary); }
 
 /* Dashboard Grid */
 .dashboard-grid {
@@ -669,9 +681,6 @@ tbody td {
 
 /* Responsive breakpoints */
 @media (max-width: 1024px) {
-  .kpi-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
   .dashboard-grid {
     grid-template-columns: 1fr; /* Stack vertically on smaller screens */
   }
@@ -682,17 +691,6 @@ tbody td {
     flex-direction: column;
     align-items: flex-start;
     gap: 10px;
-  }
-  .kpi-grid {
-    grid-template-columns: 1fr;
-  }
-  .controls-row {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 15px;
-  }
-  .controls-actions {
-    flex-direction: column;
   }
 }
 
