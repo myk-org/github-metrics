@@ -42,7 +42,6 @@ class PRStoryModal {
      * Create a new PR Story modal instance.
      */
     constructor() {
-        this.apiClient = null;
         this.currentRepository = null;
         this.currentPRNumber = null;
         this.storyData = null;
@@ -62,13 +61,6 @@ class PRStoryModal {
      * Initialize the modal and inject into DOM.
      */
     initialize() {
-        // Get API client from global window object
-        this.apiClient = window.MetricsAPI?.apiClient;
-        if (!this.apiClient) {
-            console.error('[PRStory] MetricsAPI client not found');
-            return;
-        }
-
         // Create modal HTML and inject into body
         this.createModalHTML();
 
@@ -992,7 +984,7 @@ class PRStoryModal {
         // Generate filter options HTML
         const filterOptionsHTML = sortedEventTypes.map(eventType => {
             const config = PR_STORY_EVENT_CONFIG[eventType] || { icon: '●', label: eventType };
-            const isChecked = this.selectedEventTypes.size === 0 || this.selectedEventTypes.has(eventType);
+            const isChecked = this.selectedEventTypes.has(eventType);
 
             return `
                 <label class="pr-story-filter-option">
@@ -1096,7 +1088,12 @@ class PRStoryModal {
      * Clear filter and show all events.
      */
     clearFilter() {
-        this.selectedEventTypes.clear();
+        // Get all event types from the current story data
+        if (this.storyData && this.storyData.events) {
+            this.storyData.events.forEach(event => {
+                this.selectedEventTypes.add(event.event_type);
+            });
+        }
 
         // Update checkboxes
         const checkboxes = document.querySelectorAll('#prStoryFilter input[type="checkbox"]');
@@ -1348,7 +1345,17 @@ class PRStoryModal {
      * @returns {string} Escaped text
      */
     escapeHtml(text) {
-        return window.MetricsUtils?.escapeHTML(text) || String(text);
+        if (window.MetricsUtils?.escapeHTML) {
+            return window.MetricsUtils.escapeHTML(text);
+        }
+        // Local fallback with proper HTML escaping
+        if (text == null) return '';
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     }
 }
 

@@ -92,6 +92,7 @@ services:
       - METRICS_SERVER_HOST=0.0.0.0
       - METRICS_SERVER_PORT=8080
       - METRICS_SERVER_WORKERS=4
+      - METRICS_SERVER_ALLOW_ALL_HOSTS=true  # Required when using 0.0.0.0
       # Webhook security (uncomment to enable)
       # - METRICS_WEBHOOK_SECRET=your-webhook-secret
       # - METRICS_VERIFY_GITHUB_IPS=true
@@ -131,11 +132,12 @@ All configuration is done via environment variables. No configuration files are 
 
 ### Server Configuration
 
-| Variable                 | Description      | Default   |
-| ------------------------ | ---------------- | --------- |
-| `METRICS_SERVER_HOST`    | Server bind host | `0.0.0.0` |
-| `METRICS_SERVER_PORT`    | Server bind port | `8080`    |
-| `METRICS_SERVER_WORKERS` | Uvicorn workers  | `4`       |
+| Variable                         | Description                                              | Default   |
+| -------------------------------- | -------------------------------------------------------- | --------- |
+| `METRICS_SERVER_HOST`            | Server bind host                                         | `0.0.0.0` |
+| `METRICS_SERVER_PORT`            | Server bind port                                         | `8080`    |
+| `METRICS_SERVER_WORKERS`         | Uvicorn workers                                          | `4`       |
+| `METRICS_SERVER_ALLOW_ALL_HOSTS` | Allow binding to 0.0.0.0 (required for wildcard binding) | `false`   |
 
 ### MCP Server Configuration
 

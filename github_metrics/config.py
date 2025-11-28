@@ -17,6 +17,7 @@ Optional environment variables (with defaults):
 - METRICS_SERVER_PORT: Server bind port (default: 8080)
 - METRICS_SERVER_WORKERS: Uvicorn workers (default: 4)
 - METRICS_SERVER_RELOAD: Enable auto-reload for development (default: false)
+- METRICS_SERVER_ALLOW_ALL_HOSTS: Allow binding to wildcard addresses (default: false)
 
 Webhook security configuration:
 - METRICS_WEBHOOK_SECRET: Secret for validating webhook payloads
@@ -52,6 +53,42 @@ def _parse_bool(value: str) -> bool:
         - Everything else → False
     """
     return value.lower() in ("true", "1", "yes", "on")
+
+
+def _validate_server_host(host: str) -> str:
+    """Validate server bind host for security concerns.
+
+    Args:
+        host: The host address to bind to
+
+    Returns:
+        str: The validated host address
+
+    Raises:
+        ValueError: If wildcard address is used without explicit opt-in
+
+    Security note:
+        Binding to 0.0.0.0 or :: exposes the service to all network interfaces.
+        This is a security risk if the service is not properly secured.
+        Use METRICS_SERVER_ALLOW_ALL_HOSTS=true to explicitly opt-in.
+    """
+    # Check if host is a wildcard address (binds to all interfaces)
+    wildcard_addresses = {"0.0.0.0", "::"}
+
+    if host in wildcard_addresses:
+        # Check for explicit opt-in via environment variable
+        allow_all_hosts = _parse_bool(os.environ.get("METRICS_SERVER_ALLOW_ALL_HOSTS", ""))
+
+        if not allow_all_hosts:
+            msg = (
+                f"Security warning: Binding to {host} exposes the service to all network interfaces. "
+                "This is a security risk in production environments. "
+                "Set METRICS_SERVER_ALLOW_ALL_HOSTS=true to explicitly opt-in, "
+                "or use a specific interface address (e.g., 127.0.0.1 for localhost only)."
+            )
+            raise ValueError(msg)
+
+    return host
 
 
 @dataclass(frozen=True)
@@ -152,8 +189,9 @@ class MetricsConfig:
         )
 
         # Server configuration
+        server_host = os.environ.get("METRICS_SERVER_HOST", "0.0.0.0")
         self.server = ServerConfig(
-            host=os.environ.get("METRICS_SERVER_HOST", "0.0.0.0"),  # noqa: S104
+            host=_validate_server_host(server_host),
             port=int(os.environ.get("METRICS_SERVER_PORT", "8080")),
             workers=int(os.environ.get("METRICS_SERVER_WORKERS", "4")),
             reload=_parse_bool(os.environ.get("METRICS_SERVER_RELOAD", "")),

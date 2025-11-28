@@ -40,18 +40,20 @@ LOGGER = get_logger(name="github_metrics.pr_story")
 GROUPING_WINDOW_SECONDS = 60
 
 
-def _parse_payload(payload: dict[str, Any] | str) -> dict[str, Any]:
+def _parse_payload(payload: dict[str, Any] | str | None) -> dict[str, Any]:
     """Parse payload from database, handling both dict and string formats.
 
     asyncpg may return JSONB as string depending on configuration.
     This function ensures we always have a dict.
 
     Args:
-        payload: Payload from database (dict or JSON string)
+        payload: Payload from database (dict, JSON string, or None for NULL values)
 
     Returns:
-        Parsed payload as dict, empty dict if parsing fails
+        Parsed payload as dict, empty dict if parsing fails or payload is None
     """
+    if payload is None:
+        return {}
     if isinstance(payload, dict):
         return payload
     if isinstance(payload, str):

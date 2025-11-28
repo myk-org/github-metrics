@@ -942,9 +942,10 @@ class MetricsDashboard {
 
         // PR Story button - delegated handler
         document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('pr-story-btn')) {
-                const repo = e.target.dataset.repo;
-                const pr = Number(e.target.dataset.pr);
+            const btn = e.target.closest('.pr-story-btn');
+            if (btn) {
+                const repo = btn.dataset.repo;
+                const pr = Number(btn.dataset.pr);
                 if (window.openPRStory && repo && !isNaN(pr)) {
                     window.openPRStory(repo, pr);
                 }
@@ -2027,7 +2028,7 @@ class MetricsDashboard {
                     <tr class="pr-row" data-pr-id="${prNumber}">
                         <td>
                             <a href="https://github.com/${this.escapeHtml(repository)}/pull/${prNumber}" target="_blank" rel="noopener noreferrer">#${prNumber}</a>
-                            <button class="pr-story-btn" data-repo="${this.escapeHtml(repository)}" data-pr="${prNumber}" title="View PR Story">📊</button>
+                            <button type="button" class="pr-story-btn" data-repo="${this.escapeHtml(repository)}" data-pr="${prNumber}" title="View PR Story">📊</button>
                         </td>
                         <td>${this.escapeHtml(title)}</td>
                         <td><span class="clickable-username" data-user="${this.escapeHtml(owner)}">${this.escapeHtml(owner)}</span></td>
