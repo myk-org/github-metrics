@@ -860,7 +860,40 @@ tbody td {
 
 .modal-body {
   padding: 20px;
-  max-height: 70vh;
+  overflow-y: auto;
+}
+
+/* PR Story Modal - Full height layout */
+#prStoryModal.modal .modal-content.pr-story-modal {
+  width: 90vw;
+  max-width: 1200px;
+  height: 90vh;
+  display: flex;
+  flex-direction: column;
+  animation: none;
+  overflow: hidden;
+}
+
+#prStoryModal.modal .modal-content.pr-story-modal > .modal-header {
+  flex: 0 0 auto;
+}
+
+#prStoryModal.modal .modal-content.pr-story-modal > .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+#prStoryModal.modal .modal-body > .pr-story-toolbar {
+  flex: 0 0 auto;
+}
+
+#prStoryModal.modal .modal-body > .pr-story-timeline {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -1096,4 +1129,378 @@ a:hover {
     transform: translateX(0);
     opacity: 1;
   }
+}
+
+/* ==========================================================================
+   PR Story Modal Styles
+   ========================================================================== */
+
+/* PR Story Modal - Override base modal for larger size */
+.pr-story-modal {
+    max-width: 800px;
+    width: 90%;
+}
+
+/* PR Story Header */
+.pr-story-header {
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.pr-story-title {
+    margin: 0 0 8px 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-color);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.pr-story-meta {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.pr-state-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.pr-state-badge.open {
+    background: var(--success-color);
+    color: white;
+}
+
+.pr-state-badge.closed {
+    background: var(--error-color);
+    color: white;
+}
+
+.pr-state-badge.merged {
+    background: #8b5cf6;
+    color: white;
+}
+
+/* PR Story Summary */
+.pr-story-summary {
+    margin-bottom: 20px;
+    padding: 12px 15px;
+    background: var(--input-bg);
+    border-radius: 6px;
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.pr-story-stat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.pr-story-stat-value {
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+/* PR Story Timeline */
+.pr-story-timeline {
+    position: relative;
+    padding-left: 30px;
+    overflow-y: auto;
+}
+
+/* Timeline vertical line */
+.pr-story-timeline::before {
+    content: '';
+    position: absolute;
+    left: 10px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--border-color);
+}
+
+/* Timeline Group */
+.timeline-group {
+    position: relative;
+    margin-bottom: 20px;
+}
+
+.timeline-group:last-child {
+    margin-bottom: 0;
+}
+
+/* Timeline node marker */
+.timeline-group::before {
+    content: '';
+    position: absolute;
+    left: -24px;
+    top: 4px;
+    width: 10px;
+    height: 10px;
+    background: var(--primary-color);
+    border: 2px solid var(--container-bg);
+    border-radius: 50%;
+    z-index: 1;
+}
+
+.timeline-group.has-collapsed::before {
+    background: var(--warning-color);
+}
+
+/* Timeline Timestamp */
+.timeline-timestamp {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+/* Timeline Events Container */
+.timeline-events {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Individual Event */
+.timeline-event {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--container-bg);
+    border: 1px solid var(--border-color);
+    border-left: 3px solid var(--event-color, var(--primary-color));
+    border-radius: 4px;
+}
+
+.event-icon {
+    font-size: 1.2rem;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.event-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.event-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 2px;
+}
+
+.event-type {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-color);
+}
+
+.event-actor {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.event-details {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Collapsed Event Group */
+.collapsed-group {
+    padding: 12px 15px;
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.collapsed-group:hover {
+    background: var(--hover-bg, var(--input-bg));
+}
+
+.collapsed-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.collapsed-summary {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-color);
+}
+
+.collapsed-toggle {
+    font-size: 0.8rem;
+    color: var(--primary-color);
+}
+
+.collapsed-events {
+    display: none;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-color);
+}
+
+.collapsed-events.expanded {
+    display: block;
+}
+
+/* Check run conclusion badges */
+.check-conclusion {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.check-conclusion.success {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+}
+
+.check-conclusion.failure {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+.check-conclusion.neutral {
+    background: rgba(107, 114, 128, 0.15);
+    color: #6b7280;
+}
+
+/* PR Story Loading State */
+.pr-story-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    color: var(--text-secondary);
+}
+
+.pr-story-loading .spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 15px;
+}
+
+/* PR Story Error State */
+.pr-story-error {
+    padding: 20px;
+    text-align: center;
+    color: var(--error-color);
+}
+
+.pr-story-error p {
+    margin: 0;
+}
+
+/* PR Story Icon Button */
+.pr-story-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 6px;
+    font-size: 1rem;
+    color: var(--primary-color);
+    opacity: 0.7;
+    transition: opacity 0.2s;
+    vertical-align: middle;
+}
+
+.pr-story-btn:hover {
+    opacity: 1;
+}
+
+/* Modal Footer for PR Story */
+.pr-story-modal .modal-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding-top: 15px;
+    border-top: 1px solid var(--border-color);
+}
+
+.pr-story-modal .modal-footer .btn {
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.pr-story-modal .modal-footer .btn-secondary {
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+}
+
+.pr-story-modal .modal-footer .btn-secondary:hover {
+    background: var(--hover-bg, var(--border-color));
+}
+
+.pr-story-modal .modal-footer .btn-primary {
+    background: var(--primary-color);
+    border: 1px solid var(--primary-color);
+    color: white;
+}
+
+.pr-story-modal .modal-footer .btn-primary:hover {
+    background: var(--primary-hover, var(--primary-color));
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+    .pr-story-modal {
+        width: 95%;
+        max-height: 90vh;
+    }
+
+    .pr-story-timeline {
+        padding-left: 25px;
+    }
+
+    .pr-story-summary {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .timeline-event {
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .event-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
 }

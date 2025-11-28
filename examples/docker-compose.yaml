@@ -45,6 +45,7 @@ services:
       METRICS_SERVER_HOST: "0.0.0.0"  # (default: 0.0.0.0)
       METRICS_SERVER_PORT: "8080"  # (default: 8080)
       METRICS_SERVER_WORKERS: "4"  # (default: 4)
+      METRICS_SERVER_ALLOW_ALL_HOSTS: "true"  # (required when using 0.0.0.0)
       # Webhook security (leave empty by default, user can set)
       METRICS_WEBHOOK_SECRET: ""  # (optional) Secret for webhook signature validation
       METRICS_VERIFY_GITHUB_IPS: "false"  # (default: false)

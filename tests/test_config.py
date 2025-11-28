@@ -20,8 +20,53 @@ from github_metrics.config import (
     ServerConfig,
     WebhookConfig,
     _reset_config_for_testing,
+    _validate_server_host,
     get_config,
 )
+
+
+class TestValidateServerHost:
+    """Tests for _validate_server_host function."""
+
+    def test_validate_server_host_allows_specific_address(self) -> None:
+        """Test that specific IP addresses are allowed."""
+        assert _validate_server_host("127.0.0.1") == "127.0.0.1"
+        assert _validate_server_host("192.168.1.1") == "192.168.1.1"
+        assert _validate_server_host("10.0.0.1") == "10.0.0.1"
+
+    def test_validate_server_host_allows_hostname(self) -> None:
+        """Test that hostnames are allowed."""
+        assert _validate_server_host("localhost") == "localhost"
+        assert _validate_server_host("example.com") == "example.com"
+
+    def test_validate_server_host_rejects_wildcard_without_opt_in(self) -> None:
+        """Test that wildcard addresses are rejected without opt-in."""
+        # Save original value and ensure opt-in flag is not set
+        original_value = os.environ.pop("METRICS_SERVER_ALLOW_ALL_HOSTS", None)
+
+        try:
+            with pytest.raises(ValueError, match=r"Security warning.*0\.0\.0\.0"):
+                _validate_server_host("0.0.0.0")
+
+            with pytest.raises(ValueError, match=r"Security warning.*::"):
+                _validate_server_host("::")
+        finally:
+            # Restore original value
+            if original_value is not None:
+                os.environ["METRICS_SERVER_ALLOW_ALL_HOSTS"] = original_value
+
+    def test_validate_server_host_allows_wildcard_with_opt_in(self) -> None:
+        """Test that wildcard addresses are allowed with explicit opt-in."""
+        original_value = os.environ.get("METRICS_SERVER_ALLOW_ALL_HOSTS")
+        os.environ["METRICS_SERVER_ALLOW_ALL_HOSTS"] = "true"
+        try:
+            assert _validate_server_host("0.0.0.0") == "0.0.0.0"
+            assert _validate_server_host("::") == "::"
+        finally:
+            if original_value is not None:
+                os.environ["METRICS_SERVER_ALLOW_ALL_HOSTS"] = original_value
+            else:
+                os.environ.pop("METRICS_SERVER_ALLOW_ALL_HOSTS", None)
 
 
 class TestDatabaseConfig:
@@ -59,10 +104,11 @@ class TestServerConfig:
 
     def test_server_config_creation(self) -> None:
         """Test server configuration creation."""
-        config = ServerConfig(host="0.0.0.0", port=8080, workers=4)
+        config = ServerConfig(host="0.0.0.0", port=8080, workers=4, reload=False)
         assert config.host == "0.0.0.0"
         assert config.port == 8080
         assert config.workers == 4
+        assert config.reload is False
 
 
 class TestWebhookConfig:
@@ -157,6 +203,51 @@ class TestMetricsConfig:
         config = MetricsConfig()
         assert config.webhook.verify_github_ips is False
         assert config.webhook.verify_cloudflare_ips is False
+
+    def test_config_rejects_wildcard_host_without_opt_in(self) -> None:
+        """Test that MetricsConfig rejects wildcard server host without opt-in."""
+        # Save original values
+        original_host = os.environ.get("METRICS_SERVER_HOST")
+        original_allow = os.environ.get("METRICS_SERVER_ALLOW_ALL_HOSTS")
+
+        # Set wildcard host without opt-in flag
+        os.environ["METRICS_SERVER_HOST"] = "0.0.0.0"
+        os.environ.pop("METRICS_SERVER_ALLOW_ALL_HOSTS", None)
+
+        try:
+            with pytest.raises(ValueError, match=r"Security warning.*0\.0\.0\.0"):
+                MetricsConfig()
+        finally:
+            # Restore original values
+            if original_host is not None:
+                os.environ["METRICS_SERVER_HOST"] = original_host
+            else:
+                os.environ.pop("METRICS_SERVER_HOST", None)
+            if original_allow is not None:
+                os.environ["METRICS_SERVER_ALLOW_ALL_HOSTS"] = original_allow
+
+    def test_config_allows_wildcard_host_with_opt_in(self) -> None:
+        """Test that MetricsConfig allows wildcard server host with explicit opt-in."""
+        # Save original values
+        original_host = os.environ.get("METRICS_SERVER_HOST")
+        original_allow = os.environ.get("METRICS_SERVER_ALLOW_ALL_HOSTS")
+
+        os.environ["METRICS_SERVER_HOST"] = "0.0.0.0"
+        os.environ["METRICS_SERVER_ALLOW_ALL_HOSTS"] = "true"
+
+        try:
+            config = MetricsConfig()
+            assert config.server.host == "0.0.0.0"
+        finally:
+            # Restore original values
+            if original_host is not None:
+                os.environ["METRICS_SERVER_HOST"] = original_host
+            else:
+                os.environ.pop("METRICS_SERVER_HOST", None)
+            if original_allow is not None:
+                os.environ["METRICS_SERVER_ALLOW_ALL_HOSTS"] = original_allow
+            else:
+                os.environ.pop("METRICS_SERVER_ALLOW_ALL_HOSTS", None)
 
 
 class TestGetConfig:

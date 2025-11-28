@@ -88,10 +88,20 @@ if __name__ == "__main__":
     config = get_config()
 
     # Start uvicorn server
+    # Note: workers and reload are mutually exclusive in uvicorn
+    reload_dirs = None
+    reload_includes = None
+    if config.server.reload:
+        # Watch Python files plus web UI files (templates, JS, CSS)
+        reload_dirs = [str(Path(__file__).parent / "github_metrics")]
+        reload_includes = ["*.py", "*.html", "*.js", "*.css"]
+
     uvicorn.run(
         "github_metrics.app:app",
         host=config.server.host,
         port=config.server.port,
-        workers=config.server.workers,
-        reload=False,
+        workers=1 if config.server.reload else config.server.workers,
+        reload=config.server.reload,
+        reload_dirs=reload_dirs,
+        reload_includes=reload_includes,
     )
