@@ -291,6 +291,52 @@ class MetricsAPIClient {
     }
 
     /**
+     * Fetch PR story/timeline with all events.
+     *
+     * Returns complete timeline of a PR including lifecycle events, commits,
+     * reviews, labels, check runs, and comments.
+     *
+     * @param {string} repository - Repository in org/repo format
+     * @param {number} prNumber - Pull request number
+     * @returns {Promise<Object>} PR story data or error object
+     *
+     * Response format (success):
+     * {
+     *     pr_number: 123,
+     *     repository: 'org/repo',
+     *     title: 'PR Title',
+     *     state: 'merged',
+     *     author: 'username',
+     *     created_at: '2024-01-15T10:00:00Z',
+     *     merged_at: '2024-01-16T14:30:00Z',
+     *     timeline: [
+     *         {
+     *             timestamp: '2024-01-15T10:00:00Z',
+     *             events: [{ type: 'pr_opened', actor: 'user', details: {...} }],
+     *             collapsed: null
+     *         }
+     *     ],
+     *     summary: {
+     *         check_runs: { total: 15, success: 12, failure: 3 },
+     *         reviews: { total: 3, approved: 2, changes_requested: 1 },
+     *         commits: 5,
+     *         comments: 8
+     *     }
+     * }
+     */
+    async fetchPRStory(repository, prNumber) {
+        if (!repository || !prNumber) {
+            return {
+                error: 'Invalid parameters',
+                detail: 'repository and prNumber are required',
+                status: null
+            };
+        }
+
+        return await this._fetch(`/pr-story/${encodeURIComponent(repository)}/${prNumber}`);
+    }
+
+    /**
      * Fetch specific webhook event by delivery ID.
      *
      * Returns complete details for a single webhook event including full payload.

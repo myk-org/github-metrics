@@ -86,6 +86,7 @@ class ServerConfig:
     host: str
     port: int
     workers: int
+    reload: bool
 
 
 @dataclass(frozen=True)
@@ -154,6 +155,7 @@ class MetricsConfig:
             host=os.environ.get("METRICS_SERVER_HOST", "0.0.0.0"),  # noqa: S104
             port=int(os.environ.get("METRICS_SERVER_PORT", "8080")),
             workers=int(os.environ.get("METRICS_SERVER_WORKERS", "4")),
+            reload=_parse_bool(os.environ.get("METRICS_SERVER_RELOAD", "")),
         )
 
         # Webhook security configuration

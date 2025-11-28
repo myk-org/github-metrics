@@ -2014,7 +2014,10 @@ class MetricsDashboard {
 
                 return `
                     <tr class="pr-row" data-pr-id="${prNumber}">
-                        <td><a href="https://github.com/${this.escapeHtml(repository)}/pull/${prNumber}" target="_blank" rel="noopener noreferrer">#${prNumber}</a></td>
+                        <td>
+                            <a href="https://github.com/${this.escapeHtml(repository)}/pull/${prNumber}" target="_blank" rel="noopener noreferrer">#${prNumber}</a>
+                            <button class="pr-story-btn" onclick="window.openPRStory('${this.escapeHtml(repository)}', ${prNumber})" title="View PR Story">📊</button>
+                        </td>
                         <td>${this.escapeHtml(title)}</td>
                         <td><span class="clickable-username" data-user="${this.escapeHtml(owner)}">${this.escapeHtml(owner)}</span></td>
                         <td>${this.escapeHtml(repository)}</td>

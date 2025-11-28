@@ -59,10 +59,11 @@ class TestServerConfig:
 
     def test_server_config_creation(self) -> None:
         """Test server configuration creation."""
-        config = ServerConfig(host="0.0.0.0", port=8080, workers=4)
+        config = ServerConfig(host="0.0.0.0", port=8080, workers=4, reload=False)
         assert config.host == "0.0.0.0"
         assert config.port == 8080
         assert config.workers == 4
+        assert config.reload is False
 
 
 class TestWebhookConfig:
