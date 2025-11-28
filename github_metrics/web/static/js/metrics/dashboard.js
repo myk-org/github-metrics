@@ -1568,6 +1568,9 @@ class MetricsDashboard {
                     data = await this.apiClient.fetchUserPRs(startTime, endTime, params);
                     // Store user PRs data for sorting
                     this.currentData.userPrs = data;
+                    // Clear filtered view - server already applied user filter via params.user
+                    // This ensures getTableData uses fresh paginated data instead of stale view
+                    this.currentData.userPrsView = null;
                     this.updateUserPRsTable(data);
                     break;
             }
