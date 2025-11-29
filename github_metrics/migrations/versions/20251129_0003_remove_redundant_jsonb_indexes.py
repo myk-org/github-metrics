@@ -23,6 +23,9 @@ Note: The composite and PR story indexes are retained as they serve different pu
 - ix_webhooks_check_run_head_sha: PR story check_run lookups
 - ix_webhooks_status_sha: PR story status lookups
 
+Note: Uses CONCURRENTLY for non-blocking index operations in production.
+This requires running outside a transaction block.
+
 Related: https://github.com/myk-org/github-metrics/issues/23
 """
 
@@ -36,27 +39,34 @@ depends_on = None
 
 
 def upgrade() -> None:
-    """Remove redundant JSONB functional indexes."""
-    # Drop JSONB functional indexes that are now replaced by extracted column indexes
-    op.drop_index("ix_webhooks_pr_author_jsonb", table_name="webhooks")
-    op.drop_index("ix_webhooks_label_name_jsonb", table_name="webhooks")
+    """Remove redundant JSONB functional indexes.
+
+    Uses DROP INDEX CONCURRENTLY to avoid ACCESS EXCLUSIVE locks in production.
+    """
+    # Drop JSONB functional indexes concurrently to avoid blocking reads/writes
+    # CONCURRENTLY cannot run inside a transaction, so we use raw SQL
+    op.execute("DROP INDEX CONCURRENTLY IF EXISTS ix_webhooks_pr_author_jsonb")
+    op.execute("DROP INDEX CONCURRENTLY IF EXISTS ix_webhooks_label_name_jsonb")
 
 
 def downgrade() -> None:
-    """Recreate JSONB functional indexes."""
-    # Recreate PR author JSONB index
+    """Recreate JSONB functional indexes.
+
+    Uses CREATE INDEX CONCURRENTLY to avoid ACCESS EXCLUSIVE locks in production.
+    """
+    # Recreate PR author JSONB index concurrently
     op.execute(
         """
-        CREATE INDEX ix_webhooks_pr_author_jsonb
+        CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_webhooks_pr_author_jsonb
         ON webhooks ((payload->'pull_request'->'user'->>'login'))
         WHERE payload->'pull_request' IS NOT NULL
         """
     )
 
-    # Recreate label name JSONB index
+    # Recreate label name JSONB index concurrently
     op.execute(
         """
-        CREATE INDEX ix_webhooks_label_name_jsonb
+        CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_webhooks_label_name_jsonb
         ON webhooks ((payload->'label'->>'name'))
         WHERE payload->'label' IS NOT NULL
         """
