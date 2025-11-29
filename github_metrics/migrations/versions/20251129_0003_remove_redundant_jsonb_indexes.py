@@ -23,8 +23,10 @@ Note: The composite and PR story indexes are retained as they serve different pu
 - ix_webhooks_check_run_head_sha: PR story check_run lookups
 - ix_webhooks_status_sha: PR story status lookups
 
-Note: Uses CONCURRENTLY for non-blocking index operations in production.
-This requires running outside a transaction block.
+Note: DROP INDEX without CONCURRENTLY is used here because:
+1. Dropping indexes is fast (just metadata removal)
+2. CONCURRENTLY requires running outside a transaction which complicates Alembic migrations
+3. The brief lock during drop is acceptable for this operation
 
 Related: https://github.com/myk-org/github-metrics/issues/23
 """
@@ -41,32 +43,32 @@ depends_on = None
 def upgrade() -> None:
     """Remove redundant JSONB functional indexes.
 
-    Uses DROP INDEX CONCURRENTLY to avoid ACCESS EXCLUSIVE locks in production.
+    Uses standard DROP INDEX (not CONCURRENTLY) because:
+    - Index drops are fast operations (metadata removal only)
+    - CONCURRENTLY cannot run inside Alembic's transaction wrapper
+    - Brief ACCESS EXCLUSIVE lock is acceptable for index removal
     """
-    # Drop JSONB functional indexes concurrently to avoid blocking reads/writes
-    # CONCURRENTLY cannot run inside a transaction, so we use raw SQL
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS ix_webhooks_pr_author_jsonb")
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS ix_webhooks_label_name_jsonb")
+    # Drop JSONB functional indexes - these are now redundant
+    # Using IF EXISTS for idempotency
+    op.execute("DROP INDEX IF EXISTS ix_webhooks_pr_author_jsonb")
+    op.execute("DROP INDEX IF EXISTS ix_webhooks_label_name_jsonb")
 
 
 def downgrade() -> None:
-    """Recreate JSONB functional indexes.
-
-    Uses CREATE INDEX CONCURRENTLY to avoid ACCESS EXCLUSIVE locks in production.
-    """
-    # Recreate PR author JSONB index concurrently
+    """Recreate JSONB functional indexes."""
+    # Recreate PR author JSONB index
     op.execute(
         """
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_webhooks_pr_author_jsonb
+        CREATE INDEX IF NOT EXISTS ix_webhooks_pr_author_jsonb
         ON webhooks ((payload->'pull_request'->'user'->>'login'))
         WHERE payload->'pull_request' IS NOT NULL
         """
     )
 
-    # Recreate label name JSONB index concurrently
+    # Recreate label name JSONB index
     op.execute(
         """
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_webhooks_label_name_jsonb
+        CREATE INDEX IF NOT EXISTS ix_webhooks_label_name_jsonb
         ON webhooks ((payload->'label'->>'name'))
         WHERE payload->'label' IS NOT NULL
         """
