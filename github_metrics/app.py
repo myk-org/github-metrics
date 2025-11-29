@@ -1245,10 +1245,11 @@ async def get_metrics_contributors(
         params.append(repository)
 
     # Build category-specific user filters to align with per-category "user" semantics
-    # PR Creators: user = COALESCE(CASE event_type WHEN 'pull_request'/'pull_request_review'/'issue_comment'..., sender)
-    # PR Reviewers: user = sender
-    # PR Approvers: user = SUBSTRING(payload->'label'->>'name' FROM 10)
-    # PR LGTM: user = SUBSTRING(payload->'label'->>'name' FROM 6)
+    # PR Creators: user = pr_author (extracted at insert-time from payload)
+    # PR Reviewers: user = sender (reviewer who submitted the review)
+    # PR Approvers: user = SUBSTRING(label_name FROM 10) where label_name LIKE 'approved-%'
+    # PR LGTM: user = SUBSTRING(label_name FROM 6) where label_name LIKE 'lgtm-%'
+    # Note: pr_author column is used for PR creators, reviewers use sender column
     user_filter_reviewers = ""
     user_filter_approvers = ""
     user_filter_lgtm = ""
@@ -1260,10 +1261,10 @@ async def get_metrics_contributors(
 
         # PR Reviewers: filter on sender (correct as-is)
         user_filter_reviewers = " AND sender = $" + str(user_param_idx)
-        # PR Approvers: filter on extracted username from 'approved-<username>' label
-        user_filter_approvers = " AND SUBSTRING(label_name FROM 10) = $" + str(user_param_idx)
-        # PR LGTM: filter on extracted username from 'lgtm-<username>' label
-        user_filter_lgtm = " AND SUBSTRING(label_name FROM 6) = $" + str(user_param_idx)
+        # PR Approvers: filter using label_name with prefix (index-friendly)
+        user_filter_approvers = " AND label_name = 'approved-' || $" + str(user_param_idx)
+        # PR LGTM: filter using label_name with prefix (index-friendly)
+        user_filter_lgtm = " AND label_name = 'lgtm-' || $" + str(user_param_idx)
 
     # Calculate offset for pagination
     offset = (page - 1) * page_size
@@ -1764,6 +1765,8 @@ async def get_user_pull_requests(
             status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=f"Pagination offset exceeds maximum ({MAX_OFFSET}). Use time filters to narrow results.",
         )
+    # Parameter indexing: limit and offset are added after filter params
+    # count_query uses params[0:param_count], data_query uses params + [page_size, offset]
     param_count += 1
     limit_param_idx = param_count
     param_count += 1
