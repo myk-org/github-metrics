@@ -36,6 +36,7 @@ env/
 .coverage
 .coverage.*
 htmlcov/
+htmlcov/js/
 .tox/
 .nox/
 coverage-js/

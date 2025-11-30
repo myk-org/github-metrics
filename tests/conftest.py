@@ -18,16 +18,18 @@ import logging
 import os
 import subprocess
 import time
-from collections.abc import Generator
+from collections.abc import AsyncGenerator, Generator
 from typing import Any
 from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from playwright.async_api import Page
 
 from github_metrics.config import DatabaseConfig, MetricsConfig
 from github_metrics.database import DatabaseManager
+from tests.test_js_coverage_utils import JSCoverageCollector
 
 # IMPORTANT: app.py reads configuration at module import time (get_config() at module level).
 # Environment variables MUST be set BEFORE importing github_metrics.app.
@@ -471,3 +473,48 @@ def dev_server() -> Generator[str]:
     # Cleanup
     process.terminate()
     process.wait(timeout=10)
+
+
+@pytest.fixture(scope="session")
+def js_coverage_collector() -> Generator[JSCoverageCollector]:
+    """Session-scoped JavaScript coverage collector.
+
+    Collects V8 JavaScript coverage across all UI tests and generates
+    reports in htmlcov/js/ after all tests complete.
+    """
+    collector = JSCoverageCollector()
+    yield collector
+    collector.generate_reports()
+    if collector.coverage_entries:
+        print(f"\n[JS Coverage] Report generated: {collector.output_dir}/index.html")
+
+
+@pytest.fixture
+async def page_with_js_coverage(
+    page: Page,
+    js_coverage_collector: JSCoverageCollector,
+) -> AsyncGenerator[Page]:
+    """Page fixture that collects JavaScript coverage.
+
+    Wraps the Playwright page to collect V8 JavaScript coverage
+    for each test using CDP (Chrome DevTools Protocol).
+    Coverage is aggregated in the session-scoped js_coverage_collector.
+    """
+    cdp = await page.context.new_cdp_session(page)
+    await cdp.send("Profiler.enable")
+    await cdp.send(
+        "Profiler.startPreciseCoverage",
+        {
+            "callCount": True,
+            "detailed": True,
+        },
+    )
+
+    yield page
+
+    result = await cdp.send("Profiler.takePreciseCoverage")
+    await cdp.send("Profiler.stopPreciseCoverage")
+    await cdp.send("Profiler.disable")
+
+    if "result" in result:
+        js_coverage_collector.add_coverage(result["result"])
