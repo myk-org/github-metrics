@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import os
+import re
+
 import pytest
 from playwright.async_api import Page, expect
 
 # Test constants
-DASHBOARD_URL = "http://localhost:8765/dashboard"
+DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "http://localhost:8765/dashboard")
 TIMEOUT = 10000  # 10 seconds timeout for UI interactions
 
 pytestmark = [pytest.mark.ui, pytest.mark.asyncio]
@@ -362,7 +365,7 @@ class TestDashboardTheme:
 @pytest.mark.usefixtures("dev_server")
 @pytest.mark.asyncio(loop_scope="session")
 class TestDashboardCollapsiblePanels:
-    """Tests for collapsible panel functionality."""
+    """Tests for collapsible panel structure and behavior."""
 
     async def test_control_panel_has_collapse_button(self, page_with_js_coverage: Page) -> None:
         """Verify control panel has collapse button."""
@@ -410,6 +413,39 @@ class TestDashboardCollapsiblePanels:
 
         # Button should still be visible after click
         await expect(collapse_btn).to_be_visible()
+
+    async def test_collapse_all_sections(self, page_with_js_coverage: Page) -> None:
+        """Test collapsing all collapsible sections."""
+        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
+        await page_with_js_coverage.wait_for_load_state("networkidle")
+
+        # Collapse each section
+        sections = ["control-panel", "top-repositories", "recent-events", "pr-contributors", "user-prs"]
+
+        for section in sections:
+            btn = page_with_js_coverage.locator(f'.collapse-btn[data-section="{section}"]')
+            if await btn.count() > 0:
+                await btn.click()
+
+        # Dashboard should still be visible
+        await expect(page_with_js_coverage.locator(".dashboard-grid")).to_be_visible()
+
+    async def test_expand_collapsed_sections(self, page_with_js_coverage: Page) -> None:
+        """Test expanding collapsed sections."""
+        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
+        await page_with_js_coverage.wait_for_load_state("networkidle")
+
+        # Collapse then expand
+        btn = page_with_js_coverage.locator('.collapse-btn[data-section="top-repositories"]')
+
+        # Collapse
+        await btn.click()
+
+        # Expand
+        await btn.click()
+
+        # Section container should be visible
+        await expect(page_with_js_coverage.locator('.chart-container[data-section="top-repositories"]')).to_be_visible()
 
 
 @pytest.mark.usefixtures("dev_server")
@@ -636,7 +672,7 @@ class TestDashboardTableUpdates:
         if count > 1:
             # Click second tab
             await tabs.nth(1).click()
-            await expect(tabs.nth(1)).to_have_class("active", timeout=TIMEOUT)
+            await expect(tabs.nth(1)).to_have_class(re.compile(r"\bactive\b"), timeout=TIMEOUT)
 
 
 @pytest.mark.usefixtures("dev_server")
@@ -776,7 +812,7 @@ class TestDashboardDataExport:
 
         download_btns = page_with_js_coverage.locator(".download-btn, [data-action='download']")
         count = await download_btns.count()
-        assert count >= 0
+        assert count > 0, "Expected at least one download button"
 
 
 @pytest.mark.usefixtures("dev_server")
@@ -1068,42 +1104,3 @@ class TestDashboardTimeRangeInteractions:
         # Button should still be visible and enabled
         await expect(refresh_btn).to_be_visible()
         await expect(refresh_btn).to_be_enabled()
-
-
-@pytest.mark.usefixtures("dev_server")
-@pytest.mark.asyncio(loop_scope="session")
-class TestDashboardCollapsePanels:
-    """Tests for collapsing and expanding panels."""
-
-    async def test_collapse_all_sections(self, page_with_js_coverage: Page) -> None:
-        """Test collapsing all collapsible sections."""
-        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
-        await page_with_js_coverage.wait_for_load_state("networkidle")
-
-        # Collapse each section
-        sections = ["control-panel", "top-repositories", "recent-events", "pr-contributors", "user-prs"]
-
-        for section in sections:
-            btn = page_with_js_coverage.locator(f'.collapse-btn[data-section="{section}"]')
-            if await btn.count() > 0:
-                await btn.click()
-
-        # Dashboard should still be visible
-        await expect(page_with_js_coverage.locator(".dashboard-grid")).to_be_visible()
-
-    async def test_expand_collapsed_sections(self, page_with_js_coverage: Page) -> None:
-        """Test expanding collapsed sections."""
-        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
-        await page_with_js_coverage.wait_for_load_state("networkidle")
-
-        # Collapse then expand
-        btn = page_with_js_coverage.locator('.collapse-btn[data-section="top-repositories"]')
-
-        # Collapse
-        await btn.click()
-
-        # Expand
-        await btn.click()
-
-        # Section container should be visible
-        await expect(page_with_js_coverage.locator('.chart-container[data-section="top-repositories"]')).to_be_visible()

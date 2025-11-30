@@ -78,7 +78,7 @@ tox -e unused-code
 | `test_database.py` | Database manager tests |
 | `test_metrics_tracker.py` | Metrics tracker tests |
 | `test_security.py` | Security utilities tests |
-| `test_ui_dashboard.py` | Playwright UI tests |
+| `ui/test_ui_dashboard.py` | Playwright UI tests |
 
 ## Test Markers
 

@@ -1602,7 +1602,16 @@ class MetricsDashboard {
      * @returns {string} Escaped text
      */
     escapeHtml(text) {
-        return window.MetricsUtils?.escapeHTML(text) || String(text);
+        if (window.MetricsUtils?.escapeHTML) {
+            return window.MetricsUtils.escapeHTML(text);
+        }
+        // Safe inline fallback using string replacement
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 
     /**
