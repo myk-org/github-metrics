@@ -590,6 +590,30 @@ h3 {
   align-items: center;
 }
 
+.github-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  color: var(--text-color);
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  transition: all 0.3s ease;
+  text-decoration: none;
+}
+
+.github-link:hover {
+  color: var(--primary-color);
+  background: var(--input-bg);
+  border-color: var(--primary-color);
+  text-decoration: none;
+}
+
+.github-link svg {
+  display: block;
+}
+
 .chart-wrapper {
   position: relative;
   height: 250px; /* Standardized height */
