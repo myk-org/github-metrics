@@ -9,3 +9,8 @@ commands = [["pyutils-unusedcode", "--exclude-files", "conftest.py"]]
 [env.unittests]
 deps = ["uv"]
 commands = [["uv", "run", "--group", "tests", "pytest", "-n", "auto", "tests"]]
+
+[env.ui]
+description = "Run Playwright UI tests"
+deps = ["uv"]
+commands = [["uv", "run", "--group", "tests", "pytest", "-m", "ui", "tests"]]
