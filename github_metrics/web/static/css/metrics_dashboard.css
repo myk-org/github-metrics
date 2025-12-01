@@ -36,6 +36,10 @@
   /* Card shadows */
   --card-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   --card-shadow-hover: 0 4px 8px rgba(0, 0, 0, 0.15);
+
+  /* Download button sizing */
+  --download-btn-font-size: 12px;
+  --download-btn-padding: 4px 8px;
 }
 
 [data-theme="dark"] {
@@ -250,6 +254,23 @@ h3 {
 
 .btn-icon:hover {
   color: var(--text-color);
+}
+
+.download-btn {
+  font-size: var(--download-btn-font-size);
+  padding: var(--download-btn-padding);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--text-color);
+  transition: all 0.2s ease;
+}
+
+.download-btn:hover {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+  transform: none;
 }
 
 .collapse-btn {
@@ -584,6 +605,12 @@ h3 {
   border-bottom: 1px solid var(--border-color);
 }
 
+.chart-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .header-actions {
   display: flex;
   gap: 8px;
@@ -733,10 +760,23 @@ tbody td {
   padding: 10px;
 }
 
+.contributor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.contributor-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .contributor-section h3 {
   font-size: 0.9rem;
   font-weight: 600;
-  margin: 0 0 10px 0;
+  margin: 0;
   color: var(--text-color);
   text-align: center;
   border-bottom: 1px solid var(--border-color);

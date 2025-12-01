@@ -108,7 +108,11 @@
         <div class="chart-container" data-section="top-repositories">
           <div class="chart-header">
             <h2>Top Repositories</h2>
-            <button class="btn-icon collapse-btn" data-section="top-repositories" title="Collapse">▼</button>
+            <div class="chart-header-actions">
+              <button class="btn-icon download-btn" data-section="topRepositories" data-format="csv" title="Download as CSV" aria-label="Download top repositories data as CSV">⬇️ CSV</button>
+              <button class="btn-icon download-btn" data-section="topRepositories" data-format="json" title="Download as JSON" aria-label="Download top repositories data as JSON">⬇️ JSON</button>
+              <button class="btn-icon collapse-btn" data-section="top-repositories" title="Collapse">▼</button>
+            </div>
           </div>
           <div class="chart-content">
             <div class="table-wrapper">
@@ -133,7 +137,11 @@
         <div class="chart-container" data-section="recent-events">
           <div class="chart-header">
             <h2>Recent Events</h2>
-            <button class="btn-icon collapse-btn" data-section="recent-events" title="Collapse">▼</button>
+            <div class="chart-header-actions">
+              <button class="btn-icon download-btn" data-section="recentEvents" data-format="csv" title="Download as CSV" aria-label="Download recent events data as CSV">⬇️ CSV</button>
+              <button class="btn-icon download-btn" data-section="recentEvents" data-format="json" title="Download as JSON" aria-label="Download recent events data as JSON">⬇️ JSON</button>
+              <button class="btn-icon collapse-btn" data-section="recent-events" title="Collapse">▼</button>
+            </div>
           </div>
           <div class="chart-content">
             <div class="table-wrapper">
@@ -159,13 +167,21 @@
         <div class="chart-container full-width" data-section="pr-contributors">
           <div class="chart-header">
             <h2>PR Contributors</h2>
-            <button class="btn-icon collapse-btn" data-section="pr-contributors" title="Collapse">▼</button>
+            <div class="chart-header-actions">
+              <button class="btn-icon collapse-btn" data-section="pr-contributors" title="Collapse">▼</button>
+            </div>
           </div>
           <div class="chart-content">
             <div class="contributors-grid">
             <!-- PR Creators -->
             <div class="contributor-section" data-section="pr-creators">
-              <h3>PR Creators</h3>
+              <div class="contributor-header">
+                <h3>PR Creators</h3>
+                <div class="contributor-actions">
+                  <button class="btn-icon download-btn" data-section="prCreators" data-format="csv" title="Download as CSV" aria-label="Download PR creators data as CSV">⬇️ CSV</button>
+                  <button class="btn-icon download-btn" data-section="prCreators" data-format="json" title="Download as JSON" aria-label="Download PR creators data as JSON">⬇️ JSON</button>
+                </div>
+              </div>
               <div class="table-wrapper">
                 <table id="prCreatorsTable">
                   <thead>
@@ -188,7 +204,13 @@
 
             <!-- PR Reviewers -->
             <div class="contributor-section" data-section="pr-reviewers">
-              <h3>PR Reviewers</h3>
+              <div class="contributor-header">
+                <h3>PR Reviewers</h3>
+                <div class="contributor-actions">
+                  <button class="btn-icon download-btn" data-section="prReviewers" data-format="csv" title="Download as CSV" aria-label="Download PR reviewers data as CSV">⬇️ CSV</button>
+                  <button class="btn-icon download-btn" data-section="prReviewers" data-format="json" title="Download as JSON" aria-label="Download PR reviewers data as JSON">⬇️ JSON</button>
+                </div>
+              </div>
               <div class="table-wrapper">
                 <table id="prReviewersTable">
                   <thead>
@@ -210,7 +232,13 @@
 
             <!-- PR Approvers -->
             <div class="contributor-section" data-section="pr-approvers">
-              <h3>PR Approvers</h3>
+              <div class="contributor-header">
+                <h3>PR Approvers</h3>
+                <div class="contributor-actions">
+                  <button class="btn-icon download-btn" data-section="prApprovers" data-format="csv" title="Download as CSV" aria-label="Download PR approvers data as CSV">⬇️ CSV</button>
+                  <button class="btn-icon download-btn" data-section="prApprovers" data-format="json" title="Download as JSON" aria-label="Download PR approvers data as JSON">⬇️ JSON</button>
+                </div>
+              </div>
               <div class="table-wrapper">
                 <table id="prApproversTable">
                   <thead>
@@ -235,7 +263,11 @@
         <div class="chart-container full-width" data-section="user-prs">
           <div class="chart-header">
             <h2>Pull Requests</h2>
-            <button class="btn-icon collapse-btn" data-section="user-prs" title="Collapse">▼</button>
+            <div class="chart-header-actions">
+              <button class="btn-icon download-btn" data-section="userPrs" data-format="csv" title="Download as CSV" aria-label="Download pull requests data as CSV">⬇️ CSV</button>
+              <button class="btn-icon download-btn" data-section="userPrs" data-format="json" title="Download as JSON" aria-label="Download pull requests data as JSON">⬇️ JSON</button>
+              <button class="btn-icon collapse-btn" data-section="user-prs" title="Collapse">▼</button>
+            </div>
           </div>
           <div class="chart-content">
             <div class="table-wrapper">

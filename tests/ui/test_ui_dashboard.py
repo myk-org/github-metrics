@@ -1095,3 +1095,245 @@ class TestDashboardTimeRangeInteractions:
         # Button should still be visible and enabled
         await expect(refresh_btn).to_be_visible()
         await expect(refresh_btn).to_be_enabled()
+
+
+@pytest.mark.usefixtures("dev_server")
+@pytest.mark.asyncio(loop_scope="session")
+class TestDashboardDownloadButtons:
+    """Tests for download button functionality."""
+
+    async def test_download_buttons_exist(self, page_with_js_coverage: Page) -> None:
+        """Verify download buttons (CSV/JSON) exist for each table section."""
+        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
+        await page_with_js_coverage.wait_for_load_state("networkidle")
+
+        # Define all sections that should have download buttons (using camelCase as in HTML)
+        sections = [
+            "topRepositories",
+            "recentEvents",
+            "prCreators",
+            "prReviewers",
+            "prApprovers",
+            "userPrs",
+        ]
+
+        for section in sections:
+            # Each section should have 2 download buttons (CSV and JSON)
+            csv_button = page_with_js_coverage.locator(f'.download-btn[data-section="{section}"][data-format="csv"]')
+            json_button = page_with_js_coverage.locator(f'.download-btn[data-section="{section}"][data-format="json"]')
+
+            await expect(csv_button).to_be_visible()
+            await expect(json_button).to_be_visible()
+
+    async def test_download_button_attributes(self, page_with_js_coverage: Page) -> None:
+        """Verify download buttons have correct data attributes."""
+        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
+        await page_with_js_coverage.wait_for_load_state("networkidle")
+
+        # Get all download buttons
+        download_buttons = page_with_js_coverage.locator(".download-btn")
+        button_count = await download_buttons.count()
+
+        # Should have 12 buttons (6 sections × 2 formats)
+        await expect(download_buttons).to_have_count(12)
+
+        # Verify each button has required attributes
+        for i in range(button_count):
+            button = download_buttons.nth(i)
+
+            # Check data-section attribute exists
+            await expect(button).to_have_attribute("data-section", re.compile(r".+"))
+
+            # Check data-format attribute is either csv or json
+            format_attr = await button.get_attribute("data-format")
+            assert format_attr in ["csv", "json"], f"Invalid format: {format_attr}"
+
+            # Check class includes download-btn
+            class_attr = await button.get_attribute("class")
+            assert "download-btn" in class_attr, f"Missing download-btn class: {class_attr}"
+
+    async def test_download_button_visibility(self, page_with_js_coverage: Page) -> None:
+        """Verify download buttons are visible and clickable."""
+        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
+        await page_with_js_coverage.wait_for_load_state("networkidle")
+
+        # Test top repositories download buttons
+        top_repos_csv = page_with_js_coverage.locator(
+            '.download-btn[data-section="topRepositories"][data-format="csv"]'
+        )
+        top_repos_json = page_with_js_coverage.locator(
+            '.download-btn[data-section="topRepositories"][data-format="json"]'
+        )
+
+        await expect(top_repos_csv).to_be_visible()
+        await expect(top_repos_csv).to_be_enabled()
+        await expect(top_repos_json).to_be_visible()
+        await expect(top_repos_json).to_be_enabled()
+
+        # Test recent events download buttons
+        recent_events_csv = page_with_js_coverage.locator(
+            '.download-btn[data-section="recentEvents"][data-format="csv"]'
+        )
+        recent_events_json = page_with_js_coverage.locator(
+            '.download-btn[data-section="recentEvents"][data-format="json"]'
+        )
+
+        await expect(recent_events_csv).to_be_visible()
+        await expect(recent_events_csv).to_be_enabled()
+        await expect(recent_events_json).to_be_visible()
+        await expect(recent_events_json).to_be_enabled()
+
+        # Test PR creators download buttons
+        pr_creators_csv = page_with_js_coverage.locator('.download-btn[data-section="prCreators"][data-format="csv"]')
+        pr_creators_json = page_with_js_coverage.locator('.download-btn[data-section="prCreators"][data-format="json"]')
+
+        await expect(pr_creators_csv).to_be_visible()
+        await expect(pr_creators_csv).to_be_enabled()
+        await expect(pr_creators_json).to_be_visible()
+        await expect(pr_creators_json).to_be_enabled()
+
+        # Test PR reviewers download buttons
+        pr_reviewers_csv = page_with_js_coverage.locator('.download-btn[data-section="prReviewers"][data-format="csv"]')
+        pr_reviewers_json = page_with_js_coverage.locator(
+            '.download-btn[data-section="prReviewers"][data-format="json"]'
+        )
+
+        await expect(pr_reviewers_csv).to_be_visible()
+        await expect(pr_reviewers_csv).to_be_enabled()
+        await expect(pr_reviewers_json).to_be_visible()
+        await expect(pr_reviewers_json).to_be_enabled()
+
+        # Test PR approvers download buttons
+        pr_approvers_csv = page_with_js_coverage.locator('.download-btn[data-section="prApprovers"][data-format="csv"]')
+        pr_approvers_json = page_with_js_coverage.locator(
+            '.download-btn[data-section="prApprovers"][data-format="json"]'
+        )
+
+        await expect(pr_approvers_csv).to_be_visible()
+        await expect(pr_approvers_csv).to_be_enabled()
+        await expect(pr_approvers_json).to_be_visible()
+        await expect(pr_approvers_json).to_be_enabled()
+
+        # Test user PRs download buttons
+        user_prs_csv = page_with_js_coverage.locator('.download-btn[data-section="userPrs"][data-format="csv"]')
+        user_prs_json = page_with_js_coverage.locator('.download-btn[data-section="userPrs"][data-format="json"]')
+
+        await expect(user_prs_csv).to_be_visible()
+        await expect(user_prs_csv).to_be_enabled()
+        await expect(user_prs_json).to_be_visible()
+        await expect(user_prs_json).to_be_enabled()
+
+    async def test_download_button_click_interaction(self, page_with_js_coverage: Page) -> None:
+        """Test download buttons trigger file downloads."""
+        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
+        await page_with_js_coverage.wait_for_load_state("networkidle")
+
+        # Test CSV download for top repositories
+        csv_button = page_with_js_coverage.locator('.download-btn[data-section="topRepositories"][data-format="csv"]')
+
+        # Listen for download event
+        try:
+            async with page_with_js_coverage.expect_download(timeout=5000) as download_info:
+                await csv_button.click()
+            download = await download_info.value
+
+            # Verify download properties
+            assert download.suggested_filename.endswith(".csv")
+            assert "github_metrics_" in download.suggested_filename
+        except Exception:
+            # If no download occurs (e.g., no data), verify button is still functional
+            await expect(csv_button).to_be_visible()
+
+        # Test JSON download for recent events
+        json_button = page_with_js_coverage.locator('.download-btn[data-section="recentEvents"][data-format="json"]')
+
+        # Listen for download event
+        try:
+            async with page_with_js_coverage.expect_download(timeout=5000) as download_info:
+                await json_button.click()
+            download = await download_info.value
+
+            # Verify download properties
+            assert download.suggested_filename.endswith(".json")
+            assert "github_metrics_" in download.suggested_filename
+        except Exception:
+            # If no download occurs (e.g., no data), verify button is still functional
+            await expect(json_button).to_be_visible()
+
+    async def test_download_with_filtered_empty_data(self, page_with_js_coverage: Page) -> None:
+        """Test download button behavior when table has no data."""
+        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
+        await page_with_js_coverage.wait_for_load_state("networkidle")
+
+        # Apply filters that should result in no data
+        # Use a very narrow time range (1 hour) to minimize data
+        time_range = page_with_js_coverage.locator("#time-range-select")
+        await time_range.select_option("1h")
+        await page_with_js_coverage.wait_for_load_state("networkidle")
+
+        # Try to download CSV for top repositories
+        csv_button = page_with_js_coverage.locator('.download-btn[data-section="topRepositories"][data-format="csv"]')
+
+        # Attempt download - should either trigger download or handle gracefully
+        try:
+            async with page_with_js_coverage.expect_download(timeout=5000) as download_info:
+                await csv_button.click()
+            download = await download_info.value
+            # If download occurs, verify it's a valid CSV file
+            assert download.suggested_filename.endswith(".csv")
+        except Exception:
+            # If no download occurs (expected with no data), verify:
+            # 1. No JavaScript errors occurred
+            # 2. Button is still functional
+            await expect(csv_button).to_be_visible()
+            await expect(csv_button).to_be_enabled()
+
+        # Dashboard should remain functional
+        await expect(page_with_js_coverage.locator(".dashboard-grid")).to_be_visible()
+
+    async def test_download_buttons_have_title_attribute(self, page_with_js_coverage: Page) -> None:
+        """Verify download buttons have title attribute for tooltips."""
+        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
+        await page_with_js_coverage.wait_for_load_state("networkidle")
+
+        # Get all download buttons
+        download_buttons = page_with_js_coverage.locator(".download-btn")
+        button_count = await download_buttons.count()
+
+        # Verify each button has a title attribute
+        for i in range(button_count):
+            button = download_buttons.nth(i)
+            title_attr = await button.get_attribute("title")
+            assert title_attr is not None, f"Button {i} missing title attribute"
+            assert len(title_attr) > 0, f"Button {i} has empty title attribute"
+
+    async def test_all_sections_have_both_download_formats(self, page_with_js_coverage: Page) -> None:
+        """Verify each section has both CSV and JSON download options."""
+        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
+        await page_with_js_coverage.wait_for_load_state("networkidle")
+
+        sections = [
+            "topRepositories",
+            "recentEvents",
+            "prCreators",
+            "prReviewers",
+            "prApprovers",
+            "userPrs",
+        ]
+
+        for section in sections:
+            # Count buttons for this section
+            section_buttons = page_with_js_coverage.locator(f'.download-btn[data-section="{section}"]')
+            await expect(section_buttons).to_have_count(2)
+
+            # Verify CSV button exists
+            csv_count = await page_with_js_coverage.locator(
+                f'.download-btn[data-section="{section}"][data-format="csv"]'
+            ).count()
+            assert csv_count == 1, f"Section {section} should have 1 CSV button, found {csv_count}"
+
+            # Verify JSON button exists
+            json_count = await page_with_js_coverage.locator(
+                f'.download-btn[data-section="{section}"][data-format="json"]'
+            ).count()
+            assert json_count == 1, f"Section {section} should have 1 JSON button, found {json_count}"

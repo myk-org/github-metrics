@@ -12,6 +12,16 @@
 
 // Dashboard Controller
 class MetricsDashboard {
+    // Section display names for downloads and error messages
+    static SECTION_DISPLAY_NAMES = {
+        'topRepositories': 'top_repositories',
+        'recentEvents': 'recent_events',
+        'prCreators': 'pr_creators',
+        'prReviewers': 'pr_reviewers',
+        'prApprovers': 'pr_approvers',
+        'userPrs': 'pull_requests'
+    };
+
     constructor() {
         this.apiClient = null;  // Will be initialized in initialize()
         this.currentData = {
@@ -367,7 +377,6 @@ class MetricsDashboard {
         const summary = workingData.summary;
         let webhooks = workingData.webhooks;
         let repositories = workingData.repositories;
-        const trends = workingData.trends;
 
         // Apply repository filter
         let filteredWebhooks = webhooks;
@@ -856,7 +865,61 @@ class MetricsDashboard {
         // Collapse buttons
         this.setupCollapseButtons();
 
+        // Download buttons
+        this.setupDownloadListeners();
+
         console.log('[Dashboard] Event listeners set up');
+    }
+
+    /**
+     * Set up download button listeners.
+     */
+    setupDownloadListeners() {
+        // Only set up once during initialization
+        if (this.downloadListenerInitialized) return;
+        this.downloadListenerInitialized = true;
+
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('download-btn')) {
+                const section = e.target.dataset.section;
+                const format = e.target.dataset.format;
+                this.handleDownload(section, format);
+            }
+        });
+    }
+
+    /**
+     * Handle download button click.
+     * @param {string} section - Section identifier
+     * @param {string} format - Download format ('csv' or 'json')
+     */
+    handleDownload(section, format) {
+        const data = this.getTableData(section);
+
+        if (!data || data.length === 0) {
+            const sectionName = this.getSectionDisplayName(section);
+            const reason = this.currentData ? 'No matching data found with current filters' : 'Data not loaded yet';
+            console.warn(`[Dashboard] No data available for download: ${section}`);
+            this.showError(`No data available to download for ${sectionName}. ${reason}`);
+            return;
+        }
+
+        // Generate filename with section name and timestamp
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        const sectionName = this.getSectionDisplayName(section);
+        const filename = `github_metrics_${sectionName}_${timestamp}.${format}`;
+
+        this.downloadData(data, filename, format);
+        console.log(`[Dashboard] Downloaded ${sectionName} data as ${format}`);
+    }
+
+    /**
+     * Get display name for section.
+     * @param {string} section - Section identifier
+     * @returns {string} Display name
+     */
+    getSectionDisplayName(section) {
+        return MetricsDashboard.SECTION_DISPLAY_NAMES[section] || section;
     }
 
     /**
@@ -1282,8 +1345,13 @@ class MetricsDashboard {
      * @return {string} - Escaped CSV value
      */
     escapeCsvValue(value) {
+        // Handle null/undefined/empty
+        if (value === null || value === undefined || value === '') {
+            return '';
+        }
+
         // Convert to string
-        const stringValue = String(value ?? '');
+        const stringValue = String(value);
 
         // Check if value needs escaping (contains comma, quote, or newline)
         const needsEscaping = /[",\n\r]/.test(stringValue);
@@ -1305,6 +1373,13 @@ class MetricsDashboard {
      * @param {string} format - Format ('csv' or 'json')
      */
     downloadData(data, filename, format) {
+        // Warn for large downloads (> 10,000 rows)
+        if (data.length > 10000) {
+            if (!window.confirm(`This download contains ${data.length.toLocaleString()} rows. Continue?`)) {
+                return;
+            }
+        }
+
         let content, mimeType;
 
         if (format === 'csv') {
