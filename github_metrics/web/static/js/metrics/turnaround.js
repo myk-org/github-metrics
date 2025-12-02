@@ -15,6 +15,7 @@ import { apiClient } from './api-client.js';
 
 class TurnaroundMetrics {
     constructor() {
+        console.log('[Turnaround] Constructor called');
         this.data = null;
         this.loadingElement = document.getElementById('turnaround-loading');
         this.errorElement = document.getElementById('turnaround-error');
@@ -48,10 +49,37 @@ class TurnaroundMetrics {
         // Set up download buttons
         this.setupDownloadButtons();
 
-        // Check if Contributors page is currently visible
-        // Use hash check instead of .active class to handle F5 refresh
-        if (window.location.hash === '#contributors') {
+        // Check if we should load metrics (handles direct navigation to #contributors)
+        this.checkAndLoadMetrics();
+    }
+
+    /**
+     * Check if we should load metrics and load them if conditions are met
+     */
+    checkAndLoadMetrics() {
+        const hash = window.location.hash; // Full hash including #
+        const currentHash = hash.slice(1) || 'overview'; // Remove # and default to overview
+
+        console.log('[Turnaround] checkAndLoadMetrics - full hash:', hash, 'parsed:', currentHash);
+
+        if (currentHash !== 'contributors') {
+            console.log('[Turnaround] Not on contributors page, skipping initial load. Hash is:', currentHash);
+            return;
+        }
+
+        // Check if time filters are ready
+        const startTimeInput = document.getElementById('startTime');
+        const endTimeInput = document.getElementById('endTime');
+
+        console.log('[Turnaround] startTime:', startTimeInput?.value, 'endTime:', endTimeInput?.value);
+
+        if (startTimeInput && startTimeInput.value && endTimeInput && endTimeInput.value) {
+            console.log('[Turnaround] Time filters ready, loading metrics');
             this.loadMetrics();
+        } else {
+            console.log('[Turnaround] Time filters not ready, waiting...');
+            // Retry after a short delay
+            setTimeout(() => this.checkAndLoadMetrics(), 100);
         }
     }
 
@@ -59,36 +87,54 @@ class TurnaroundMetrics {
      * Set up listener for page changes
      */
     setupPageChangeListener() {
-        // Listen for hash changes
+        // Listen for hash changes - load metrics directly when navigating to contributors
         window.addEventListener('hashchange', () => {
             const hash = window.location.hash.slice(1);
             if (hash === 'contributors') {
+                console.log('[Turnaround] Navigated to contributors page, loading metrics');
                 this.loadMetrics();
             }
         });
 
-        // Listen for time filter changes
-        const startTimeInput = document.getElementById('startTime');
-        const endTimeInput = document.getElementById('endTime');
-        const timeRangeSelect = document.getElementById('time-range-select');
-
-        const refreshIfActive = () => {
-            const contributorsPage = document.getElementById('page-contributors');
-            if (contributorsPage && contributorsPage.classList.contains('active')) {
-                console.log('[Turnaround] Time filter changed, refreshing metrics');
+        // Listen for time filter changes - always reload data when time changes
+        // Listen for time filter updates from dashboard (custom event)
+        document.addEventListener('timeFiltersUpdated', () => {
+            const hash = window.location.hash.slice(1);
+            if (hash === 'contributors') {
+                console.log('[Turnaround] Time filters updated, refreshing metrics');
                 this.loadMetrics();
             }
-        };
+        });
 
-        if (startTimeInput) {
-            startTimeInput.addEventListener('change', refreshIfActive);
-        }
-        if (endTimeInput) {
-            endTimeInput.addEventListener('change', refreshIfActive);
-        }
-        if (timeRangeSelect) {
-            timeRangeSelect.addEventListener('change', refreshIfActive);
-        }
+        // Listen for repository filter changes with debounce
+        let repoFilterTimeout = null;
+        document.addEventListener('input', (e) => {
+            if (e.target.id === 'repositoryFilter') {
+                clearTimeout(repoFilterTimeout);
+                repoFilterTimeout = setTimeout(() => {
+                    const hash = window.location.hash.slice(1);
+                    if (hash === 'contributors') {
+                        console.log('[Turnaround] Repository filter changed, refreshing metrics');
+                        this.loadMetrics();
+                    }
+                }, 300);
+            }
+        });
+
+        // Listen for user filter changes with debounce
+        let userFilterTimeout = null;
+        document.addEventListener('input', (e) => {
+            if (e.target.id === 'userFilter') {
+                clearTimeout(userFilterTimeout);
+                userFilterTimeout = setTimeout(() => {
+                    const hash = window.location.hash.slice(1);
+                    if (hash === 'contributors') {
+                        console.log('[Turnaround] User filter changed, refreshing metrics');
+                        this.loadMetrics();
+                    }
+                }, 300);
+            }
+        });
     }
 
     /**
@@ -117,6 +163,13 @@ class TurnaroundMetrics {
             // Store data
             this.data = response;
 
+            // Debug logging
+            console.log('[Turnaround] Response received:', {
+                hasSummary: !!response.summary,
+                repositoryCount: response.by_repository?.length || 0,
+                reviewerCount: response.by_reviewer?.length || 0
+            });
+
             // Update UI
             this.updateKPIs(response.summary);
             this.updateRepositoryTable(response.by_repository || []);
@@ -137,6 +190,8 @@ class TurnaroundMetrics {
     getTimeFilters() {
         const startTimeInput = document.getElementById('startTime');
         const endTimeInput = document.getElementById('endTime');
+        const repoInput = document.getElementById('repositoryFilter');
+        const userInput = document.getElementById('userFilter');
 
         const filters = {};
 
@@ -149,6 +204,16 @@ class TurnaroundMetrics {
         if (endTimeInput && endTimeInput.value) {
             const endDate = new Date(endTimeInput.value);
             filters.end_time = endDate.toISOString();
+        }
+
+        // Add repository filter
+        if (repoInput && repoInput.value) {
+            filters.repository = repoInput.value;
+        }
+
+        // Add user filter
+        if (userInput && userInput.value) {
+            filters.user = userInput.value;
         }
 
         return filters;
@@ -238,7 +303,7 @@ class TurnaroundMetrics {
     }
 
     /**
-     * Format hours for display
+     * Format hours for display in human-readable format
      */
     formatHours(hours) {
         if (hours === null || hours === undefined) {
@@ -250,7 +315,28 @@ class TurnaroundMetrics {
             return 'N/A';
         }
 
-        return num.toFixed(1);
+        // Less than 1 hour: show minutes
+        if (num < 1) {
+            const minutes = Math.round(num * 60);
+            return `${minutes}m`;
+        }
+
+        // 1-24 hours: show hours
+        if (num < 24) {
+            return `${num.toFixed(1)}h`;
+        }
+
+        // 24-168 hours (1 week): show days and hours
+        if (num < 168) {
+            const days = Math.floor(num / 24);
+            const remainingHours = Math.round(num % 24);
+            return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`;
+        }
+
+        // 168+ hours: show weeks and days
+        const weeks = Math.floor(num / 168);
+        const remainingDays = Math.floor((num % 168) / 24);
+        return remainingDays > 0 ? `${weeks}w ${remainingDays}d` : `${weeks}w`;
     }
 
     /**

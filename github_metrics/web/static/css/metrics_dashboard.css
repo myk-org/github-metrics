@@ -674,9 +674,14 @@ h3 {
   position: relative;
 }
 
+.combo-box-wrapper {
+  position: relative;
+  width: 100%;
+}
+
 .combo-box-input {
   width: 100%;
-  padding: 8px 12px;
+  padding: 8px 32px 8px 12px; /* Add right padding for clear button */
   border: 1px solid var(--input-border);
   border-radius: 4px;
   background-color: var(--input-bg);
@@ -689,6 +694,39 @@ h3 {
 .combo-box-input:focus {
   outline: none;
   border-color: var(--primary-color);
+}
+
+/* Clear button */
+.combo-box-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+  z-index: 1;
+}
+
+.combo-box-clear:hover {
+  background-color: var(--border-color);
+  color: var(--text-color);
+}
+
+.combo-box-clear:focus {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
 }
 
 .combo-box-dropdown {

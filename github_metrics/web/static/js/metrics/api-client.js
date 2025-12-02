@@ -425,6 +425,7 @@ class MetricsAPIClient {
         if (filters.start_time) params.start_time = filters.start_time;
         if (filters.end_time) params.end_time = filters.end_time;
         if (filters.repository) params.repository = filters.repository;
+        if (filters.user) params.user = filters.user;
 
         return await this._fetch('/turnaround', params);
     }

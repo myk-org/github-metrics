@@ -118,34 +118,37 @@ async def get_review_turnaround(
     start_datetime = parse_datetime_string(start_time, "start_time")
     end_datetime = parse_datetime_string(end_time, "end_time")
 
-    # Build filter clause with time and repository filters
+    # Build base parameters (time + repository filters)
+    # These are used by ALL queries
     time_filter = ""
-    params: list[Any] = []
-    param_count = 0
+    base_params: list[Any] = []
+    base_param_count = 0
 
     if start_datetime:
-        param_count += 1
-        time_filter += " AND created_at >= $" + str(param_count)
-        params.append(start_datetime)
+        base_param_count += 1
+        time_filter += " AND created_at >= $" + str(base_param_count)
+        base_params.append(start_datetime)
 
     if end_datetime:
-        param_count += 1
-        time_filter += " AND created_at <= $" + str(param_count)
-        params.append(end_datetime)
+        base_param_count += 1
+        time_filter += " AND created_at <= $" + str(base_param_count)
+        base_params.append(end_datetime)
 
     # Add repository filter if provided
     repository_filter = ""
     if repository:
-        param_count += 1
-        repository_filter = " AND repository = $" + str(param_count)
-        params.append(repository)
+        base_param_count += 1
+        repository_filter = " AND repository = $" + str(base_param_count)
+        base_params.append(repository)
 
-    # User filter for reviewers (applied in by_reviewer query only)
-    user_filter = ""
+    # Build reviewer parameters (base params + user filter)
+    # These are used only by queries that filter by reviewer
+    reviewer_params = base_params.copy()
+    user_filter_reviewer = ""
     if user:
-        param_count += 1
-        user_filter = " AND sender = $" + str(param_count)
-        params.append(user)
+        reviewer_param_count = base_param_count + 1
+        user_filter_reviewer = " AND sender = $" + str(reviewer_param_count)
+        reviewer_params.append(user)
 
     # Query 1: Time to first review per PR (for overall summary)
     # Find the first 'pull_request_review' event for each PR after it was opened
@@ -176,6 +179,9 @@ async def get_review_turnaround(
             WHERE w.event_type = 'pull_request_review'
               AND w.action = 'submitted'
               AND w.sender IS DISTINCT FROM w.pr_author
+              """
+        + user_filter_reviewer
+        + """
             GROUP BY w.repository, w.pr_number
         )
         SELECT
@@ -289,6 +295,9 @@ async def get_review_turnaround(
             WHERE w.event_type = 'pull_request_review'
               AND w.action = 'submitted'
               AND w.sender IS DISTINCT FROM w.pr_author
+              """
+        + user_filter_reviewer
+        + """
             GROUP BY w.repository, w.pr_number
         ),
         first_approval AS (
@@ -366,7 +375,7 @@ async def get_review_turnaround(
           AND w.action = 'submitted'
           AND w.sender IS DISTINCT FROM w.pr_author
           """
-        + user_filter
+        + user_filter_reviewer
         + """
         GROUP BY w.sender
         ORDER BY total_reviews DESC
@@ -375,6 +384,7 @@ async def get_review_turnaround(
 
     try:
         # Execute all queries in parallel
+        # Note: Some queries use reviewer_params (with user filter), others use base_params
         (
             first_review_rows,
             approval_rows,
@@ -382,11 +392,11 @@ async def get_review_turnaround(
             by_repo_rows,
             by_reviewer_rows,
         ) = await asyncio.gather(
-            db_manager.fetch(time_to_first_review_query, *params),
-            db_manager.fetch(time_to_approval_query, *params),
-            db_manager.fetchrow(pr_lifecycle_query, *params),
-            db_manager.fetch(by_repository_query, *params),
-            db_manager.fetch(by_reviewer_query, *params),
+            db_manager.fetch(time_to_first_review_query, *reviewer_params),  # Uses user filter
+            db_manager.fetch(time_to_approval_query, *base_params),  # No user filter
+            db_manager.fetchrow(pr_lifecycle_query, *base_params),  # No user filter
+            db_manager.fetch(by_repository_query, *reviewer_params),  # Uses user filter
+            db_manager.fetch(by_reviewer_query, *reviewer_params),  # Uses user filter
         )
 
         # Calculate overall averages

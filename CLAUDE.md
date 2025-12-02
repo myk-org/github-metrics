@@ -378,6 +378,23 @@ tox -e ui
 
 Both test suites must pass to declare all tests successful.
 
+### Development Server
+
+For debugging and code verification, use the dev server at http://localhost:8765/
+
+**Before making changes:**
+1. Check if the dev server is already running (visit http://localhost:8765/dashboard)
+2. If running, use it directly - the server has **hot reload** enabled, so no restart is needed when code changes
+3. If not running, start it with: `./dev/run.sh`
+
+**Use cases:**
+- Verify frontend changes in the browser
+- Check API responses in browser DevTools (Network tab)
+- Debug JavaScript issues in browser Console
+- Test UI interactions manually
+
+**Note:** Always verify code changes in the browser before committing, especially for frontend/UI work.
+
 ### Code Quality
 
 ```bash
