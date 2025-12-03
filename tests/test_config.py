@@ -104,11 +104,17 @@ class TestServerConfig:
 
     def test_server_config_creation(self) -> None:
         """Test server configuration creation."""
-        config = ServerConfig(host="0.0.0.0", port=8080, workers=4, reload=False)
+        config = ServerConfig(host="0.0.0.0", port=8080, workers=4, reload=False, debug=False)
         assert config.host == "0.0.0.0"
         assert config.port == 8080
         assert config.workers == 4
         assert config.reload is False
+        assert config.debug is False
+
+    def test_server_config_debug_mode(self) -> None:
+        """Test server configuration with debug mode enabled."""
+        config = ServerConfig(host="127.0.0.1", port=8765, workers=1, reload=True, debug=True)
+        assert config.debug is True
 
 
 class TestWebhookConfig:
@@ -161,6 +167,7 @@ class TestMetricsConfig:
         assert test_config.server.host == "127.0.0.1"  # Set in conftest.py for test environment
         assert test_config.server.port == 8765
         assert test_config.server.workers == 1
+        assert test_config.server.debug is False  # Default is production-safe (no debug mode)
 
     def test_config_missing_required_env_var_raises_error(self) -> None:
         """Test missing required environment variable raises KeyError."""
@@ -203,6 +210,32 @@ class TestMetricsConfig:
         config = MetricsConfig()
         assert config.webhook.verify_github_ips is False
         assert config.webhook.verify_cloudflare_ips is False
+
+    def test_server_debug_mode_enabled(self) -> None:
+        """Test server debug mode can be enabled."""
+        original_value = os.environ.get("METRICS_SERVER_DEBUG")
+        os.environ["METRICS_SERVER_DEBUG"] = "true"
+
+        try:
+            config = MetricsConfig()
+            assert config.server.debug is True
+        finally:
+            if original_value is not None:
+                os.environ["METRICS_SERVER_DEBUG"] = original_value
+            else:
+                os.environ.pop("METRICS_SERVER_DEBUG", None)
+
+    def test_server_debug_mode_disabled_by_default(self) -> None:
+        """Test server debug mode is disabled by default (production-safe)."""
+        original_value = os.environ.get("METRICS_SERVER_DEBUG")
+        os.environ.pop("METRICS_SERVER_DEBUG", None)
+
+        try:
+            config = MetricsConfig()
+            assert config.server.debug is False
+        finally:
+            if original_value is not None:
+                os.environ["METRICS_SERVER_DEBUG"] = original_value
 
     def test_config_rejects_wildcard_host_without_opt_in(self) -> None:
         """Test that MetricsConfig rejects wildcard server host without opt-in."""

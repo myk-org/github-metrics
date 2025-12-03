@@ -17,6 +17,7 @@ Optional environment variables (with defaults):
 - METRICS_SERVER_PORT: Server bind port (default: 8080)
 - METRICS_SERVER_WORKERS: Uvicorn workers (default: 4)
 - METRICS_SERVER_RELOAD: Enable auto-reload for development (default: false)
+- METRICS_SERVER_DEBUG: Enable debug mode features like no-cache middleware (default: false)
 - METRICS_SERVER_ALLOW_ALL_HOSTS: Allow binding to wildcard addresses (default: false)
 
 Webhook security configuration:
@@ -125,6 +126,7 @@ class ServerConfig:
     port: int
     workers: int
     reload: bool
+    debug: bool
 
 
 @dataclass(frozen=True)
@@ -195,6 +197,7 @@ class MetricsConfig:
             port=int(os.environ.get("METRICS_SERVER_PORT", "8080")),
             workers=int(os.environ.get("METRICS_SERVER_WORKERS", "4")),
             reload=_parse_bool(os.environ.get("METRICS_SERVER_RELOAD", "")),
+            debug=_parse_bool(os.environ.get("METRICS_SERVER_DEBUG", "")),
         )
 
         # Webhook security configuration

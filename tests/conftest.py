@@ -225,159 +225,6 @@ def db_manager(mock_metrics_config: Mock, mock_logger: Mock) -> DatabaseManager:
     return DatabaseManager(config=mock_metrics_config, logger=mock_logger)
 
 
-# Playwright UI test fixtures
-@pytest.fixture
-def mock_dashboard_data() -> dict[str, Any]:
-    """Mock dashboard data for UI tests."""
-    return {
-        "summary": {
-            "total_events": 150,
-            "successful_events": 145,
-            "failed_events": 5,
-            "success_rate": 96.67,
-            "avg_processing_time_ms": 234,
-            "total_events_trend": 12.5,
-            "success_rate_trend": 2.3,
-            "failed_events_trend": -10.0,
-            "avg_duration_trend": -5.2,
-        },
-        "top_repositories": [
-            {"repository": "org/repo1", "total_events": 80, "percentage": 53.33, "success_rate": 98.75},
-            {"repository": "org/repo2", "total_events": 50, "percentage": 33.33, "success_rate": 94.0},
-            {"repository": "org/repo3", "total_events": 20, "percentage": 13.33, "success_rate": 95.0},
-        ],
-        "event_type_distribution": {
-            "pull_request": 80,
-            "issue_comment": 40,
-            "push": 30,
-        },
-    }
-
-
-@pytest.fixture
-def mock_contributors_data() -> dict[str, Any]:
-    """Mock contributors data for UI tests."""
-    return {
-        "pr_creators": {
-            "data": [
-                {"user": "alice", "total_prs": 25, "merged_prs": 23, "closed_prs": 2, "avg_commits_per_pr": 3.2},
-                {"user": "bob", "total_prs": 18, "merged_prs": 17, "closed_prs": 1, "avg_commits_per_pr": 2.8},
-            ],
-            "pagination": {
-                "total": 2,
-                "page": 1,
-                "page_size": 10,
-                "total_pages": 1,
-                "has_next": False,
-                "has_prev": False,
-            },
-        },
-        "pr_reviewers": {
-            "data": [
-                {"user": "charlie", "total_reviews": 45, "prs_reviewed": 30, "avg_reviews_per_pr": 1.5},
-                {"user": "diana", "total_reviews": 35, "prs_reviewed": 28, "avg_reviews_per_pr": 1.25},
-            ],
-            "pagination": {
-                "total": 2,
-                "page": 1,
-                "page_size": 10,
-                "total_pages": 1,
-                "has_next": False,
-                "has_prev": False,
-            },
-        },
-        "pr_approvers": {
-            "data": [
-                {"user": "eve", "total_approvals": 40, "prs_approved": 38},
-                {"user": "frank", "total_approvals": 32, "prs_approved": 30},
-            ],
-            "pagination": {
-                "total": 2,
-                "page": 1,
-                "page_size": 10,
-                "total_pages": 1,
-                "has_next": False,
-                "has_prev": False,
-            },
-        },
-        "pr_lgtm": {
-            "data": [
-                {"user": "grace", "total_lgtm": 28, "prs_lgtm": 26},
-                {"user": "henry", "total_lgtm": 22, "prs_lgtm": 20},
-            ],
-            "pagination": {
-                "total": 2,
-                "page": 1,
-                "page_size": 10,
-                "total_pages": 1,
-                "has_next": False,
-                "has_prev": False,
-            },
-        },
-    }
-
-
-@pytest.fixture
-def mock_user_prs_data() -> dict[str, Any]:
-    """Mock user PRs data for UI tests."""
-    return {
-        "data": [
-            {
-                "number": 123,
-                "title": "Add feature X",
-                "owner": "alice",
-                "repository": "org/repo1",
-                "state": "closed",
-                "merged": True,
-                "url": "https://github.com/org/repo1/pull/123",
-                "created_at": "2024-11-20T10:00:00Z",
-                "updated_at": "2024-11-21T15:30:00Z",
-                "commits_count": 5,
-                "head_sha": "abc123",  # pragma: allowlist secret
-            },
-            {
-                "number": 124,
-                "title": "Fix bug Y",
-                "owner": "bob",
-                "repository": "org/repo1",
-                "state": "open",
-                "merged": False,
-                "url": "https://github.com/org/repo1/pull/124",
-                "created_at": "2024-11-22T09:00:00Z",
-                "updated_at": "2024-11-22T16:45:00Z",
-                "commits_count": 3,
-                "head_sha": "def456",  # pragma: allowlist secret
-            },
-        ],
-        "pagination": {"total": 2, "page": 1, "page_size": 10, "total_pages": 1, "has_next": False, "has_prev": False},
-    }
-
-
-@pytest.fixture
-def mock_recent_events_data() -> list[dict[str, Any]]:
-    """Mock recent events data for UI tests."""
-    return [
-        {
-            "created_at": "2024-11-30T10:30:00Z",
-            "repository": "org/repo1",
-            "event_type": "pull_request",
-            "status": "success",
-        },
-        {
-            "created_at": "2024-11-30T10:25:00Z",
-            "repository": "org/repo2",
-            "event_type": "issue_comment",
-            "status": "success",
-        },
-        {
-            "created_at": "2024-11-30T10:20:00Z",
-            "repository": "org/repo1",
-            "event_type": "push",
-            "status": "error",
-        },
-    ]
-
-
 # Playwright UI test configuration
 @pytest.fixture(scope="session")
 def browser_context_args() -> dict[str, Any]:
@@ -419,6 +266,20 @@ def dev_server() -> Generator[str]:
     Raises:
         DevServerStartupError: If the server fails to start within the timeout period.
     """
+    base_url = "http://localhost:8765"
+    server_already_running = False
+    try:
+        response = httpx.get(f"{base_url}/dashboard", timeout=2.0)
+        if response.status_code == 200:
+            print(f"Dev server {base_url} is already up, reusing it.")
+            server_already_running = True
+    except httpx.RequestError as e:
+        # Server not running, start it
+        print(f"Dev server probe failed for {base_url}: {e}")
+
+    if server_already_running:
+        yield base_url
+        return
 
     # Start server subprocess
     # CRITICAL: Use DEVNULL for stdout/stderr to prevent buffering deadlock
@@ -437,7 +298,6 @@ def dev_server() -> Generator[str]:
 
     # Wait for server to be ready
     # Startup sequence: Docker (3s) + PostgreSQL (variable) + migrations (variable) + server (variable)
-    base_url = "http://localhost:8765"
     max_retries = 30  # 30 seconds total timeout
     for _ in range(max_retries):
         # Check if process died

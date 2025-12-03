@@ -46,7 +46,9 @@ Perfect for teams who want to:
 
 🔔 **Webhook Processing** - Secure webhook receiver with IP allowlist verification and HMAC SHA256 signature validation
 
-📊 **Real-time Dashboard** - Interactive web interface with live updates via WebSocket streaming and dark/light theme support
+📊 **Real-time Dashboard** - Interactive web interface with sidebar navigation, Overview and Contributors views, live updates via WebSocket streaming, and dark/light theme support
+
+⏱️ **Review Turnaround Metrics** - Track time to first review, approval time, and PR lifecycle duration by repository and reviewer with human-readable time formats
 
 💾 **Event Storage** - Comprehensive event tracking in PostgreSQL with full payload storage and optimized indexing
 
@@ -63,6 +65,35 @@ Perfect for teams who want to:
 🔒 **Security** - Multi-layer security with IP allowlist (GitHub/Cloudflare), webhook signature validation, and secure configuration
 
 🚀 **Auto-Setup** - Optionally auto-create webhooks on startup for configured repositories
+
+---
+
+## Dashboard Views
+
+The interactive dashboard provides two specialized views accessible via sidebar navigation:
+
+### Overview
+
+The main dashboard view includes:
+- **Real-time Event Stream** - Live webhook events with filters for repository, event type, and status
+- **Repository Statistics** - Event counts, success rates, and processing times per repository
+- **Activity Trends** - Time-series charts showing webhook volume over time
+- **PR Story Modal** - Complete PR lifecycle timeline with reviews, comments, and check runs
+
+### Contributors
+
+Review turnaround analytics and contributor performance:
+- **Summary KPI Cards** - Quick metrics for average first review time, approval time, PR lifecycle duration, and total PRs analyzed
+- **Turnaround by Repository** - Review metrics broken down by repository with sortable columns
+- **Turnaround by Reviewer** - Individual reviewer response times and PR review counts
+- **Human-Readable Time Format** - Times displayed as "6m", "1.1h", "2d 5h" for easy interpretation
+
+Both views share common filtering capabilities:
+- **Repository Filter** - ComboBox dropdown with fuzzy search across all repositories
+- **User Filter** - ComboBox dropdown to filter by specific users
+- **Time Range** - Defaults to last 7 days, configurable for custom date ranges
+- **Clear Filters** - One-click reset button (X) to clear all active filters
+- **Data Export** - Download filtered data as CSV or JSON for external analysis and reporting
 
 ---
 

@@ -383,6 +383,54 @@ class MetricsAPIClient {
     }
 
     /**
+     * Fetch review turnaround metrics.
+     *
+     * Returns metrics about PR review response times and lifecycle.
+     *
+     * @param {Object} filters - Filter options
+     * @param {string} filters.start_time - ISO 8601 start time filter (optional)
+     * @param {string} filters.end_time - ISO 8601 end time filter (optional)
+     * @param {string} filters.repository - Filter by repository (optional)
+     * @returns {Promise<Object>} Turnaround metrics or error object
+     *
+     * Response format (success):
+     * {
+     *     summary: {
+     *         avg_time_to_first_review_hours: 2.5,
+     *         avg_time_to_approval_hours: 8.3,
+     *         avg_pr_lifecycle_hours: 24.1,
+     *         total_prs_analyzed: 150
+     *     },
+     *     by_repository: [
+     *         {
+     *             repository: 'org/repo1',
+     *             avg_time_to_first_review_hours: 1.2,
+     *             avg_time_to_approval_hours: 4.5,
+     *             avg_pr_lifecycle_hours: 12.0,
+     *             total_prs: 50
+     *         }
+     *     ],
+     *     by_reviewer: [
+     *         {
+     *             reviewer: 'user1',
+     *             avg_response_time_hours: 1.5,
+     *             total_reviews: 30,
+     *             repositories_reviewed: ['org/repo1', 'org/repo2']
+     *         }
+     *     ]
+     * }
+     */
+    async fetchTurnaroundMetrics(filters = {}) {
+        const params = {};
+        if (filters.start_time) params.start_time = filters.start_time;
+        if (filters.end_time) params.end_time = filters.end_time;
+        if (filters.repository) params.repository = filters.repository;
+        if (filters.user) params.user = filters.user;
+
+        return await this._fetch('/turnaround', params);
+    }
+
+    /**
      * Internal fetch wrapper with timeout and error handling.
      *
      * @private

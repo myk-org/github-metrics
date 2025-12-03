@@ -1,4 +1,4 @@
-"""Playwright UI tests for the metrics dashboard."""
+"""Playwright UI tests for the metrics dashboard Overview page."""
 
 from __future__ import annotations
 
@@ -30,25 +30,25 @@ class TestDashboardPageLoad:
         """Verify page header renders correctly."""
         await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
 
-        # Check main heading
-        heading = page_with_js_coverage.locator("h1")
+        # Check main heading - target the shared header in main-content, not page-specific headers
+        heading = page_with_js_coverage.locator(".main-content > .container > .header h1")
         await expect(heading).to_have_text("GitHub Metrics Dashboard")
 
-        # Check subtitle
-        subtitle = page_with_js_coverage.locator("h1 + p")
-        await expect(subtitle).to_have_text("Real-time monitoring of webhook processing metrics")
+        # Check inline status indicator is present
+        status_inline = page_with_js_coverage.locator("#connection-status-inline")
+        await expect(status_inline).to_be_visible()
 
     async def test_connection_status_displays(self, page_with_js_coverage: Page) -> None:
         """Verify connection status element is visible."""
         await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
 
-        # Check connection status container
-        status = page_with_js_coverage.locator("#connection-status")
-        await expect(status).to_be_visible()
+        # Check inline connection status container (new inline version)
+        status_inline = page_with_js_coverage.locator("#connection-status-inline")
+        await expect(status_inline).to_be_visible()
 
-        # Check status text element
-        status_text = page_with_js_coverage.locator("#statusText")
-        await expect(status_text).to_be_visible()
+        # Check inline status text element
+        status_text_inline = page_with_js_coverage.locator("#statusTextInline")
+        await expect(status_text_inline).to_be_visible()
 
     async def test_control_panel_renders(self, page_with_js_coverage: Page) -> None:
         """Verify control panel renders with all controls."""
@@ -81,25 +81,28 @@ class TestDashboardPageLoad:
     async def test_all_dashboard_sections_render(self, page_with_js_coverage: Page) -> None:
         """Verify all dashboard sections are present."""
         await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
+        await page_with_js_coverage.wait_for_load_state("networkidle")
 
-        # Top Repositories section
-        top_repos = page_with_js_coverage.locator('.chart-container[data-section="top-repositories"]')
-        await expect(top_repos).to_be_visible()
+        # Top Repositories section - scope to overview page
+        top_repos = page_with_js_coverage.locator('#page-overview .chart-container[data-section="top-repositories"]')
+        await expect(top_repos).to_be_attached()
         await expect(top_repos.locator("h2")).to_have_text("Top Repositories")
 
         # Recent Events section
-        recent_events = page_with_js_coverage.locator('.chart-container[data-section="recent-events"]')
-        await expect(recent_events).to_be_visible()
+        recent_events = page_with_js_coverage.locator('#page-overview .chart-container[data-section="recent-events"]')
+        await expect(recent_events).to_be_attached()
         await expect(recent_events.locator("h2")).to_have_text("Recent Events")
 
         # PR Contributors section
-        pr_contributors = page_with_js_coverage.locator('.chart-container[data-section="pr-contributors"]')
-        await expect(pr_contributors).to_be_visible()
+        pr_contributors = page_with_js_coverage.locator(
+            '#page-overview .chart-container[data-section="pr-contributors"]'
+        )
+        await expect(pr_contributors).to_be_attached()
         await expect(pr_contributors.locator("h2")).to_have_text("PR Contributors")
 
         # User PRs section
-        user_prs = page_with_js_coverage.locator('.chart-container[data-section="user-prs"]')
-        await expect(user_prs).to_be_visible()
+        user_prs = page_with_js_coverage.locator('#page-overview .chart-container[data-section="user-prs"]')
+        await expect(user_prs).to_be_attached()
         await expect(user_prs.locator("h2")).to_have_text("Pull Requests")
 
 
@@ -117,7 +120,7 @@ class TestDashboardControls:
 
         # UI Contract Verification:
         # These assertions verify the UI contract - the dashboard MUST have exactly 4 time range options
-        # (1h, 24h, 7d, 30d) with "24h" as the default. Changes to option count or default value are
+        # (1h, 24h, 7d, 30d) with "7d" as the default. Changes to option count or default value are
         # breaking changes to the UI contract. Failures here indicate intentional contract violations,
         # not flaky test behavior.
         # Check options exist
@@ -131,7 +134,7 @@ class TestDashboardControls:
         await expect(options.nth(3)).to_have_attribute("value", "30d")
 
         # Check default selection
-        await expect(time_range_select).to_have_value("24h")
+        await expect(time_range_select).to_have_value("7d")
 
     async def test_time_range_selector_changes(self, page_with_js_coverage: Page) -> None:
         """Test time range selector can be changed."""
@@ -344,11 +347,11 @@ class TestDashboardTheme:
     """Tests for theme toggle functionality."""
 
     async def test_theme_toggle_button_exists(self, page_with_js_coverage: Page) -> None:
-        """Verify theme toggle button is present."""
+        """Verify theme toggle button is present in sidebar."""
         await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
 
         theme_toggle = page_with_js_coverage.locator("#theme-toggle")
-        await expect(theme_toggle).to_be_visible()
+        await expect(theme_toggle).to_be_attached()
         await expect(theme_toggle).to_be_enabled()
         await expect(theme_toggle).to_have_attribute("title", "Toggle between light and dark theme")
 
@@ -433,8 +436,8 @@ class TestDashboardCollapsiblePanels:
             if await btn.count() > 0:
                 await btn.click()
 
-        # Dashboard should still be visible
-        await expect(page_with_js_coverage.locator(".dashboard-grid")).to_be_visible()
+        # Dashboard should still be visible - scope to overview page
+        await expect(page_with_js_coverage.locator("#page-overview .dashboard-grid")).to_be_visible()
 
     async def test_expand_collapsed_sections(self, page_with_js_coverage: Page) -> None:
         """Test expanding collapsed sections."""
@@ -450,8 +453,10 @@ class TestDashboardCollapsiblePanels:
         # Expand
         await btn.click()
 
-        # Section container should be visible
-        await expect(page_with_js_coverage.locator('.chart-container[data-section="top-repositories"]')).to_be_visible()
+        # Section container should be visible - scope to overview page
+        await expect(
+            page_with_js_coverage.locator('#page-overview .chart-container[data-section="top-repositories"]')
+        ).to_be_visible()
 
 
 @pytest.mark.usefixtures("dev_server")
@@ -528,9 +533,9 @@ class TestDashboardResponsiveness:
         await page_with_js_coverage.set_viewport_size({"width": 375, "height": 667})  # iPhone size
         await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
 
-        # Main elements should still be visible
-        await expect(page_with_js_coverage.locator("h1")).to_be_visible()
-        await expect(page_with_js_coverage.locator("#connection-status")).to_be_visible()
+        # Main elements should still be visible - target the shared header specifically
+        await expect(page_with_js_coverage.locator(".main-content > .container > .header h1")).to_be_visible()
+        await expect(page_with_js_coverage.locator("#connection-status-inline")).to_be_visible()
         await expect(page_with_js_coverage.locator(".control-panel")).to_be_visible()
 
     async def test_dashboard_renders_on_tablet_viewport(self, page_with_js_coverage: Page) -> None:
@@ -538,22 +543,36 @@ class TestDashboardResponsiveness:
         await page_with_js_coverage.set_viewport_size({"width": 768, "height": 1024})  # iPad size
         await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
 
-        # All sections should be visible
-        await expect(page_with_js_coverage.locator('.chart-container[data-section="top-repositories"]')).to_be_visible()
-        await expect(page_with_js_coverage.locator('.chart-container[data-section="recent-events"]')).to_be_visible()
-        await expect(page_with_js_coverage.locator('.chart-container[data-section="pr-contributors"]')).to_be_visible()
+        # All sections should be visible - scope to overview page
+        await expect(
+            page_with_js_coverage.locator('#page-overview .chart-container[data-section="top-repositories"]')
+        ).to_be_visible()
+        await expect(
+            page_with_js_coverage.locator('#page-overview .chart-container[data-section="recent-events"]')
+        ).to_be_visible()
+        await expect(
+            page_with_js_coverage.locator('#page-overview .chart-container[data-section="pr-contributors"]')
+        ).to_be_visible()
 
     async def test_dashboard_renders_on_desktop_viewport(self, page_with_js_coverage: Page) -> None:
         """Verify dashboard renders on desktop viewport."""
         await page_with_js_coverage.set_viewport_size({"width": 1920, "height": 1080})
         await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
 
-        # Full dashboard should be visible
-        await expect(page_with_js_coverage.locator(".dashboard-grid")).to_be_visible()
-        await expect(page_with_js_coverage.locator('.chart-container[data-section="top-repositories"]')).to_be_visible()
-        await expect(page_with_js_coverage.locator('.chart-container[data-section="recent-events"]')).to_be_visible()
-        await expect(page_with_js_coverage.locator('.chart-container[data-section="pr-contributors"]')).to_be_visible()
-        await expect(page_with_js_coverage.locator('.chart-container[data-section="user-prs"]')).to_be_visible()
+        # Full dashboard should be visible - scope to overview page
+        await expect(page_with_js_coverage.locator("#page-overview .dashboard-grid")).to_be_visible()
+        await expect(
+            page_with_js_coverage.locator('#page-overview .chart-container[data-section="top-repositories"]')
+        ).to_be_visible()
+        await expect(
+            page_with_js_coverage.locator('#page-overview .chart-container[data-section="recent-events"]')
+        ).to_be_visible()
+        await expect(
+            page_with_js_coverage.locator('#page-overview .chart-container[data-section="pr-contributors"]')
+        ).to_be_visible()
+        await expect(
+            page_with_js_coverage.locator('#page-overview .chart-container[data-section="user-prs"]')
+        ).to_be_visible()
 
 
 @pytest.mark.usefixtures("dev_server")
@@ -574,11 +593,12 @@ class TestDashboardStaticAssets:
         await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
 
         # Check all JS modules are referenced
-        await expect(page_with_js_coverage.locator('script[src="/static/js/metrics/utils.js"]')).to_be_attached()
-        await expect(page_with_js_coverage.locator('script[src="/static/js/metrics/api-client.js"]')).to_be_attached()
-        await expect(page_with_js_coverage.locator('script[src="/static/js/metrics/combo-box.js"]')).to_be_attached()
-        await expect(page_with_js_coverage.locator('script[src="/static/js/metrics/pr-story.js"]')).to_be_attached()
-        await expect(page_with_js_coverage.locator('script[src="/static/js/metrics/dashboard.js"]')).to_be_attached()
+        await expect(page_with_js_coverage.locator('script[src^="/static/js/metrics/utils.js"]')).to_be_attached()
+        await expect(page_with_js_coverage.locator('script[src^="/static/js/metrics/api-client.js"]')).to_be_attached()
+        await expect(page_with_js_coverage.locator('script[src^="/static/js/metrics/combo-box.js"]')).to_be_attached()
+        await expect(page_with_js_coverage.locator('script[src^="/static/js/metrics/pr-story.js"]')).to_be_attached()
+        await expect(page_with_js_coverage.locator('script[src^="/static/js/metrics/navigation.js"]')).to_be_attached()
+        await expect(page_with_js_coverage.locator('script[src^="/static/js/metrics/dashboard.js"]')).to_be_attached()
 
     async def test_favicon_loads(self, page_with_js_coverage: Page) -> None:
         """Verify favicon is linked."""
@@ -592,6 +612,134 @@ class TestDashboardStaticAssets:
 
 @pytest.mark.usefixtures("dev_server")
 @pytest.mark.asyncio(loop_scope="session")
+class TestDashboardNavigation:
+    """Tests for sidebar navigation functionality."""
+
+    async def test_sidebar_exists(self, page_with_js_coverage: Page) -> None:
+        """Verify sidebar navigation exists."""
+        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
+
+        sidebar = page_with_js_coverage.locator("#sidebar")
+        await expect(sidebar).to_be_attached()
+
+    async def test_sidebar_nav_items(self, page_with_js_coverage: Page) -> None:
+        """Verify sidebar has navigation items."""
+        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
+
+        nav_items = page_with_js_coverage.locator(".nav-item")
+        await expect(nav_items).to_have_count(2)
+
+        # Check Overview nav item
+        overview_nav = page_with_js_coverage.locator('.nav-item[data-page="overview"]')
+        await expect(overview_nav).to_be_visible()
+        await expect(overview_nav).to_have_attribute("href", "#overview")
+
+        # Check Contributors nav item
+        contributors_nav = page_with_js_coverage.locator('.nav-item[data-page="contributors"]')
+        await expect(contributors_nav).to_be_visible()
+        await expect(contributors_nav).to_have_attribute("href", "#contributors")
+
+    async def test_mobile_menu_toggle_button(self, page_with_js_coverage: Page) -> None:
+        """Verify mobile menu toggle button exists."""
+        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
+
+        mobile_toggle = page_with_js_coverage.locator("#mobile-menu-toggle")
+        await expect(mobile_toggle).to_be_attached()
+
+    async def test_sidebar_overlay_exists(self, page_with_js_coverage: Page) -> None:
+        """Verify sidebar overlay exists for mobile."""
+        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
+
+        overlay = page_with_js_coverage.locator("#sidebar-overlay")
+        await expect(overlay).to_be_attached()
+
+    async def test_overview_page_visible_by_default(self, page_with_js_coverage: Page) -> None:
+        """Verify overview page is visible by default."""
+        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
+
+        overview_page = page_with_js_coverage.locator("#page-overview")
+        await expect(overview_page).to_be_visible()
+
+        contributors_page = page_with_js_coverage.locator("#page-contributors")
+        await expect(contributors_page).not_to_be_visible()
+
+    async def test_navigation_to_contributors_page(self, page_with_js_coverage: Page) -> None:
+        """Test navigating to contributors page."""
+        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
+        await page_with_js_coverage.wait_for_load_state("networkidle")
+
+        # Click contributors nav item
+        contributors_nav = page_with_js_coverage.locator('.nav-item[data-page="contributors"]')
+        await contributors_nav.click()
+
+        # Wait for contributors page to be visible (event-based waiting)
+        contributors_page = page_with_js_coverage.locator("#page-contributors")
+        await expect(contributors_page).to_be_visible(timeout=5000)
+
+        # Overview page should be hidden
+        overview_page = page_with_js_coverage.locator("#page-overview")
+        await expect(overview_page).not_to_be_visible()
+
+    async def test_navigation_back_to_overview(self, page_with_js_coverage: Page) -> None:
+        """Test navigating back to overview page."""
+        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
+        await page_with_js_coverage.wait_for_load_state("networkidle")
+
+        # Navigate to contributors
+        contributors_nav = page_with_js_coverage.locator('.nav-item[data-page="contributors"]')
+        await contributors_nav.click()
+
+        # Wait for contributors page to be visible
+        contributors_page = page_with_js_coverage.locator("#page-contributors")
+        await expect(contributors_page).to_be_visible(timeout=5000)
+
+        # Navigate back to overview
+        overview_nav = page_with_js_coverage.locator('.nav-item[data-page="overview"]')
+        await overview_nav.click()
+
+        # Wait for overview page to be visible (event-based waiting)
+        overview_page = page_with_js_coverage.locator("#page-overview")
+        await expect(overview_page).to_be_visible(timeout=5000)
+
+    async def test_active_nav_item_indicator(self, page_with_js_coverage: Page) -> None:
+        """Test active navigation item has active class."""
+        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
+        await page_with_js_coverage.wait_for_load_state("networkidle")
+
+        # Overview should be active by default
+        overview_nav = page_with_js_coverage.locator('.nav-item[data-page="overview"]')
+        await expect(overview_nav).to_have_class(re.compile(r"\bactive\b"))
+
+        # Contributors should not be active
+        contributors_nav = page_with_js_coverage.locator('.nav-item[data-page="contributors"]')
+        await expect(contributors_nav).not_to_have_class(re.compile(r"\bactive\b"))
+
+        # Click contributors
+        await contributors_nav.click()
+
+        # Wait for contributors nav to become active (event-based waiting)
+        await expect(contributors_nav).to_have_class(re.compile(r"\bactive\b"), timeout=5000)
+
+        # Overview should not be active
+        await expect(overview_nav).not_to_have_class(re.compile(r"\bactive\b"))
+
+    async def test_hash_navigation(self, page_with_js_coverage: Page) -> None:
+        """Test URL hash navigation."""
+        # Navigate directly to contributors via hash
+        await page_with_js_coverage.goto(f"{DASHBOARD_URL}#contributors", timeout=TIMEOUT)
+        await page_with_js_coverage.wait_for_load_state("networkidle")
+
+        # Contributors page should be visible
+        contributors_page = page_with_js_coverage.locator("#page-contributors")
+        await expect(contributors_page).to_be_visible()
+
+        # Overview page should be hidden
+        overview_page = page_with_js_coverage.locator("#page-overview")
+        await expect(overview_page).not_to_be_visible()
+
+
+@pytest.mark.usefixtures("dev_server")
+@pytest.mark.asyncio(loop_scope="session")
 class TestPRStoryModal:
     """Tests for PR Story modal functionality."""
 
@@ -599,7 +747,7 @@ class TestPRStoryModal:
         """Verify PR story script is loaded."""
         await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
 
-        script = page_with_js_coverage.locator('script[src="/static/js/metrics/pr-story.js"]')
+        script = page_with_js_coverage.locator('script[src^="/static/js/metrics/pr-story.js"]')
         await expect(script).to_be_attached()
 
     async def test_pr_table_exists(self, page_with_js_coverage: Page) -> None:
@@ -618,8 +766,8 @@ class TestPRStoryModal:
         # Press Escape - should not cause errors
         await page_with_js_coverage.keyboard.press("Escape")
 
-        # Dashboard should still be functional
-        await expect(page_with_js_coverage.locator(".dashboard-grid")).to_be_visible()
+        # Dashboard should still be functional - scope to overview page
+        await expect(page_with_js_coverage.locator("#page-overview .dashboard-grid")).to_be_visible()
 
 
 @pytest.mark.usefixtures("dev_server")
@@ -761,8 +909,8 @@ class TestDashboardLoadingStates:
         await time_range.select_option("1h")
         await page_with_js_coverage.wait_for_load_state("networkidle")
 
-        # Dashboard should still be functional
-        await expect(page_with_js_coverage.locator(".dashboard-grid")).to_be_visible()
+        # Dashboard should still be functional - scope to overview page
+        await expect(page_with_js_coverage.locator("#page-overview .dashboard-grid")).to_be_visible()
 
 
 @pytest.mark.usefixtures("dev_server")
@@ -886,8 +1034,8 @@ class TestDashboardKeyboardNavigation:
         await page_with_js_coverage.keyboard.press("Tab")
         await page_with_js_coverage.keyboard.press("Tab")
 
-        # Dashboard should still be visible
-        await expect(page_with_js_coverage.locator(".dashboard-grid")).to_be_visible()
+        # Dashboard should still be visible - scope to overview page
+        await expect(page_with_js_coverage.locator("#page-overview .dashboard-grid")).to_be_visible()
 
     async def test_enter_key_on_refresh(self, page_with_js_coverage: Page) -> None:
         """Test Enter key triggers refresh button."""
@@ -936,8 +1084,8 @@ class TestDashboardComboBox:
         await repo_filter.fill("test-repo")
         await expect(repo_filter).to_have_value("test-repo")
 
-        # Blur by clicking elsewhere
-        await page_with_js_coverage.locator("h1").click()
+        # Blur by clicking elsewhere - click on the shared header h1 which is always visible
+        await page_with_js_coverage.locator(".main-content > .container > .header h1").click()
 
         # Verify value persists
         await expect(repo_filter).to_have_value("test-repo")
@@ -1057,8 +1205,8 @@ class TestDashboardTimeRangeInteractions:
             await time_range.select_option(value)
             await page_with_js_coverage.wait_for_load_state("networkidle")
 
-        # Dashboard should still be visible
-        await expect(page_with_js_coverage.locator(".dashboard-grid")).to_be_visible()
+        # Dashboard should still be visible - scope to overview page
+        await expect(page_with_js_coverage.locator("#page-overview .dashboard-grid")).to_be_visible()
 
     async def test_custom_date_range(self, page_with_js_coverage: Page) -> None:
         """Test setting custom date range."""
@@ -1078,8 +1226,8 @@ class TestDashboardTimeRangeInteractions:
         await page_with_js_coverage.locator("#refresh-button").click()
         await page_with_js_coverage.wait_for_load_state("networkidle")
 
-        # Dashboard should still be visible
-        await expect(page_with_js_coverage.locator(".dashboard-grid")).to_be_visible()
+        # Dashboard should still be visible - scope to overview page
+        await expect(page_with_js_coverage.locator("#page-overview .dashboard-grid")).to_be_visible()
 
     async def test_multiple_refreshes(self, page_with_js_coverage: Page) -> None:
         """Test multiple refresh button clicks."""
@@ -1101,14 +1249,14 @@ class TestDashboardTimeRangeInteractions:
 @pytest.mark.usefixtures("dev_server")
 @pytest.mark.asyncio(loop_scope="session")
 class TestDashboardDownloadButtons:
-    """Tests for download button functionality."""
+    """Tests for download button functionality on Overview page."""
 
     async def test_download_buttons_exist(self, page_with_js_coverage: Page) -> None:
-        """Verify download buttons (CSV/JSON) exist for each table section."""
+        """Verify download buttons (CSV/JSON) exist for each table section on Overview page."""
         await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
         await page_with_js_coverage.wait_for_load_state("networkidle")
 
-        # Define all sections that should have download buttons (using camelCase as in HTML)
+        # Define Overview page sections that should have download buttons (using camelCase as in HTML)
         sections = [
             "topRepositories",
             "recentEvents",
@@ -1135,8 +1283,9 @@ class TestDashboardDownloadButtons:
         download_buttons = page_with_js_coverage.locator(".download-btn")
         button_count = await download_buttons.count()
 
-        # Should have 12 buttons (6 sections x 2 formats)
-        await expect(download_buttons).to_have_count(12)
+        # Should have 16 buttons (8 sections x 2 formats: 6 overview + 2 contributors)
+        # Contributors page sections (turnaroundByRepo, turnaroundByReviewer) are counted separately
+        await expect(download_buttons).to_have_count(16)
 
         # Verify each button has required attributes
         for i in range(button_count):
@@ -1292,8 +1441,8 @@ class TestDashboardDownloadButtons:
             await expect(csv_button).to_be_visible()
             await expect(csv_button).to_be_enabled()
 
-        # Dashboard should remain functional
-        await expect(page_with_js_coverage.locator(".dashboard-grid")).to_be_visible()
+        # Dashboard should remain functional - scope to overview page
+        await expect(page_with_js_coverage.locator("#page-overview .dashboard-grid")).to_be_visible()
 
     async def test_download_buttons_have_title_attribute(self, page_with_js_coverage: Page) -> None:
         """Verify download buttons have title attribute for tooltips."""

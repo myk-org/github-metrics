@@ -181,15 +181,73 @@ raise KeyError("Required field missing")  # Clear error
 
 This is a FastAPI-based metrics service that receives GitHub webhooks, stores event data in PostgreSQL, and provides a real-time dashboard for monitoring.
 
+### Project Structure
+
+```text
+github_metrics/
+├── app.py                    # Core app setup (350 lines)
+│                            # - FastAPI application initialization
+│                            # - Lifespan management (startup/shutdown)
+│                            # - MCP server integration
+│                            # - Database connection pooling
+│                            # - Route registration
+├── config.py                # Environment-based configuration
+├── database.py              # DatabaseManager with asyncpg pool
+├── metrics_tracker.py       # Webhook event storage and tracking
+├── models.py                # SQLAlchemy 2.0 declarative models
+├── pr_story.py              # Pull request timeline generation
+├── routes/                  # Modular route handlers
+│   ├── __init__.py
+│   ├── health.py            # GET /health, GET /favicon.ico
+│   ├── webhooks.py          # POST /metrics (webhook receiver)
+│   ├── dashboard.py         # GET /dashboard
+│   └── api/                 # REST API endpoints
+│       ├── __init__.py
+│       ├── webhooks.py      # GET /api/metrics/webhooks
+│       ├── repositories.py  # GET /api/metrics/repositories
+│       ├── summary.py       # GET /api/metrics/summary
+│       ├── contributors.py  # GET /api/metrics/contributors
+│       ├── user_prs.py      # GET /api/metrics/user-prs
+│       ├── trends.py        # GET /api/metrics/trends
+│       ├── pr_story.py      # GET /api/metrics/pr-story
+│       └── turnaround.py    # GET /api/metrics/turnaround
+├── utils/
+│   ├── __init__.py
+│   ├── security.py          # GitHub/Cloudflare IP validation, HMAC verification
+│   ├── datetime_utils.py    # Timezone-aware datetime utilities
+│   └── query_filters.py     # SQL query filter builders
+└── web/
+    ├── dashboard.py         # Jinja2 template rendering
+    ├── templates/
+    │   └── dashboard.html
+    └── static/
+        ├── css/
+        │   └── dashboard.css
+        └── js/
+            └── metrics/
+                ├── main.js          # Dashboard initialization
+                ├── dashboard.js     # Main dashboard logic
+                ├── navigation.js    # Sidebar navigation
+                ├── turnaround.js    # Turnaround metrics
+                └── ...
+```
+
 ### Core Components
 
 **Application (`github_metrics/app.py`):**
 
-- FastAPI application with async endpoints
-- Webhook receiver at POST /metrics
-- Dashboard at GET /dashboard
-- REST API at /api/metrics/\*
-- WebSocket streaming at /metrics/ws
+- FastAPI application initialization with CORS middleware
+- Lifespan context manager for database connection pooling
+- Route registration from modular route handlers
+- MCP server integration for external tool access
+- Database connection passed to route modules via module-level variables
+
+**Routes (`github_metrics/routes/`):**
+
+- Modular route handlers organized by functionality
+- Each API route module has a `db_manager` module-level variable
+- Set during app lifespan startup (before routes are called)
+- Enables clean separation of routing logic from app setup
 
 **Configuration (`github_metrics/config.py`):**
 
@@ -248,16 +306,94 @@ uv run entrypoint.py
 
 ### Testing
 
-```bash
-# Run all tests (parallel execution)
-uv run --group tests pytest tests/ -n auto
+**Two Test Suites:**
 
-# Run with coverage (90% required)
+This project has separate test suites for API tests and UI tests. **Both must pass to declare all tests passed.**
+
+```bash
+# Run API tests (unit tests, integration tests)
+tox
+
+# Run UI tests (Playwright browser automation)
+tox -e ui
+
+# Run all tests (API + UI)
+tox && tox -e ui
+```
+
+**API Tests (via `tox`):**
+- Unit tests for API endpoints, database operations, utilities
+- Integration tests with mocked database
+- Fast execution (parallel with pytest-xdist)
+- 90% code coverage required
+- No external dependencies (uses mocks)
+
+**UI Tests (via `tox -e ui`):**
+- Playwright browser automation tests
+- Tests against live development server
+- Real user interactions: clicks, forms, navigation
+- WebSocket real-time updates
+- Full-stack integration testing
+- Slower execution (requires browser + server)
+
+**Individual Test Commands:**
+
+```bash
+# Run specific API test file
+uv run --group tests pytest tests/test_app.py -v
+
+# Run with coverage report
 uv run --group tests pytest tests/ -n auto --cov=github_metrics --cov-report=term-missing
 
-# Run specific test file
-uv run --group tests pytest tests/test_app.py -v
+# Run specific UI test
+uv run --group tests pytest tests/ui/test_dashboard.py -v
+
+# Run UI tests with headed browser (see what's happening)
+uv run --group tests pytest tests/ui/ --headed
 ```
+
+### Running Tests in Parallel with Claude Code
+
+When using Claude Code, run both test suites in parallel using two agents to reduce total test time:
+
+**Parallel Execution Strategy:**
+- Agent 1: `tox` (API tests - fast execution)
+- Agent 2: `tox -e ui` (UI tests - slower execution with browser automation)
+
+**Rationale:**
+- UI tests take significantly longer due to browser automation and server startup
+- Running both suites concurrently reduces overall test time by approximately 50%
+- Both suites are independent and can run simultaneously without conflicts
+
+**Example:**
+
+```bash
+# In parallel using two agents:
+# Agent 1 (API tests):
+tox
+
+# Agent 2 (UI tests):
+tox -e ui
+```
+
+Both test suites must pass to declare all tests successful.
+
+### Development Server
+
+For debugging and code verification, use the dev server at <http://localhost:8765/>
+
+**Before making changes:**
+1. Check if the dev server is already running (visit <http://localhost:8765/dashboard>)
+2. If running, use it directly - the server has **hot reload** enabled, so no restart is needed when code changes
+3. If not running, start it with: `./dev/run.sh`
+
+**Use cases:**
+- Verify frontend changes in the browser
+- Check API responses in browser DevTools (Network tab)
+- Debug JavaScript issues in browser Console
+- Test UI interactions manually
+
+**Note:** Always verify code changes in the browser before committing, especially for frontend/UI work.
 
 ### Code Quality
 
@@ -428,6 +564,52 @@ test_database.py     # All database.py tests
 test_config.py       # All config.py tests
 ```
 
+### UI Tests vs Unit Tests
+
+**CRITICAL:** UI tests and unit tests have fundamentally different approaches.
+
+**UI Tests (`tests/ui/`):**
+
+- Run against the **live dev server** (no mocking)
+- Use Playwright for browser automation
+- Test real user interactions and full-stack behavior
+- Require dev server to be running before test execution
+- Automatically start/stop server process in test fixtures
+- Test realistic scenarios: clicking buttons, filling forms, WebSocket connections
+- Verify actual DOM elements, CSS rendering, JavaScript execution
+
+```python
+# ✅ CORRECT - UI test runs against real server
+@pytest.mark.ui
+async def test_dashboard_loads(page: Page):
+    """Test dashboard page loads correctly."""
+    await page.goto("http://localhost:8000/dashboard")
+    await expect(page.locator("h1")).to_have_text("GitHub Metrics Dashboard")
+```
+
+**Unit Tests (`tests/test_*.py`):**
+
+- Use mocking for database and external services
+- Test individual components in isolation
+- Fast execution without external dependencies
+- Mock database connections, HTTP clients, file I/O
+- Verify component behavior with controlled inputs
+
+```python
+# ✅ CORRECT - Unit test with mocking
+@pytest.mark.asyncio
+async def test_track_webhook_event(mock_db):
+    """Test webhook event tracking with mocked database."""
+    with patch("github_metrics.metrics_tracker.db_manager", mock_db):
+        await track_webhook_event("delivery-123", "repo", "push", {})
+        mock_db.execute.assert_called_once()
+```
+
+**When to Use Each:**
+
+- **UI Tests:** User workflows, page navigation, form submissions, real-time updates, visual regression
+- **Unit Tests:** API endpoints, database queries, utility functions, error handling, configuration parsing
+
 ---
 
 ## Security Considerations
@@ -445,3 +627,171 @@ test_config.py       # All config.py tests
 - Store tokens in environment variables
 - Never commit tokens to repository
 - Use secrets management in production
+
+---
+
+## Dashboard UI Guidelines
+
+**MANDATORY:** All dashboard components must follow these UI/UX principles.
+
+### Collapsible Sections
+
+All data sections must be collapsible with expand/collapse controls:
+
+```html
+<!-- ✅ CORRECT - Section with collapse button -->
+<div class="metrics-section">
+    <div class="section-header">
+        <h2>Pull Requests</h2>
+        <button class="collapse-btn" onclick="toggleSection('pr-section')">▼</button>
+    </div>
+    <div id="pr-section" class="section-content">
+        <!-- Section content -->
+    </div>
+</div>
+```
+
+### Shared Time Filters
+
+Time range controls must be visible and functional on all pages:
+
+- Time filters apply globally across all sections
+- Persist selected time range across page navigation
+- Supported ranges: Last 24h, Last 7 days, Last 30 days, Custom range
+- Display current filter selection prominently
+
+```javascript
+// ✅ CORRECT - Shared time filter state
+const timeFilter = {
+    start: '2024-01-01T00:00:00Z',
+    end: '2024-01-31T23:59:59Z'
+};
+// Apply to all API calls
+```
+
+### Table Features
+
+All data tables must support:
+
+**Sorting:**
+- Click column headers to sort ascending/descending
+- Visual indicator for current sort column and direction
+- Default sort by most recent/relevant data
+
+**Download:**
+- CSV download button for raw data export
+- JSON download button for programmatic access
+- File naming: `{table_name}_{timestamp}.{format}`
+
+**Pagination:**
+- Paginate tables with > 50 rows
+- Show row count and current page
+- Configurable page size (25, 50, 100 rows)
+
+```html
+<!-- ✅ CORRECT - Table with all features -->
+<div class="table-controls">
+    <button onclick="downloadCSV('pull_requests')">📥 CSV</button>
+    <button onclick="downloadJSON('pull_requests')">📥 JSON</button>
+</div>
+<table class="sortable-table">
+    <thead>
+        <tr>
+            <th onclick="sortTable('pr', 'number')">PR # ▼</th>
+            <th onclick="sortTable('pr', 'created')">Created ▲</th>
+        </tr>
+    </thead>
+    <!-- Table body -->
+</table>
+```
+
+### Theme Support
+
+Implement light/dark mode using CSS variables:
+
+**CSS Variables Pattern:**
+
+```css
+/* ✅ CORRECT - Theme-aware CSS variables */
+:root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f5f5f5;
+    --text-primary: #000000;
+    --text-secondary: #666666;
+    --border-color: #dddddd;
+}
+
+[data-theme="dark"] {
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #2d2d2d;
+    --text-primary: #ffffff;
+    --text-secondary: #aaaaaa;
+    --border-color: #444444;
+}
+```
+
+**Theme Toggle:**
+
+```html
+<!-- ✅ CORRECT - Theme toggle button -->
+<button onclick="toggleTheme()">🌙/☀️</button>
+
+<script>
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme');
+    const next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+}
+</script>
+```
+
+### Responsive Design
+
+Dashboard must be usable on mobile, tablet, and desktop:
+
+**Breakpoints:**
+- Mobile: < 768px (single column, stacked sections)
+- Tablet: 768px - 1024px (two column where appropriate)
+- Desktop: > 1024px (full layout)
+
+**Mobile Optimizations:**
+- Tables scroll horizontally on small screens
+- Navigation collapses to hamburger menu
+- Touch-friendly button sizes (min 44x44px)
+- Readable font sizes (min 16px for body text)
+
+```css
+/* ✅ CORRECT - Responsive table */
+@media (max-width: 768px) {
+    .metrics-table {
+        display: block;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .section-header h2 {
+        font-size: 1.25rem;  /* Smaller on mobile */
+    }
+}
+```
+
+### Accessibility
+
+**MANDATORY:** Follow WCAG 2.1 AA standards:
+
+- All interactive elements keyboard accessible
+- ARIA labels for icon-only buttons
+- Sufficient color contrast (4.5:1 for normal text)
+- Focus indicators visible
+- No content conveyed by color alone
+
+```html
+<!-- ✅ CORRECT - Accessible button -->
+<button aria-label="Download as CSV" class="download-btn">
+    📥 CSV
+</button>
+
+<!-- ❌ WRONG - No accessible label -->
+<button class="download-btn">📥</button>
+```
