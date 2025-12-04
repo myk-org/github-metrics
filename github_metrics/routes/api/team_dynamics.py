@@ -123,8 +123,8 @@ async def get_team_dynamics(
         "alerts": [
           {
             "approver": "charlie",
-            "avg_approval_hours": 48.5,
-            "pending_count": 5,
+            "avg_approval_hours": 50.5,
+            "team_pending_count": 5,
             "severity": "critical"
           }
         ],
@@ -148,9 +148,9 @@ async def get_team_dynamics(
     - `median_review_time_hours`: Median review time (less affected by outliers)
     - `fastest_reviewer`: User with lowest average review time
     - `slowest_reviewer`: User with highest average review time
-    - `avg_approval_hours`: Average time from PR creation to approval
-    - `pending_count`: Number of PRs currently awaiting approval
-    - `severity`: Alert severity ("critical" if >48h or >5 pending, "warning" otherwise)
+    - `avg_approval_hours`: Average time from PR creation to approval (per-approver metric)
+    - `team_pending_count`: Total number of PRs currently awaiting approval (team-wide metric)
+    - `severity`: Alert severity based on `avg_approval_hours` only ("critical" if >48h, "warning" if >24h)
 
     **Errors:**
     - 400: Invalid datetime format in parameters
@@ -486,7 +486,7 @@ async def get_team_dynamics(
             alerts.append({
                 "approver": approver_data["approver"],
                 "avg_approval_hours": avg_hours,
-                "pending_count": pending_count,
+                "team_pending_count": pending_count,
                 "severity": severity,
             })
 

@@ -438,6 +438,7 @@ class MetricsAPIClient {
      * @param {string|null} startTime - ISO 8601 start time filter (optional)
      * @param {string|null} endTime - ISO 8601 end time filter (optional)
      * @param {string|null} repository - Filter by repository (optional)
+     * @param {string|null} user - Filter by user (optional)
      * @returns {Promise<Object>} Team dynamics data or error object
      *
      * Response format (success):
@@ -446,7 +447,7 @@ class MetricsAPIClient {
      *         summary: {
      *             total_contributors: 25,
      *             avg_prs_per_contributor: 8.4,
-     *             top_contributor: 'user1',
+     *             top_contributor: { user: 'user1', total_prs: 42 },
      *             workload_gini: 0.35
      *         },
      *         by_contributor: [
@@ -469,24 +470,24 @@ class MetricsAPIClient {
      *             {
      *                 user: 'user2',
      *                 avg_review_time_hours: 1.5,
-     *                 reviews_count: 85,
-     *                 efficiency_score: 95.2
+     *                 median_review_time_hours: 1.2,
+     *                 total_reviews: 85
      *             }
      *         ]
      *     },
      *     bottlenecks: {
      *         by_approver: [
      *             {
-     *                 user: 'user4',
-     *                 pending_approvals: 12,
+     *                 approver: 'user4',
+     *                 total_approvals: 12,
      *                 avg_approval_hours: 48.3
      *             }
      *         ],
      *         alerts: [
      *             {
-     *                 type: 'critical',
+     *                 severity: 'critical',
      *                 approver: 'user4',
-     *                 pending_count: 12,
+     *                 team_pending_count: 12,
      *                 avg_approval_hours: 48.3
      *             }
      *         ]

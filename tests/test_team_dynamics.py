@@ -156,7 +156,7 @@ class TestTeamDynamicsEndpoint:
             assert charlie_alert is not None
             assert charlie_alert["severity"] == "critical"
             assert charlie_alert["avg_approval_hours"] == 48.5
-            assert charlie_alert["pending_count"] == 5
+            assert charlie_alert["team_pending_count"] == 5
 
     def test_team_dynamics_with_time_filter(
         self,
@@ -397,7 +397,7 @@ class TestTeamDynamicsEndpoint:
 
             # Verify alert structure
             for alert in data["bottlenecks"]["alerts"]:
-                assert set(alert.keys()) == {"approver", "avg_approval_hours", "pending_count", "severity"}
+                assert set(alert.keys()) == {"approver", "avg_approval_hours", "team_pending_count", "severity"}
                 assert alert["severity"] in {"critical", "warning"}
 
             # Verify approver data structure

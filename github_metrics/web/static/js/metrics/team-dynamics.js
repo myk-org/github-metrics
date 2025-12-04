@@ -553,7 +553,7 @@ class TeamDynamics {
                     <span class="alert-title">${this.escapeHtml(alert.approver)}</span>
                 </div>
                 <div class="alert-body">
-                    <p><strong>${alert.pending_count}</strong> pending approvals</p>
+                    <p>Team has <strong>${alert.team_pending_count}</strong> pending approvals</p>
                     <p>Average approval time: <strong>${this.formatHours(alert.avg_approval_hours)}</strong></p>
                 </div>
             `;
