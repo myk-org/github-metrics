@@ -403,3 +403,33 @@ class TestTeamDynamicsEndpoint:
             # Verify approver data structure
             for approver in data["bottlenecks"]["by_approver"]:
                 assert set(approver.keys()) == {"approver", "avg_approval_hours", "total_approvals"}
+
+    def test_team_dynamics_with_user_filter(
+        self,
+        mock_workload_rows: list[dict[str, Any]],
+        mock_review_rows: list[dict[str, Any]],
+        mock_approval_rows: list[dict[str, Any]],
+        mock_pending_row: dict[str, Any],
+    ) -> None:
+        """Test team dynamics with user filter."""
+        with patch("github_metrics.routes.api.team_dynamics.db_manager") as mock_db:
+            mock_db.fetch = AsyncMock(
+                side_effect=[
+                    mock_workload_rows,
+                    mock_review_rows,
+                    mock_approval_rows,
+                ]
+            )
+            mock_db.fetchrow = AsyncMock(return_value=mock_pending_row)
+
+            client = TestClient(app)
+            response = client.get(
+                "/api/metrics/team-dynamics",
+                params={"user": "alice"},
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert "workload" in data
+            assert "review_efficiency" in data
+            assert "bottlenecks" in data

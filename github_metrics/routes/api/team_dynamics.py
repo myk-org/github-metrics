@@ -61,6 +61,7 @@ async def get_team_dynamics(
     ),
     end_time: str | None = Query(default=None, description="End time in ISO 8601 format (e.g., 2024-01-31T23:59:59Z)"),
     repository: str | None = Query(default=None, description="Filter by repository (org/repo format)"),
+    user: str | None = Query(default=None, description="Filter by user (username)"),
 ) -> dict[str, Any]:
     """Get team dynamics and workload distribution metrics.
 
@@ -81,6 +82,7 @@ async def get_team_dynamics(
     - `end_time` (str, optional): End of time range in ISO 8601 format
       Default: No time filter (up to current time)
     - `repository` (str, optional): Filter by repository (org/repo format)
+    - `user` (str, optional): Filter by user (username)
 
     **Return Structure:**
     ```json
@@ -168,6 +170,16 @@ async def get_team_dynamics(
     time_filter = build_time_filter(params, start_datetime, end_datetime)
     repository_filter = build_repository_filter(params, repository)
 
+    # Build user filter
+    user_filter_pr_author = ""
+    user_filter_sender = ""
+    user_filter_label = ""
+    if user:
+        user_param = params.add(user)
+        user_filter_pr_author = f" AND pr_author = {user_param}"
+        user_filter_sender = f" AND sender = {user_param}"
+        user_filter_label = f" AND SUBSTRING(label_name FROM 10) = {user_param}"
+
     # Query 1: Workload distribution by contributor
     workload_query = (
         """
@@ -181,6 +193,7 @@ async def get_team_dynamics(
               """
         + time_filter
         + repository_filter
+        + user_filter_pr_author
         + """
             GROUP BY pr_author
         ),
@@ -195,6 +208,7 @@ async def get_team_dynamics(
               """
         + time_filter
         + repository_filter
+        + user_filter_sender
         + """
             GROUP BY sender
         ),
@@ -209,6 +223,7 @@ async def get_team_dynamics(
               """
         + time_filter
         + repository_filter
+        + user_filter_label
         + """
             GROUP BY SUBSTRING(label_name FROM 10)
         )
@@ -253,6 +268,9 @@ async def get_team_dynamics(
               AND w.action = 'submitted'
               AND w.sender IS DISTINCT FROM w.pr_author
               AND w.created_at >= po.opened_at
+              """
+        + user_filter_sender.replace("sender", "w.sender")
+        + """
         ),
         overall_median AS (
             SELECT ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY hours_to_review)::numeric, 1) as median_hours
@@ -301,6 +319,9 @@ async def get_team_dynamics(
               AND w.action = 'labeled'
               AND w.label_name LIKE 'approved-%'
               AND w.created_at >= po.opened_at
+              """
+        + user_filter_label.replace("SUBSTRING(label_name FROM 10)", "SUBSTRING(w.label_name FROM 10)")
+        + """
         )
         SELECT
             approver,
@@ -327,6 +348,7 @@ async def get_team_dynamics(
               """
         + time_filter
         + repository_filter
+        + user_filter_pr_author
         + """
             ORDER BY repository, pr_number, created_at DESC
         ),
@@ -339,6 +361,7 @@ async def get_team_dynamics(
               """
         + time_filter
         + repository_filter
+        + user_filter_label
         + """
         )
         SELECT COUNT(*) as pending_count

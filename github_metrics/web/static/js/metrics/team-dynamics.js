@@ -22,9 +22,17 @@ class TeamDynamics {
     constructor() {
         console.log('[TeamDynamics] Constructor called');
         this.data = null;
+        this.destroyed = false;
+        this._retryTimer = null;
         this.loadingElement = document.getElementById('team-dynamics-loading');
         this.errorElement = document.getElementById('team-dynamics-error');
         this.contentElement = document.getElementById('team-dynamics-content');
+
+        // Filter timeouts for debouncing
+        this.filterTimeouts = {
+            repo: null,
+            user: null
+        };
 
         // Workload KPI elements
         this.kpiTotalContributors = document.getElementById('kpi-active-contributors');
@@ -144,7 +152,19 @@ class TeamDynamics {
             console.log('[TeamDynamics] Time filters not ready, waiting...');
             const maxRetries = 50;
             if (retryCount < maxRetries) {
-                setTimeout(() => this.checkAndLoadMetrics(retryCount + 1), 100);
+                // Check if destroyed before scheduling retry
+                if (this.destroyed) {
+                    console.log('[TeamDynamics] Component destroyed, aborting retry loop');
+                    return;
+                }
+                this._retryTimer = setTimeout(() => {
+                    // Check if destroyed before executing retry
+                    if (this.destroyed) {
+                        console.log('[TeamDynamics] Component destroyed, aborting retry');
+                        return;
+                    }
+                    this.checkAndLoadMetrics(retryCount + 1);
+                }, 100);
             } else {
                 console.error('[TeamDynamics] Max retry attempts reached. Time filters failed to initialize.');
             }
@@ -174,6 +194,31 @@ class TeamDynamics {
             }
         };
         document.addEventListener('timeFiltersUpdated', this.timeFiltersUpdatedHandler);
+
+        // Listen for repository and user filter changes with debounce
+        document.addEventListener('input', (e) => {
+            if (e.target.id === 'repositoryFilter') {
+                clearTimeout(this.filterTimeouts?.repo);
+                this.filterTimeouts = this.filterTimeouts || {};
+                this.filterTimeouts.repo = setTimeout(() => {
+                    const hash = window.location.hash.slice(1);
+                    if (hash === 'team-dynamics') {
+                        console.log('[TeamDynamics] Repository filter changed, refreshing metrics');
+                        this.loadMetrics();
+                    }
+                }, 300);
+            } else if (e.target.id === 'userFilter') {
+                clearTimeout(this.filterTimeouts?.user);
+                this.filterTimeouts = this.filterTimeouts || {};
+                this.filterTimeouts.user = setTimeout(() => {
+                    const hash = window.location.hash.slice(1);
+                    if (hash === 'team-dynamics') {
+                        console.log('[TeamDynamics] User filter changed, refreshing metrics');
+                        this.loadMetrics();
+                    }
+                }, 300);
+            }
+        });
     }
 
     /**
@@ -194,7 +239,8 @@ class TeamDynamics {
             const response = await apiClient.fetchTeamDynamics(
                 filters.start_time,
                 filters.end_time,
-                filters.repository
+                filters.repository,
+                filters.user
             );
 
             // Check for errors
@@ -234,6 +280,7 @@ class TeamDynamics {
         const startTimeInput = document.getElementById('startTime');
         const endTimeInput = document.getElementById('endTime');
         const repoInput = document.getElementById('repositoryFilter');
+        const userInput = document.getElementById('userFilter');
 
         const filters = {};
 
@@ -251,6 +298,11 @@ class TeamDynamics {
         // Add repository filter
         if (repoInput && repoInput.value) {
             filters.repository = repoInput.value;
+        }
+
+        // Add user filter
+        if (userInput && userInput.value) {
+            filters.user = userInput.value;
         }
 
         return filters;
@@ -1232,6 +1284,15 @@ class TeamDynamics {
      */
     destroy() {
         console.log('[TeamDynamics] Destroying team dynamics module');
+
+        // Mark as destroyed to prevent retry loop continuation
+        this.destroyed = true;
+
+        // Clear any pending retry timer
+        if (this._retryTimer) {
+            clearTimeout(this._retryTimer);
+            this._retryTimer = null;
+        }
 
         // Remove event listeners
         if (this.hashChangeHandler) {

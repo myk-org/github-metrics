@@ -493,11 +493,12 @@ class MetricsAPIClient {
      *     }
      * }
      */
-    async fetchTeamDynamics(startTime = null, endTime = null, repository = null) {
+    async fetchTeamDynamics(startTime = null, endTime = null, repository = null, user = null) {
         const params = {};
         if (startTime) params.start_time = startTime;
         if (endTime) params.end_time = endTime;
         if (repository) params.repository = repository;
+        if (user) params.user = user;
 
         return await this._fetch('/team-dynamics', params);
     }
