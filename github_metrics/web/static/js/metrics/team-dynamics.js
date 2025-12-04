@@ -17,6 +17,8 @@ import { Pagination } from '../components/pagination.js';
 import { SortableTable } from '../components/sortable-table.js';
 import { DownloadButtons } from '../components/download-buttons.js';
 import { Modal } from '../components/modal.js';
+import { formatHours, formatTimestamp, escapeHtml } from '../utils/formatters.js';
+import { renderPrStoryTimeline } from '../components/pr-timeline.js';
 
 class TeamDynamics {
     constructor() {
@@ -79,6 +81,7 @@ class TeamDynamics {
         // Event listener references for cleanup
         this.hashChangeHandler = null;
         this.timeFiltersUpdatedHandler = null;
+        this.inputHandler = null;
 
         this.initialize();
     }
@@ -196,7 +199,7 @@ class TeamDynamics {
         document.addEventListener('timeFiltersUpdated', this.timeFiltersUpdatedHandler);
 
         // Listen for repository and user filter changes with debounce
-        document.addEventListener('input', (e) => {
+        this.inputHandler = (e) => {
             if (e.target.id === 'repositoryFilter') {
                 clearTimeout(this.filterTimeouts?.repo);
                 this.filterTimeouts = this.filterTimeouts || {};
@@ -218,7 +221,8 @@ class TeamDynamics {
                     }
                 }, 300);
             }
-        });
+        };
+        document.addEventListener('input', this.inputHandler);
     }
 
     /**
@@ -352,22 +356,28 @@ class TeamDynamics {
         // Update table directly with server-side paginated data
         this.updateWorkloadTable(workloadData.by_contributor || []);
 
-        // Update pagination component with server-side pagination metadata
-        const paginationComponent = this.paginationState.workload.paginationComponent;
+        // Update pagination components with server-side pagination metadata
+        // Note: All three tables share the same pagination from workload data
         const pagination = workloadData.pagination;
-        if (paginationComponent && pagination) {
-            paginationComponent.update({
-                total: pagination.total,
-                page: pagination.page,
-                pageSize: pagination.page_size
-            });
+        if (pagination) {
+            // Update all three pagination components to stay in sync
+            ['workload', 'reviewEfficiency', 'bottlenecks'].forEach(key => {
+                const paginationComponent = this.paginationState[key].paginationComponent;
+                if (paginationComponent) {
+                    paginationComponent.update({
+                        total: pagination.total,
+                        page: pagination.page,
+                        pageSize: pagination.page_size
+                    });
 
-            // Show/hide pagination based on total items
-            if (pagination.total > pagination.page_size) {
-                paginationComponent.show();
-            } else {
-                paginationComponent.hide();
-            }
+                    // Show/hide pagination based on total items
+                    if (pagination.total > pagination.page_size) {
+                        paginationComponent.show();
+                    } else {
+                        paginationComponent.hide();
+                    }
+                }
+            });
         }
     }
 
@@ -383,10 +393,10 @@ class TeamDynamics {
         // Update KPIs
         const summary = reviewEfficiencyData.summary || {};
         if (this.kpiAvgReviewTime) {
-            this.kpiAvgReviewTime.textContent = this.formatHours(summary.avg_review_time_hours);
+            this.kpiAvgReviewTime.textContent = formatHours(summary.avg_review_time_hours);
         }
         if (this.kpiMedianReviewTime) {
-            this.kpiMedianReviewTime.textContent = this.formatHours(summary.median_review_time_hours);
+            this.kpiMedianReviewTime.textContent = formatHours(summary.median_review_time_hours);
         }
         if (this.kpiFastestReviewer) {
             this.kpiFastestReviewer.textContent = summary.fastest_reviewer?.user || 'N/A';
@@ -403,23 +413,7 @@ class TeamDynamics {
         // Update table directly with server-side paginated data
         this.updateReviewEfficiencyTable(reviewEfficiencyData.by_reviewer || []);
 
-        // Update pagination component with server-side pagination metadata
-        const paginationComponent = this.paginationState.reviewEfficiency.paginationComponent;
-        const pagination = reviewEfficiencyData.pagination;
-        if (paginationComponent && pagination) {
-            paginationComponent.update({
-                total: pagination.total,
-                page: pagination.page,
-                pageSize: pagination.page_size
-            });
-
-            // Show/hide pagination based on total items
-            if (pagination.total > pagination.page_size) {
-                paginationComponent.show();
-            } else {
-                paginationComponent.hide();
-            }
-        }
+        // Note: Pagination is updated in updateWorkloadSection() since all tables share the same pagination
     }
 
     /**
@@ -442,23 +436,7 @@ class TeamDynamics {
         // Update table directly with server-side paginated data
         this.updateBottlenecksTable(bottlenecksData.by_approver || []);
 
-        // Update pagination component with server-side pagination metadata
-        const paginationComponent = this.paginationState.bottlenecks.paginationComponent;
-        const pagination = bottlenecksData.pagination;
-        if (paginationComponent && pagination) {
-            paginationComponent.update({
-                total: pagination.total,
-                page: pagination.page,
-                pageSize: pagination.page_size
-            });
-
-            // Show/hide pagination based on total items
-            if (pagination.total > pagination.page_size) {
-                paginationComponent.show();
-            } else {
-                paginationComponent.hide();
-            }
-        }
+        // Note: Pagination is updated in updateWorkloadSection() since all tables share the same pagination
     }
 
     /**
@@ -486,7 +464,7 @@ class TeamDynamics {
         contributors.forEach(contributor => {
             const row = document.createElement('tr');
             row.innerHTML = `
-                <td><a href="#" class="clickable-username" data-username="${this.escapeHtml(contributor.user)}" data-category="workload">${this.escapeHtml(contributor.user)}</a></td>
+                <td><a href="#" class="clickable-username" data-username="${escapeHtml(contributor.user)}" data-category="workload">${escapeHtml(contributor.user)}</a></td>
                 <td>${contributor.prs_created || 0}</td>
                 <td>${contributor.prs_reviewed || 0}</td>
                 <td>${contributor.prs_approved || contributor.prs_merged || 0}</td>
@@ -520,9 +498,9 @@ class TeamDynamics {
         reviewers.forEach(reviewer => {
             const row = document.createElement('tr');
             row.innerHTML = `
-                <td><a href="#" class="clickable-username" data-username="${this.escapeHtml(reviewer.user)}" data-category="reviewEfficiency">${this.escapeHtml(reviewer.user)}</a></td>
-                <td>${this.formatHours(reviewer.avg_review_time_hours)}</td>
-                <td>${this.formatHours(reviewer.median_review_time_hours)}</td>
+                <td><a href="#" class="clickable-username" data-username="${escapeHtml(reviewer.user)}" data-category="reviewEfficiency">${escapeHtml(reviewer.user)}</a></td>
+                <td>${formatHours(reviewer.avg_review_time_hours)}</td>
+                <td>${formatHours(reviewer.median_review_time_hours)}</td>
                 <td>${reviewer.total_reviews || 0}</td>
             `;
             this.reviewEfficiencyTableBody.appendChild(row);
@@ -554,8 +532,8 @@ class TeamDynamics {
         approvers.forEach(approver => {
             const row = document.createElement('tr');
             row.innerHTML = `
-                <td><a href="#" class="clickable-username" data-username="${this.escapeHtml(approver.approver)}" data-category="bottlenecks">${this.escapeHtml(approver.approver)}</a></td>
-                <td>${this.formatHours(approver.avg_approval_hours)}</td>
+                <td><a href="#" class="clickable-username" data-username="${escapeHtml(approver.approver)}" data-category="bottlenecks">${escapeHtml(approver.approver)}</a></td>
+                <td>${formatHours(approver.avg_approval_hours)}</td>
                 <td>${approver.total_approvals || 0}</td>
             `;
             this.bottlenecksTableBody.appendChild(row);
@@ -591,11 +569,11 @@ class TeamDynamics {
             alertCard.innerHTML = `
                 <div class="alert-header">
                     <span class="alert-icon">${alert.severity === 'critical' ? '🚨' : '⚠️'}</span>
-                    <span class="alert-title">${this.escapeHtml(alert.approver)}</span>
+                    <span class="alert-title">${escapeHtml(alert.approver)}</span>
                 </div>
                 <div class="alert-body">
                     <p>Team has <strong>${alert.team_pending_count}</strong> pending approvals</p>
-                    <p>Average approval time: <strong>${this.formatHours(alert.avg_approval_hours)}</strong></p>
+                    <p>Average approval time: <strong>${formatHours(alert.avg_approval_hours)}</strong></p>
                 </div>
             `;
             this.bottleneckAlertsContainer.appendChild(alertCard);
@@ -702,7 +680,7 @@ class TeamDynamics {
 
         } catch (error) {
             console.error('[TeamDynamics] Error loading user PRs:', error);
-            this.userPrsModal.setBody(`<div class="error-message">Failed to load PRs: ${this.escapeHtml(error.message)}</div>`);
+            this.userPrsModal.setBody(`<div class="error-message">Failed to load PRs: ${escapeHtml(error.message)}</div>`);
         }
     }
 
@@ -755,11 +733,11 @@ class TeamDynamics {
             const prId = `user-pr-${index}`;
 
             return `
-                <div class="user-pr-item" data-pr-id="${prId}" data-repo="${this.escapeHtml(pr.repository)}" data-pr-number="${pr.number}">
+                <div class="user-pr-item" data-pr-id="${prId}" data-repo="${escapeHtml(pr.repository)}" data-pr-number="${pr.number}">
                     <div class="user-pr-header">
                         <div class="user-pr-title">
                             <span class="pr-number">#${pr.number}</span>
-                            <span class="pr-title">${this.escapeHtml(pr.title)}</span>
+                            <span class="pr-title">${escapeHtml(pr.title)}</span>
                         </div>
                         <div class="user-pr-meta">
                             <span class="pr-state pr-state-${stateClass}">${stateLabel}</span>
@@ -872,165 +850,13 @@ class TeamDynamics {
                 throw new Error(data.detail || data.error);
             }
 
-            // Render PR story timeline (reuse turnaround.js helper)
-            storyPanel.innerHTML = `<div class="pr-story-content">${this.renderPrStoryTimeline(data)}</div>`;
+            // Render PR story timeline (using shared component)
+            storyPanel.innerHTML = `<div class="pr-story-content">${renderPrStoryTimeline(data)}</div>`;
 
         } catch (error) {
             console.error(`[TeamDynamics] Error loading PR story for ${repository}#${prNumber}:`, error);
-            storyPanel.innerHTML = `<div class="error-message">Failed to load PR timeline: ${this.escapeHtml(error.message)}</div>`;
+            storyPanel.innerHTML = `<div class="error-message">Failed to load PR timeline: ${escapeHtml(error.message)}</div>`;
         }
-    }
-
-    /**
-     * Render PR story timeline (simplified version from turnaround.js)
-     */
-    renderPrStoryTimeline(storyData) {
-        const events = storyData?.events || [];
-        const summary = storyData?.summary || {
-            total_commits: 0,
-            total_reviews: 0,
-            total_check_runs: 0,
-            total_comments: 0
-        };
-
-        if (events.length === 0) {
-            return '<div class="empty-state">No timeline events found for this PR.</div>';
-        }
-
-        const summaryHtml = `
-            <div class="pr-story-summary">
-                <span>📝 ${summary.total_commits} commits</span>
-                <span>💬 ${summary.total_reviews} reviews</span>
-                <span>▶️ ${summary.total_check_runs} check runs</span>
-                <span>💭 ${summary.total_comments} comments</span>
-            </div>
-        `;
-
-        const eventsHtml = events.map(event => this.renderTimelineEvent(event)).join('');
-
-        return `
-            ${summaryHtml}
-            <div class="pr-timeline">
-                ${eventsHtml}
-            </div>
-        `;
-    }
-
-    /**
-     * Render a single timeline event
-     */
-    renderTimelineEvent(event) {
-        const eventConfig = this.getEventConfig(event.event_type);
-        const icon = eventConfig.icon;
-        const label = eventConfig.label;
-
-        let descriptionHtml = '';
-        if (event.description) {
-            descriptionHtml = `<div class="timeline-event-description">${this.escapeHtml(event.description)}</div>`;
-        }
-
-        const timeStr = this.formatTimestamp(event.timestamp);
-
-        return `
-            <div class="timeline-event-item">
-                <div class="timeline-event-marker"></div>
-                <div class="timeline-event-content">
-                    <div class="timeline-event-header">
-                        <span class="timeline-event-icon">${icon}</span>
-                        <span class="timeline-event-title">${this.escapeHtml(label)}</span>
-                        <span class="timeline-event-time">${timeStr}</span>
-                    </div>
-                    ${descriptionHtml}
-                </div>
-            </div>
-        `;
-    }
-
-    /**
-     * Get event configuration (icon, label)
-     */
-    getEventConfig(eventType) {
-        const configs = {
-            pr_opened: { icon: '🔀', label: 'PR Opened' },
-            pr_closed: { icon: '❌', label: 'PR Closed' },
-            pr_merged: { icon: '🟣', label: 'Merged' },
-            pr_reopened: { icon: '🔄', label: 'Reopened' },
-            commit: { icon: '📝', label: 'Commit' },
-            review_approved: { icon: '✅', label: 'Approved' },
-            review_changes: { icon: '🔄', label: 'Changes Requested' },
-            review_comment: { icon: '💬', label: 'Review Comment' },
-            comment: { icon: '💬', label: 'Comment' },
-            review_requested: { icon: '👁️', label: 'Review Requested' },
-            ready_for_review: { icon: '👁️', label: 'Ready for Review' },
-            label_added: { icon: '🏷️', label: 'Label Added' },
-            label_removed: { icon: '🏷️', label: 'Label Removed' },
-            verified: { icon: '🛡️', label: 'Verified' },
-            approved_label: { icon: '✅', label: 'Approved' },
-            lgtm: { icon: '👍', label: 'LGTM' },
-            check_run: { icon: '▶️', label: 'Check Run' }
-        };
-
-        return configs[eventType] || { icon: '●', label: eventType };
-    }
-
-    /**
-     * Format timestamp for display
-     */
-    formatTimestamp(timestamp) {
-        try {
-            const date = new Date(timestamp);
-            const now = new Date();
-            const diff = now - date;
-            const minutes = Math.floor(diff / 60000);
-            const hours = Math.floor(diff / 3600000);
-            const days = Math.floor(diff / 86400000);
-
-            if (minutes < 1) return 'just now';
-            if (minutes < 60) return `${minutes}m ago`;
-            if (hours < 24) return `${hours}h ago`;
-            if (days < 7) return `${days}d ago`;
-
-            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        } catch {
-            return timestamp;
-        }
-    }
-
-    /**
-     * Format hours for display
-     */
-    formatHours(hours) {
-        if (hours === null || hours === undefined) {
-            return 'N/A';
-        }
-
-        const num = parseFloat(hours);
-        if (isNaN(num)) {
-            return 'N/A';
-        }
-
-        // Less than 1 hour: show minutes
-        if (num < 1) {
-            const minutes = Math.round(num * 60);
-            return `${minutes}m`;
-        }
-
-        // 1-24 hours: show hours
-        if (num < 24) {
-            return `${num.toFixed(1)}h`;
-        }
-
-        // 24-168 hours (1 week): show days and hours
-        if (num < 168) {
-            const days = Math.floor(num / 24);
-            const remainingHours = Math.round(num % 24);
-            return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`;
-        }
-
-        // 168+ hours: show weeks and days
-        const weeks = Math.floor(num / 168);
-        const remainingDays = Math.floor((num % 168) / 24);
-        return remainingDays > 0 ? `${weeks}w ${remainingDays}d` : `${weeks}w`;
     }
 
     /**
@@ -1232,13 +1058,19 @@ class TeamDynamics {
                 pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
                 onPageChange: (page, pageSize) => {
                     console.log(`[TeamDynamics] Review efficiency table page changed: ${page}, size: ${pageSize}`);
+                    // Sync to workload pagination (all tables share same pagination)
+                    this.paginationState.workload.currentPage = page;
                     this.paginationState.reviewEfficiency.currentPage = page;
+                    this.paginationState.bottlenecks.currentPage = page;
                     // Reload metrics from API with new page number
                     this.loadMetrics();
                 },
                 onPageSizeChange: (pageSize) => {
                     console.log(`[TeamDynamics] Review efficiency table page size changed: ${pageSize}`);
+                    // Sync to workload pagination (all tables share same pagination)
+                    this.paginationState.workload.currentPage = 1;
                     this.paginationState.reviewEfficiency.currentPage = 1;
+                    this.paginationState.bottlenecks.currentPage = 1;
                     // Reload metrics from API with new page size
                     this.loadMetrics();
                 }
@@ -1258,12 +1090,18 @@ class TeamDynamics {
                 pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
                 onPageChange: (page, pageSize) => {
                     console.log(`[TeamDynamics] Bottlenecks table page changed: ${page}, size: ${pageSize}`);
+                    // Sync to workload pagination (all tables share same pagination)
+                    this.paginationState.workload.currentPage = page;
+                    this.paginationState.reviewEfficiency.currentPage = page;
                     this.paginationState.bottlenecks.currentPage = page;
                     // Reload metrics from API with new page number
                     this.loadMetrics();
                 },
                 onPageSizeChange: (pageSize) => {
                     console.log(`[TeamDynamics] Bottlenecks table page size changed: ${pageSize}`);
+                    // Sync to workload pagination (all tables share same pagination)
+                    this.paginationState.workload.currentPage = 1;
+                    this.paginationState.reviewEfficiency.currentPage = 1;
                     this.paginationState.bottlenecks.currentPage = 1;
                     // Reload metrics from API with new page size
                     this.loadMetrics();
@@ -1274,19 +1112,6 @@ class TeamDynamics {
         }
     }
 
-
-    /**
-     * Escape HTML to prevent XSS
-     */
-    escapeHtml(text) {
-        if (!text) return '';
-        if (window.MetricsUtils?.escapeHTML) {
-            return window.MetricsUtils.escapeHTML(text);
-        }
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
 
     /**
      * Destroy and clean up
@@ -1312,6 +1137,26 @@ class TeamDynamics {
         if (this.timeFiltersUpdatedHandler) {
             document.removeEventListener('timeFiltersUpdated', this.timeFiltersUpdatedHandler);
             this.timeFiltersUpdatedHandler = null;
+        }
+
+        // Remove input event listener
+        if (this.inputHandler) {
+            document.removeEventListener('input', this.inputHandler);
+            this.inputHandler = null;
+        }
+
+        // Clear any pending filter timeouts
+        if (this.filterTimeouts) {
+            clearTimeout(this.filterTimeouts.repo);
+            clearTimeout(this.filterTimeouts.user);
+            this.filterTimeouts = { repo: null, user: null };
+        }
+
+        // Clean up PR item click handler
+        if (this._prItemClickHandler) {
+            // Note: The handler is attached to a modal element that may be destroyed,
+            // so we just clear the reference
+            this._prItemClickHandler = null;
         }
 
         // Destroy modal
