@@ -77,7 +77,7 @@ async def get_repository_statistics(
         )
 
         # Get params for count query (without LIMIT/OFFSET)
-        count_params = params.get_params()[:-2]
+        count_params = params.get_params_excluding_pagination()
         # Get all params for data query
         all_params = params.get_params()
 

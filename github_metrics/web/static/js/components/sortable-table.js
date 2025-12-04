@@ -161,8 +161,8 @@ export class SortableTable {
      */
     compareDates(aVal, bVal, direction) {
         // Check for ISO date strings FIRST (before number check)
-        // ISO dates look like: "2025-11-27T10:30:00" or "2025-11-27T10:30:00.000Z"
-        const isoDateRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+        // ISO dates look like: "2024-01-15", "2025-11-27T10:30:00" or "2025-11-27T10:30:00.000Z"
+        const isoDateRegex = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?/;
         if (typeof aVal === 'string' && typeof bVal === 'string' &&
             isoDateRegex.test(aVal) && isoDateRegex.test(bVal)) {
             const aDate = new Date(aVal);
@@ -187,8 +187,8 @@ export class SortableTable {
         // Try to parse as number (only if both are purely numeric)
         const aNum = parseFloat(aVal);
         const bNum = parseFloat(bVal);
-        const aIsNum = !isNaN(aNum) && isFinite(aVal) && String(aVal).trim() === String(aNum);
-        const bIsNum = !isNaN(bNum) && isFinite(bVal) && String(bVal).trim() === String(bNum);
+        const aIsNum = !isNaN(aNum) && isFinite(aNum) && String(aVal).trim() === String(aNum);
+        const bIsNum = !isNaN(bNum) && isFinite(bNum) && String(bVal).trim() === String(bNum);
 
         if (aIsNum && bIsNum) {
             // Numeric comparison

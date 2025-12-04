@@ -47,6 +47,9 @@
  *   - Key is the section's data-section attribute value
  */
 
+// Debug logging flag - set to true for development debugging
+const DEBUG = false;
+
 export class CollapsibleSection {
     /**
      * Initialize collapsible section.
@@ -65,8 +68,7 @@ export class CollapsibleSection {
         // Get section ID from data-section attribute
         this.sectionId = this.container?.dataset.section;
         if (!this.sectionId) {
-            console.error('[CollapsibleSection] Container must have data-section attribute');
-            return;
+            throw new Error('[CollapsibleSection] Container must have data-section attribute');
         }
 
         // Find collapse button
@@ -168,7 +170,9 @@ export class CollapsibleSection {
         // Notify consumer
         this.onToggle(collapsed);
 
-        console.log(`[CollapsibleSection] Section ${this.sectionId} ${collapsed ? 'collapsed' : 'expanded'}`);
+        if (DEBUG) {
+            console.log(`[CollapsibleSection] Section ${this.sectionId} ${collapsed ? 'collapsed' : 'expanded'}`);
+        }
     }
 
     /**
@@ -252,6 +256,8 @@ export function initializeCollapsibleSections(options = {}) {
         }
     });
 
-    console.log(`[CollapsibleSection] Initialized ${instances.length} collapsible sections`);
+    if (DEBUG) {
+        console.log(`[CollapsibleSection] Initialized ${instances.length} collapsible sections`);
+    }
     return instances;
 }

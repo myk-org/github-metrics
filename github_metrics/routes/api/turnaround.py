@@ -127,9 +127,7 @@ async def get_review_turnaround(
 
     # Build reviewer parameters (base params + user filter)
     # These are used only by queries that filter by reviewer
-    reviewer_params = QueryParams()
-    reviewer_params._params = base_params.get_params().copy()
-    reviewer_params._count = base_params.get_count()
+    reviewer_params = base_params.clone()
 
     user_filter_reviewer = ""
     if user:

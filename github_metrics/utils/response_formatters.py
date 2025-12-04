@@ -32,16 +32,32 @@ def format_pagination_metadata(
             "has_next": True,
             "has_prev": False
         }
+
+    Raises:
+        ValueError: If page_size <= 0 or page < 1
     """
+    # Validate page_size to prevent ZeroDivisionError
+    if page_size <= 0:
+        raise ValueError(f"page_size must be positive, got {page_size}")
+
+    # Validate page to be 1-based
+    if page < 1:
+        raise ValueError(f"page must be >= 1, got {page}")
+
     total_pages = calculate_total_pages(total, page_size)
+
+    # Ensure page doesn't exceed total_pages (clamp to valid range)
+    # Note: We clamp instead of raising to handle edge cases where
+    # data was deleted between count query and data fetch
+    clamped_page = min(page, max(total_pages, 1))
 
     return {
         "total": total,
-        "page": page,
+        "page": clamped_page,
         "page_size": page_size,
         "total_pages": total_pages,
-        "has_next": page < total_pages,
-        "has_prev": page > 1,
+        "has_next": clamped_page < total_pages,
+        "has_prev": clamped_page > 1,
     }
 
 

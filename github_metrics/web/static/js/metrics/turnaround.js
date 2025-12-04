@@ -867,23 +867,27 @@ class TurnaroundMetrics {
             const filters = this.getTimeFilters();
 
             // First, fetch with minimal page size to get total count
-            const countParams = new URLSearchParams({
+            const countParams = {
                 user: username,
                 role: category,
-                page: '1',
-                page_size: '1'
-            });
+                page: 1,
+                page_size: 1
+            };
 
-            if (filters.start_time) countParams.append('start_time', filters.start_time);
-            if (filters.end_time) countParams.append('end_time', filters.end_time);
-            if (filters.repository) countParams.append('repository', filters.repository);
-
-            const countResponse = await fetch(`/api/metrics/user-prs?${countParams}`);
-            if (!countResponse.ok) {
-                throw new Error(`HTTP ${countResponse.status}: ${countResponse.statusText}`);
+            if (filters.repository) {
+                countParams.repository = filters.repository;
             }
 
-            const countData = await countResponse.json();
+            const countData = await apiClient.fetchUserPRs(
+                filters.start_time,
+                filters.end_time,
+                countParams
+            );
+
+            if (countData.error) {
+                throw new Error(countData.detail || countData.error);
+            }
+
             const totalItems = countData.pagination?.total || 0;
 
             // Update title with PR count and role description
@@ -896,23 +900,26 @@ class TurnaroundMetrics {
             }
 
             // Now fetch all PRs using the total count
-            const allParams = new URLSearchParams({
+            const allParams = {
                 user: username,
                 role: category,
-                page: '1',
-                page_size: totalItems.toString()
-            });
+                page: 1,
+                page_size: totalItems
+            };
 
-            if (filters.start_time) allParams.append('start_time', filters.start_time);
-            if (filters.end_time) allParams.append('end_time', filters.end_time);
-            if (filters.repository) allParams.append('repository', filters.repository);
-
-            const allResponse = await fetch(`/api/metrics/user-prs?${allParams}`);
-            if (!allResponse.ok) {
-                throw new Error(`HTTP ${allResponse.status}: ${allResponse.statusText}`);
+            if (filters.repository) {
+                allParams.repository = filters.repository;
             }
 
-            const allData = await allResponse.json();
+            const allData = await apiClient.fetchUserPRs(
+                filters.start_time,
+                filters.end_time,
+                allParams
+            );
+
+            if (allData.error) {
+                throw new Error(allData.detail || allData.error);
+            }
 
             // Store all PRs in state
             this.userPrsPagination.allPrs = allData.data || [];
@@ -935,7 +942,6 @@ class TurnaroundMetrics {
 
         // Calculate pagination
         const totalItems = allPrs.length;
-        const totalPages = Math.ceil(totalItems / pageSize);
         const startIdx = (currentPage - 1) * pageSize;
         const endIdx = Math.min(startIdx + pageSize, totalItems);
         const prsOnPage = allPrs.slice(startIdx, endIdx);
@@ -943,6 +949,31 @@ class TurnaroundMetrics {
         // Render current page of PRs
         const prsListHtml = this.renderUserPrsListHtml(prsOnPage);
         this.userPrsModal.setBody(prsListHtml);
+
+        // Set up delegated click listener for PR items
+        const listPanel = document.querySelector('#userPrsModal .user-prs-list-panel');
+        if (listPanel) {
+            // Remove existing listener if any (to prevent duplicates)
+            listPanel.removeEventListener('click', this._prItemClickHandler);
+
+            // Create bound handler if not exists
+            if (!this._prItemClickHandler) {
+                this._prItemClickHandler = (e) => {
+                    const prItem = e.target.closest('.user-pr-item');
+                    if (prItem) {
+                        const prId = prItem.dataset.prId;
+                        const repo = prItem.dataset.repo;
+                        const prNumber = parseInt(prItem.dataset.prNumber, 10);
+                        if (prId && repo && prNumber) {
+                            this.selectPr(prId, repo, prNumber);
+                        }
+                    }
+                };
+            }
+
+            // Add delegated click listener
+            listPanel.addEventListener('click', this._prItemClickHandler);
+        }
 
         // Set up pagination component
         const paginationContainer = document.querySelector('#userPrsModal .user-prs-pagination');
@@ -957,7 +988,7 @@ class TurnaroundMetrics {
                 container: paginationContainer,
                 pageSize: pageSize,
                 pageSizeOptions: [10, 25, 50, 100],
-                onPageChange: (page, pageSize) => {
+                onPageChange: (page) => {
                     this.userPrsPagination.currentPage = page;
                     this.renderUserPrsWithPagination();
                 },
@@ -1000,7 +1031,7 @@ class TurnaroundMetrics {
         }
 
         // Create PR list items - use global index from allPrs to maintain unique IDs
-        const { allPrs, currentPage, pageSize } = this.userPrsPagination;
+        const { currentPage, pageSize } = this.userPrsPagination;
         const startIdx = (currentPage - 1) * pageSize;
 
         const listPanelHtml = prs.map((pr, localIndex) => {
@@ -1011,7 +1042,7 @@ class TurnaroundMetrics {
 
             return `
                 <div class="user-pr-item" data-pr-id="${prId}" data-repo="${this.escapeHtml(pr.repository)}" data-pr-number="${pr.number}">
-                    <div class="user-pr-header" onclick="window.turnaroundMetrics.selectPr('${prId}', '${this.escapeHtml(pr.repository)}', ${pr.number})">
+                    <div class="user-pr-header">
                         <div class="user-pr-title">
                             <span class="pr-number">#${pr.number}</span>
                             <span class="pr-title">${this.escapeHtml(pr.title)}</span>
@@ -1222,7 +1253,7 @@ class TurnaroundMetrics {
 
         // Update the pagination component with new state
         paginationComponent.update({
-            total: pagination.total_items,
+            total: pagination.total,
             page: pagination.page,
             pageSize: pagination.page_size
         });
@@ -1281,11 +1312,11 @@ class TurnaroundMetrics {
                 container: container,
                 pageSize: 10,
                 pageSizeOptions: [10, 25, 50, 100],
-                onPageChange: (page, pageSize) => {
+                onPageChange: (page) => {
                     this.contributorMetrics[category].currentPage = page;
                     this.loadContributorCategory(category, this.getTimeFilters());
                 },
-                onPageSizeChange: (pageSize) => {
+                onPageSizeChange: () => {
                     this.contributorMetrics[category].currentPage = 1;
                     this.loadContributorCategory(category, this.getTimeFilters());
                 }

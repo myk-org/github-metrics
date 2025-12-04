@@ -172,6 +172,8 @@ async def get_user_pull_requests(
             )
         """
 
+        # Mark pagination start before adding pagination parameters
+        params.mark_pagination_start()
         # Add pagination parameters
         limit_placeholder = params.add(page_size)
         offset_placeholder = params.add((page - 1) * page_size)
@@ -256,6 +258,8 @@ async def get_user_pull_requests(
             # Count query - use shared function
             count_query = get_pr_creators_count_query(time_filter, repository_filter, user_filter)
 
+            # Mark pagination start before adding pagination parameters
+            params.mark_pagination_start()
             # Add pagination parameters
             limit_placeholder = params.add(page_size)
             offset_placeholder = params.add((page - 1) * page_size)
@@ -336,6 +340,8 @@ async def get_user_pull_requests(
                   AND {where_clause}
             """
 
+            # Mark pagination start before adding pagination parameters
+            params.mark_pagination_start()
             # Add pagination parameters
             limit_placeholder = params.add(page_size)
             offset_placeholder = params.add((page - 1) * page_size)
@@ -364,7 +370,7 @@ async def get_user_pull_requests(
 
     try:
         # Get params for count query (without LIMIT/OFFSET)
-        count_params = params.get_params()[:-2]
+        count_params = params.get_params_excluding_pagination()
         # Get all params for data query
         all_params = params.get_params()
 

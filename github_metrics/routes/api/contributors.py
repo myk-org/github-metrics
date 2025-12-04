@@ -178,25 +178,25 @@ async def get_metrics_contributors(
     user_filter_reviewers = ""
     user_filter_approvers = ""
     user_filter_lgtm = ""
-    user_param_idx_str = ""
+    user_filter_creators = ""
 
     if user:
         user_placeholder = params.add(user)
-        user_param_idx_str = user_placeholder.strip("$")  # Extract the index number
 
-        # PR Reviewers: filter on sender (correct as-is)
+        # PR Creators: filter on pr_creator
+        user_filter_creators = f" AND pr_creator = {user_placeholder}"
+        # PR Reviewers: filter on sender
         user_filter_reviewers = f" AND sender = {user_placeholder}"
         # PR Approvers: filter using label_name with prefix (index-friendly)
         user_filter_approvers = f" AND label_name = 'approved-' || {user_placeholder}"
         # PR LGTM: filter using label_name with prefix (index-friendly)
         user_filter_lgtm = f" AND label_name = 'lgtm-' || {user_placeholder}"
 
+    # Mark pagination start before adding pagination parameters
+    params.mark_pagination_start()
     # Add pagination parameters and use placeholders directly
     page_size_placeholder = params.add(page_size)
     offset_placeholder = params.add((page - 1) * page_size)
-
-    # User filter for PR creators
-    user_filter_creators = f" AND pr_creator = ${user_param_idx_str}" if user else ""
 
     # Count query for PR Creators - use shared function
     pr_creators_count_query = get_pr_creators_count_query(time_filter, repository_filter, user_filter_creators)
@@ -319,7 +319,7 @@ async def get_metrics_contributors(
 
     try:
         # Get params for count queries (without LIMIT/OFFSET)
-        params_without_pagination = params.get_params()[:-2]
+        params_without_pagination = params.get_params_excluding_pagination()
         # Get all params for data queries
         all_params = params.get_params()
 

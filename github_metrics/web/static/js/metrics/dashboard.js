@@ -15,7 +15,6 @@
 import { initializeCollapsibleSections } from '../components/collapsible-section.js';
 import { SortableTable } from '../components/sortable-table.js';
 import { DownloadButtons } from '../components/download-buttons.js';
-import { Modal } from '../components/modal.js';
 import { Pagination } from '../components/pagination.js';
 
 // Dashboard Controller
@@ -582,11 +581,20 @@ class MetricsDashboard {
         tableBody.innerHTML = rows;
 
         // Update pagination component if available
+        // Note: topRepositories comes from summary.top_repositories which is NOT paginated
+        // Only update pagination if we have pagination metadata (from fetchRepositories API)
         if (pagination && this.paginationComponents.topRepositories) {
             this.paginationComponents.topRepositories.update({
                 total: pagination.total,
                 page: pagination.page,
                 pageSize: pagination.page_size
+            });
+        } else if (!pagination && repositories.length > 0 && this.paginationComponents.topRepositories) {
+            // For non-paginated top repositories (from summary), show count without pagination controls
+            this.paginationComponents.topRepositories.update({
+                total: repositories.length,
+                page: 1,
+                pageSize: repositories.length
             });
         }
     }
@@ -644,10 +652,8 @@ class MetricsDashboard {
      * Update PR contributors tables with new data.
      * Note: This method is now a no-op as PR contributor tables were removed from Overview page.
      * PR contributor tables are only in Contributors page, managed by turnaround.js.
-     *
-     * @param {Object} contributors - Contributors data with pagination
      */
-    updateContributorsTables(contributors) {
+    updateContributorsTables() {
         // No-op: PR contributor tables removed from Overview page
         // They're only in Contributors page now, managed by turnaround.js
         console.log('[Dashboard] updateContributorsTables called but PR contributor tables are in Contributors page');
@@ -868,11 +874,11 @@ class MetricsDashboard {
                     container: container,
                     pageSize: pageSize,
                     pageSizeOptions: [10, 25, 50, 100],
-                    onPageChange: (page, pageSize) => {
+                    onPageChange: () => {
                         this.loadSectionData(key);
                     },
-                    onPageSizeChange: (pageSize) => {
-                        localStorage.setItem(`pageSize_${key}`, pageSize);
+                    onPageSizeChange: (newPageSize) => {
+                        localStorage.setItem(`pageSize_${key}`, newPageSize);
                         this.loadSectionData(key);
                     }
                 });
@@ -1284,6 +1290,11 @@ class MetricsDashboard {
                     data = await this.apiClient.fetchRepositories(startTime, endTime, params);
                     this.currentData.topRepositories = data.data || data;  // Store for sorting/downloads
                     this.updateRepositoryTable(data);
+                    // Update SortableTable instance with new data after pagination
+                    if (this.sortableTables.topRepositories) {
+                        const reposData = data.data || data;
+                        this.sortableTables.topRepositories.update(reposData);
+                    }
                     break;
                 case 'recentEvents':
                     params.start_time = startTime;
@@ -1291,6 +1302,11 @@ class MetricsDashboard {
                     data = await this.apiClient.fetchWebhooks(params);
                     this.currentData.webhooks = data;  // Store for sorting/downloads
                     this.updateRecentEventsTable(data);
+                    // Update SortableTable instance with new data after pagination
+                    if (this.sortableTables.recentEvents) {
+                        const eventsData = data.data || data;
+                        this.sortableTables.recentEvents.update(eventsData);
+                    }
                     break;
                 case 'userPrs':
                     data = await this.apiClient.fetchUserPRs(startTime, endTime, params);
@@ -1300,6 +1316,11 @@ class MetricsDashboard {
                     // This ensures getTableData uses fresh paginated data instead of stale view
                     this.currentData.userPrsView = null;
                     this.updateUserPRsTable(data);
+                    // Update SortableTable instance with new data after pagination
+                    if (this.sortableTables.userPrs) {
+                        const prsData = data.data || data;
+                        this.sortableTables.userPrs.update(prsData);
+                    }
                     break;
                 // Note: prCreators, prReviewers, prApprovers removed from Overview page
                 // They're only in Contributors page now, managed by turnaround.js

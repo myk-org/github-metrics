@@ -92,7 +92,15 @@ export class DownloadButtons {
      * @param {string} format - Download format ('csv' or 'json')
      */
     handleDownload(format) {
-        const data = this.getData();
+        let data;
+        try {
+            data = this.getData();
+        } catch (error) {
+            console.error('[DownloadButtons] Error retrieving data:', error);
+
+            window.alert('Failed to retrieve data for download. Please try again.');
+            return;
+        }
 
         if (!data || data.length === 0) {
             console.warn('[DownloadButtons] No data available for download');
@@ -155,9 +163,10 @@ export class DownloadButtons {
                     return `"${this.sanitizeCSVValue(arrayStr)}"`;
                 }
 
-                // Sanitize and escape quotes, wrap in quotes if contains comma
+                // Sanitize and escape quotes, wrap in quotes if contains comma or if sanitized
                 const sanitized = this.sanitizeCSVValue(value);
-                return sanitized.includes(',') ? `"${sanitized}"` : sanitized;
+                const needsQuotes = sanitized.includes(',') || sanitized !== String(value || '');
+                return needsQuotes ? `"${sanitized}"` : sanitized;
             });
             csvRows.push(values.join(','));
         });

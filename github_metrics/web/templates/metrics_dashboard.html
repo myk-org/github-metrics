@@ -536,8 +536,8 @@
           <button class="close-modal" aria-label="Close modal">&times;</button>
         </div>
         <div class="modal-body" id="userPrsModalBody">
-          <div class="loading" style="display: none;" id="userPrsLoading">
-            <div class="spinner"></div>
+          <div class="loading" style="display: none;" id="userPrsLoading" role="status" aria-live="polite" aria-busy="true">
+            <div class="spinner" aria-hidden="true"></div>
             <p>Loading PRs...</p>
           </div>
           <div class="user-prs-list" id="userPrsList">

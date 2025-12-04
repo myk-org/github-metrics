@@ -221,7 +221,8 @@ raise KeyError("Required field missing")  # Clear error
 ### Enforcement
 
 Before implementing:
-```
+
+```bash
 1. grep/search for similar patterns
 2. Check utils/ modules
 3. If exists → USE IT
@@ -857,10 +858,44 @@ Dashboard must be usable on mobile, tablet, and desktop:
 **MANDATORY:** Always reuse existing UI components instead of duplicating code.
 
 **Rules:**
-- Create reusable JavaScript components for repeated UI elements (Pagination, Modal, Table, ComboBox, etc.)
+
+- Create reusable JavaScript components for repeated UI elements
 - Never copy-paste HTML/JS for UI elements - create a component class instead
 - Same UI elements across pages MUST have unified look and behavior
 - Components should be in `/github_metrics/web/static/js/components/`
+
+**Mandatory Reusable Components:**
+
+- **Pagination** - Table pagination with page size selector
+- **Modal** - Popup dialogs with close/cancel/submit actions
+- **DataTable** - Sortable tables with column headers (see [Table Features](#table-features))
+- **TimeFilter** - Date range picker with preset ranges
+- **ComboBox** - Searchable dropdown with keyboard navigation
+- **TableToolbar** - Download buttons (CSV/JSON) for data export
+
+**Accessibility Requirements:**
+
+All shared components MUST meet WCAG 2.1 AA standards (see [Accessibility](#accessibility)):
+
+- **Keyboard navigation** - All interactive elements accessible via keyboard (Tab, Enter, Escape)
+- **ARIA roles and labels** - Proper semantic markup (`role`, `aria-label`, `aria-describedby`)
+- **Focus management** - Visible focus indicators, logical tab order, focus trapping in modals
+- **Screen reader support** - Announce state changes, provide text alternatives for visual elements
+
+**Component Contract:**
+
+Each reusable component should define:
+
+```javascript
+/**
+ * Component responsibilities:
+ * - Render: Display the component UI in the specified container
+ * - State: Manage internal state (current page, selected items, etc.)
+ * - Events: Emit events for parent components (onPageChange, onSelect, etc.)
+ * - API: Public methods for external control (setPage, reset, destroy)
+ * - Tests: Unit tests for rendering, state changes, and user interactions
+ */
+```
 
 **Example:**
 
@@ -870,7 +905,12 @@ Dashboard must be usable on mobile, tablet, and desktop:
 
 // ✅ CORRECT - Reusable Pagination component
 import { Pagination } from './components/pagination.js';
-const pagination = new Pagination({ container: element, onPageChange: callback });
+const pagination = new Pagination({
+    container: element,
+    totalItems: 100,
+    pageSize: 25,
+    onPageChange: (page) => fetchData(page)
+});
 ```
 
 ---
@@ -881,7 +921,8 @@ const pagination = new Pagination({ container: element, onPageChange: callback }
 
 **MANDATORY:** Neither API endpoints nor frontend code may impose artificial limits on data access.
 
-#### Backend Rules:
+#### Backend Rules
+
 - ❌ **NEVER** use `le=100` or similar upper bounds on `page_size` parameters
 - ❌ **NEVER** use `MAX_OFFSET` or similar constants to cap pagination depth
 - ❌ **NEVER** hardcode `LIMIT` values for user-facing data (aggregation queries are OK)
@@ -889,7 +930,8 @@ const pagination = new Pagination({ container: element, onPageChange: callback }
 - ✅ **DO** let clients request any page_size they need
 - ✅ **DO** return total count in pagination metadata
 
-#### Frontend Rules:
+#### Frontend Rules
+
 - ❌ **NEVER** hardcode `page_size: 100` or similar limits in API calls
 - ❌ **NEVER** fetch a fixed number of items and do client-side pagination only
 - ✅ **DO** use server-side pagination with proper page navigation
@@ -897,12 +939,14 @@ const pagination = new Pagination({ container: element, onPageChange: callback }
 - ✅ **DO** use the reusable Pagination component for consistency
 
 **Rationale:**
+
 - Users must be able to access ALL their data, not just the first N items
 - Artificial limits cause UX issues when users have more data than the limit
 - Pagination handles large datasets efficiently without arbitrary caps
 - Deep pagination may be slow, but that's the user's choice
 
 **Example - Backend:**
+
 ```python
 # ❌ WRONG - Artificial limits
 page_size: int = Query(default=10, ge=1, le=100)
@@ -916,6 +960,7 @@ page_size: int = Query(default=10, ge=1)
 ```
 
 **Example - Frontend:**
+
 ```javascript
 // ❌ WRONG - Hardcoded limit, client-side pagination
 const response = await fetch(`/api/data?page_size=100`);

@@ -65,6 +65,10 @@
  *   - Loading state with spinner
  */
 
+// Module-scoped state for managing body scroll lock across multiple modals
+let modalOpenCount = 0;
+let originalBodyOverflow = '';
+
 export class Modal {
     /**
      * Create a new Modal instance.
@@ -88,6 +92,8 @@ export class Modal {
         this.closeButton = null;
         this.isOpenState = false;
         this.escapeHandler = null;
+        this.focusTrapHandler = null;
+        this.focusableElements = [];
 
         this.initialize();
     }
@@ -114,7 +120,7 @@ export class Modal {
         // Set up event listeners
         this.setupEventListeners();
 
-        console.log(`[Modal] Initialized modal: ${this.id}`);
+        console.debug(`[Modal] Initialized modal: ${this.id}`);
     }
 
     /**
@@ -139,7 +145,7 @@ export class Modal {
             });
         }
 
-        console.log(`[Modal] Event listeners set up for modal: ${this.id}`);
+        console.debug(`[Modal] Event listeners set up for modal: ${this.id}`);
     }
 
     /**
@@ -156,8 +162,12 @@ export class Modal {
         this.modal.classList.add('show');
         this.isOpenState = true;
 
-        // Lock body scroll
-        document.body.style.overflow = 'hidden';
+        // Lock body scroll (using counter-based approach for multiple modals)
+        if (modalOpenCount === 0) {
+            originalBodyOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+        }
+        modalOpenCount++;
 
         // Set up ESC key handler (if enabled)
         if (this.closeOnEscape && !this.escapeHandler) {
@@ -169,10 +179,13 @@ export class Modal {
             document.addEventListener('keydown', this.escapeHandler);
         }
 
+        // Set up focus trap
+        this.trapFocus();
+
         // Call onOpen callback with data
         this.onOpen(data);
 
-        console.log(`[Modal] Opened modal: ${this.id}`);
+        console.debug(`[Modal] Opened modal: ${this.id}`);
     }
 
     /**
@@ -185,8 +198,11 @@ export class Modal {
         this.modal.classList.remove('show');
         this.isOpenState = false;
 
-        // Unlock body scroll
-        document.body.style.overflow = '';
+        // Unlock body scroll (using counter-based approach for multiple modals)
+        modalOpenCount--;
+        if (modalOpenCount === 0) {
+            document.body.style.overflow = originalBodyOverflow;
+        }
 
         // Remove ESC key handler
         if (this.escapeHandler) {
@@ -194,10 +210,74 @@ export class Modal {
             this.escapeHandler = null;
         }
 
+        // Remove focus trap handler
+        if (this.focusTrapHandler) {
+            document.removeEventListener('keydown', this.focusTrapHandler);
+            this.focusTrapHandler = null;
+        }
+
         // Call onClose callback
         this.onClose();
 
-        console.log(`[Modal] Closed modal: ${this.id}`);
+        console.debug(`[Modal] Closed modal: ${this.id}`);
+    }
+
+    /**
+     * Trap focus within the modal.
+     * Prevents tabbing outside modal by cycling focus between first and last focusable element.
+     */
+    trapFocus() {
+        if (!this.modal) return;
+
+        // Find all focusable elements within the modal
+        const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+        this.focusableElements = Array.from(this.modal.querySelectorAll(focusableSelector));
+
+        // Filter out hidden or disabled elements
+        this.focusableElements = this.focusableElements.filter(el => {
+            return !el.hasAttribute('disabled') &&
+                   el.offsetWidth > 0 &&
+                   el.offsetHeight > 0 &&
+                   window.getComputedStyle(el).visibility !== 'hidden';
+        });
+
+        // Focus the first focusable element if available
+        if (this.focusableElements.length > 0) {
+            this.focusableElements[0].focus();
+        }
+
+        // Handle Tab/Shift+Tab to trap focus
+        this.focusTrapHandler = (e) => {
+            if (e.key !== 'Tab' || !this.isOpen()) return;
+
+            const firstElement = this.focusableElements[0];
+            const lastElement = this.focusableElements[this.focusableElements.length - 1];
+
+            // Handle single or zero focusable elements
+            if (this.focusableElements.length === 0) {
+                e.preventDefault();
+                return;
+            }
+
+            if (this.focusableElements.length === 1) {
+                e.preventDefault();
+                firstElement.focus();
+                return;
+            }
+
+            // Shift+Tab on first element: go to last
+            if (e.shiftKey && document.activeElement === firstElement) {
+                e.preventDefault();
+                lastElement.focus();
+            }
+            // Tab on last element: go to first
+            else if (!e.shiftKey && document.activeElement === lastElement) {
+                e.preventDefault();
+                firstElement.focus();
+            }
+        };
+
+        document.addEventListener('keydown', this.focusTrapHandler);
     }
 
     /**

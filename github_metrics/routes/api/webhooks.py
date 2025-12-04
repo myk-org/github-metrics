@@ -66,14 +66,17 @@ async def get_webhook_events(
     # Add time filters
     query += build_time_filter(params, start_datetime, end_datetime)
 
+    # Build count query before adding pagination
     count_query = "SELECT COUNT(*) FROM (" + query + ") AS filtered"
+    # Capture params snapshot before adding pagination (for count query)
+    count_params = params.get_params()
+
+    # Add pagination to main query (modifies params)
     pagination_sql = build_pagination_sql(params, page, page_size)
     query += " ORDER BY created_at DESC " + pagination_sql
 
     try:
-        # Get params for count query (without LIMIT/OFFSET)
-        count_params = params.get_params()[:-2]
-        # Get all params for data query
+        # Get all params for data query (includes pagination)
         all_params = params.get_params()
 
         total_count = await db_manager.fetchval(count_query, *count_params)
