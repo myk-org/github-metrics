@@ -33,6 +33,7 @@ from github_metrics.routes.api import (
     pr_story,
     repositories,
     summary,
+    team_dynamics,
     trends,
     turnaround,
     user_prs,
@@ -206,6 +207,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     trends.db_manager = db_manager
     pr_story.db_manager = db_manager
     turnaround.db_manager = db_manager
+    team_dynamics.db_manager = db_manager
 
     # Set webhook-specific globals
     webhooks.metrics_tracker = metrics_tracker
@@ -299,6 +301,7 @@ def create_app() -> FastAPI:
     app.include_router(trends.router)
     app.include_router(pr_story.router)
     app.include_router(turnaround.router)
+    app.include_router(team_dynamics.router)
 
     return app
 

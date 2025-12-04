@@ -16,6 +16,8 @@ import { Pagination } from '../components/pagination.js';
 import { SortableTable } from '../components/sortable-table.js';
 import { DownloadButtons } from '../components/download-buttons.js';
 import { Modal } from '../components/modal.js';
+import { formatHours, formatTimestamp, escapeHtml } from '../utils/formatters.js';
+import { renderPrStoryTimeline } from '../components/pr-timeline.js';
 
 class TurnaroundMetrics {
     constructor() {
@@ -63,9 +65,11 @@ class TurnaroundMetrics {
         this.userPrsPagination = {
             username: null,
             category: null,
-            allPrs: [], // Store all PRs
+            currentPagePrs: [], // Store current page PRs only
             currentPage: 1,
             pageSize: 10,
+            totalItems: 0,
+            totalPages: 0,
             paginationComponent: null
         };
 
@@ -305,9 +309,9 @@ class TurnaroundMetrics {
         }
 
         // Update KPI values
-        this.kpiFirstReview.textContent = this.formatHours(summary.avg_time_to_first_review_hours);
-        this.kpiApproval.textContent = this.formatHours(summary.avg_time_to_approval_hours);
-        this.kpiLifecycle.textContent = this.formatHours(summary.avg_pr_lifecycle_hours);
+        this.kpiFirstReview.textContent = formatHours(summary.avg_time_to_first_review_hours);
+        this.kpiApproval.textContent = formatHours(summary.avg_time_to_approval_hours);
+        this.kpiLifecycle.textContent = formatHours(summary.avg_pr_lifecycle_hours);
         this.kpiTotalPrs.textContent = summary.total_prs_analyzed || 0;
     }
 
@@ -333,10 +337,10 @@ class TurnaroundMetrics {
         repositories.forEach(repo => {
             const row = document.createElement('tr');
             row.innerHTML = `
-                <td>${this.escapeHtml(repo.repository)}</td>
-                <td>${this.formatHours(repo.avg_time_to_first_review_hours)}</td>
-                <td>${this.formatHours(repo.avg_time_to_approval_hours)}</td>
-                <td>${this.formatHours(repo.avg_pr_lifecycle_hours)}</td>
+                <td>${escapeHtml(repo.repository)}</td>
+                <td>${formatHours(repo.avg_time_to_first_review_hours)}</td>
+                <td>${formatHours(repo.avg_time_to_approval_hours)}</td>
+                <td>${formatHours(repo.avg_pr_lifecycle_hours)}</td>
                 <td>${repo.total_prs}</td>
             `;
             this.repoTableBody.appendChild(row);
@@ -369,65 +373,13 @@ class TurnaroundMetrics {
                 : reviewer.repositories_reviewed || '';
 
             row.innerHTML = `
-                <td>${this.escapeHtml(reviewer.reviewer)}</td>
-                <td>${this.formatHours(reviewer.avg_response_time_hours)}</td>
+                <td>${escapeHtml(reviewer.reviewer)}</td>
+                <td>${formatHours(reviewer.avg_response_time_hours)}</td>
                 <td>${reviewer.total_reviews}</td>
-                <td title="${this.escapeHtml(repos)}">${this.truncateText(repos, 50)}</td>
+                <td title="${escapeHtml(repos)}">${this.truncateText(repos, 50)}</td>
             `;
             this.reviewerTableBody.appendChild(row);
         });
-    }
-
-    /**
-     * Format hours for display in human-readable format
-     */
-    formatHours(hours) {
-        if (hours === null || hours === undefined) {
-            return 'N/A';
-        }
-
-        const num = parseFloat(hours);
-        if (isNaN(num)) {
-            return 'N/A';
-        }
-
-        // Less than 1 hour: show minutes
-        if (num < 1) {
-            const minutes = Math.round(num * 60);
-            return `${minutes}m`;
-        }
-
-        // 1-24 hours: show hours
-        if (num < 24) {
-            return `${num.toFixed(1)}h`;
-        }
-
-        // 24-168 hours (1 week): show days and hours
-        if (num < 168) {
-            const days = Math.floor(num / 24);
-            const remainingHours = Math.round(num % 24);
-            return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`;
-        }
-
-        // 168+ hours: show weeks and days
-        const weeks = Math.floor(num / 168);
-        const remainingDays = Math.floor((num % 168) / 24);
-        return remainingDays > 0 ? `${weeks}w ${remainingDays}d` : `${weeks}w`;
-    }
-
-    /**
-     * Escape HTML to prevent XSS
-     */
-    escapeHtml(text) {
-        if (!text) return '';
-        // Use shared utility if available
-        if (window.MetricsUtils?.escapeHTML) {
-            return window.MetricsUtils.escapeHTML(text);
-        }
-        // Fallback: use DOM createElement approach
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
     }
 
     /**
@@ -435,8 +387,8 @@ class TurnaroundMetrics {
      */
     truncateText(text, maxLength) {
         if (!text) return '';
-        if (text.length <= maxLength) return this.escapeHtml(text);
-        return this.escapeHtml(text.substring(0, maxLength) + '...');
+        if (text.length <= maxLength) return escapeHtml(text);
+        return escapeHtml(text.substring(0, maxLength) + '...');
     }
 
     /**
@@ -775,7 +727,7 @@ class TurnaroundMetrics {
 
             if (category === 'pr_creators') {
                 row.innerHTML = `
-                    <td><a href="#" class="clickable-username" data-username="${this.escapeHtml(item.user)}" data-category="${category}">${this.escapeHtml(item.user)}</a></td>
+                    <td><a href="#" class="clickable-username" data-username="${escapeHtml(item.user)}" data-category="${category}">${escapeHtml(item.user)}</a></td>
                     <td>${item.total_prs || 0}</td>
                     <td>${item.merged_prs || 0}</td>
                     <td>${item.closed_prs || 0}</td>
@@ -783,20 +735,20 @@ class TurnaroundMetrics {
                 `;
             } else if (category === 'pr_reviewers') {
                 row.innerHTML = `
-                    <td><a href="#" class="clickable-username" data-username="${this.escapeHtml(item.user)}" data-category="${category}">${this.escapeHtml(item.user)}</a></td>
+                    <td><a href="#" class="clickable-username" data-username="${escapeHtml(item.user)}" data-category="${category}">${escapeHtml(item.user)}</a></td>
                     <td>${item.total_reviews || 0}</td>
                     <td>${item.prs_reviewed || 0}</td>
                     <td>${item.avg_reviews_per_pr ? parseFloat(item.avg_reviews_per_pr).toFixed(1) : '0.0'}</td>
                 `;
             } else if (category === 'pr_approvers') {
                 row.innerHTML = `
-                    <td><a href="#" class="clickable-username" data-username="${this.escapeHtml(item.user)}" data-category="${category}">${this.escapeHtml(item.user)}</a></td>
+                    <td><a href="#" class="clickable-username" data-username="${escapeHtml(item.user)}" data-category="${category}">${escapeHtml(item.user)}</a></td>
                     <td>${item.total_approvals || 0}</td>
                     <td>${item.prs_approved || 0}</td>
                 `;
             } else if (category === 'pr_lgtm') {
                 row.innerHTML = `
-                    <td><a href="#" class="clickable-username" data-username="${this.escapeHtml(item.user)}" data-category="${category}">${this.escapeHtml(item.user)}</a></td>
+                    <td><a href="#" class="clickable-username" data-username="${escapeHtml(item.user)}" data-category="${category}">${escapeHtml(item.user)}</a></td>
                     <td>${item.total_lgtm || 0}</td>
                     <td>${item.prs_lgtm || 0}</td>
                 `;
@@ -857,90 +809,67 @@ class TurnaroundMetrics {
     }
 
     /**
-     * Load all user PRs from the API
+     * Load user PRs from the API (server-side pagination)
      */
     async loadUserPrsPage() {
-        const { username, category } = this.userPrsPagination;
+        const { username, category, currentPage, pageSize } = this.userPrsPagination;
 
         try {
             const filters = this.getTimeFilters();
 
-            // First, fetch with minimal page size to get total count
-            const countParams = {
+            // Fetch current page from API
+            const params = {
                 user: username,
                 role: category,
-                page: 1,
-                page_size: 1
+                page: currentPage,
+                page_size: pageSize
             };
 
             if (filters.repository) {
-                countParams.repository = filters.repository;
+                params.repository = filters.repository;
             }
 
-            const countData = await apiClient.fetchUserPRs(
+            const data = await apiClient.fetchUserPRs(
                 filters.start_time,
                 filters.end_time,
-                countParams
+                params
             );
 
-            if (countData.error) {
-                throw new Error(countData.detail || countData.error);
+            if (data.error) {
+                throw new Error(data.detail || data.error);
             }
 
-            const totalItems = countData.pagination?.total || 0;
+            // Store pagination metadata
+            this.userPrsPagination.totalItems = data.pagination?.total || 0;
+            this.userPrsPagination.totalPages = data.pagination?.total_pages || 0;
+            this.userPrsPagination.currentPagePrs = data.data || [];
 
             // Update title with PR count and role description
             const roleText = this.getRoleDescription(category);
-            this.userPrsModal.setTitle(`PRs ${roleText} ${username} (${totalItems})`);
+            this.userPrsModal.setTitle(`PRs ${roleText} ${username} (${this.userPrsPagination.totalItems})`);
 
-            if (totalItems === 0) {
+            if (this.userPrsPagination.totalItems === 0) {
                 this.userPrsModal.setBody('<div class="empty-state">No PRs found for this user in the selected time range.</div>');
                 return;
             }
-
-            // Now fetch all PRs using the total count
-            const allParams = {
-                user: username,
-                role: category,
-                page: 1,
-                page_size: totalItems
-            };
-
-            if (filters.repository) {
-                allParams.repository = filters.repository;
-            }
-
-            const allData = await apiClient.fetchUserPRs(
-                filters.start_time,
-                filters.end_time,
-                allParams
-            );
-
-            if (allData.error) {
-                throw new Error(allData.detail || allData.error);
-            }
-
-            // Store all PRs in state
-            this.userPrsPagination.allPrs = allData.data || [];
-            this.userPrsPagination.currentPage = 1;
 
             // Render PRs with pagination
             this.renderUserPrsWithPagination();
 
         } catch (error) {
             console.error('[Turnaround] Error loading user PRs:', error);
-            this.userPrsModal.setBody(`<div class="error-message">Failed to load PRs: ${this.escapeHtml(error.message)}</div>`);
+            this.userPrsModal.setBody(`<div class="error-message">Failed to load PRs: ${escapeHtml(error.message)}</div>`);
         }
     }
 
     /**
-     * Render all user PRs without pagination
+     * Render user PRs with server-side pagination
      */
     renderUserPrsWithPagination() {
-        const { allPrs } = this.userPrsPagination;
+        const { currentPagePrs, totalItems, currentPage, pageSize } = this.userPrsPagination;
 
-        // Render all PRs (no pagination)
-        const prsListHtml = this.renderUserPrsListHtml(allPrs);
+        // Render current page PRs with pagination controls
+        const prsListHtml = this.renderUserPrsListHtml(currentPagePrs);
         this.userPrsModal.setBody(prsListHtml);
 
         // Set up delegated click listener for PR items
@@ -966,6 +895,40 @@ class TurnaroundMetrics {
 
             // Add delegated click listener
             listPanel.addEventListener('click', this._prItemClickHandler);
+        }
+
+        // Initialize or update pagination component
+        const paginationContainer = document.querySelector('#userPrsModal .user-prs-pagination');
+        if (paginationContainer && totalItems > 0) {
+            // Destroy existing pagination component if it exists
+            if (this.userPrsPagination.paginationComponent) {
+                this.userPrsPagination.paginationComponent.destroy();
+            }
+
+            // Create new pagination component
+            this.userPrsPagination.paginationComponent = new Pagination({
+                container: paginationContainer,
+                pageSize: pageSize,
+                total: totalItems,
+                page: currentPage,
+                pageSizeOptions: [10, 25, 50, 100],
+                onPageChange: (page) => {
+                    this.userPrsPagination.currentPage = page;
+                    this.loadUserPrsPage();
+                },
+                onPageSizeChange: (newPageSize) => {
+                    this.userPrsPagination.pageSize = newPageSize;
+                    this.userPrsPagination.currentPage = 1;
+                    this.loadUserPrsPage();
+                }
+            });
+
+            // Initialize pagination state - constructor ignores these values
+            this.userPrsPagination.paginationComponent.update({
+                total: totalItems,
+                page: currentPage,
+                pageSize: pageSize
+            });
         }
     }
 
@@ -998,11 +961,11 @@ class TurnaroundMetrics {
             const prId = `user-pr-${index}`;
 
             return `
-                <div class="user-pr-item" data-pr-id="${prId}" data-repo="${this.escapeHtml(pr.repository)}" data-pr-number="${pr.number}">
+                <div class="user-pr-item" data-pr-id="${prId}" data-repo="${escapeHtml(pr.repository)}" data-pr-number="${pr.number}">
                     <div class="user-pr-header">
                         <div class="user-pr-title">
                             <span class="pr-number">#${pr.number}</span>
-                            <span class="pr-title">${this.escapeHtml(pr.title)}</span>
+                            <span class="pr-title">${escapeHtml(pr.title)}</span>
                         </div>
                         <div class="user-pr-meta">
                             <span class="pr-state pr-state-${stateClass}">${stateLabel}</span>
@@ -1012,13 +975,14 @@ class TurnaroundMetrics {
             `;
         }).join('');
 
-        // Build the two-panel layout without pagination controls
+        // Build the two-panel layout with pagination controls
         return `
             <div class="user-prs-container">
                 <div class="user-prs-list-panel">
                     <div class="user-prs-list-content">
                         ${listPanelHtml}
                     </div>
+                    <div class="user-prs-pagination"></div>
                 </div>
                 <div class="user-prs-story-panel">
                     <div class="empty-state">Select a PR to view its timeline</div>
@@ -1063,130 +1027,12 @@ class TurnaroundMetrics {
                 throw new Error(data.detail || data.error);
             }
 
-            // Render PR story timeline
-            storyPanel.innerHTML = `<div class="pr-story-content">${this.renderPrStoryTimeline(data)}</div>`;
+            // Render PR story timeline (using shared component)
+            storyPanel.innerHTML = `<div class="pr-story-content">${renderPrStoryTimeline(data)}</div>`;
 
         } catch (error) {
             console.error(`[Turnaround] Error loading PR story for ${repository}#${prNumber}:`, error);
-            storyPanel.innerHTML = `<div class="error-message">Failed to load PR timeline: ${this.escapeHtml(error.message)}</div>`;
-        }
-    }
-
-    /**
-     * Render PR story timeline
-     */
-    renderPrStoryTimeline(storyData) {
-        // Safely derive events and summary with defaults
-        const events = storyData?.events || [];
-        const summary = storyData?.summary || {
-            total_commits: 0,
-            total_reviews: 0,
-            total_check_runs: 0,
-            total_comments: 0
-        };
-
-        if (events.length === 0) {
-            return '<div class="empty-state">No timeline events found for this PR.</div>';
-        }
-
-        // Summary header
-        const summaryHtml = `
-            <div class="pr-story-summary">
-                <span>📝 ${summary.total_commits} commits</span>
-                <span>💬 ${summary.total_reviews} reviews</span>
-                <span>▶️ ${summary.total_check_runs} check runs</span>
-                <span>💭 ${summary.total_comments} comments</span>
-            </div>
-        `;
-
-        // Timeline events
-        const eventsHtml = events.map(event => this.renderTimelineEvent(event)).join('');
-
-        return `
-            ${summaryHtml}
-            <div class="pr-timeline">
-                ${eventsHtml}
-            </div>
-        `;
-    }
-
-    /**
-     * Render a single timeline event
-     */
-    renderTimelineEvent(event) {
-        const eventConfig = this.getEventConfig(event.event_type);
-        const icon = eventConfig.icon;
-        const label = eventConfig.label;
-
-        let descriptionHtml = '';
-        if (event.description) {
-            descriptionHtml = `<div class="timeline-event-description">${this.escapeHtml(event.description)}</div>`;
-        }
-
-        const timeStr = this.formatTimestamp(event.timestamp);
-
-        return `
-            <div class="timeline-event-item">
-                <div class="timeline-event-marker"></div>
-                <div class="timeline-event-content">
-                    <div class="timeline-event-header">
-                        <span class="timeline-event-icon">${icon}</span>
-                        <span class="timeline-event-title">${this.escapeHtml(label)}</span>
-                        <span class="timeline-event-time">${timeStr}</span>
-                    </div>
-                    ${descriptionHtml}
-                </div>
-            </div>
-        `;
-    }
-
-    /**
-     * Get event configuration (icon, label)
-     */
-    getEventConfig(eventType) {
-        const configs = {
-            pr_opened: { icon: '🔀', label: 'PR Opened' },
-            pr_closed: { icon: '❌', label: 'PR Closed' },
-            pr_merged: { icon: '🟣', label: 'Merged' },
-            pr_reopened: { icon: '🔄', label: 'Reopened' },
-            commit: { icon: '📝', label: 'Commit' },
-            review_approved: { icon: '✅', label: 'Approved' },
-            review_changes: { icon: '🔄', label: 'Changes Requested' },
-            review_comment: { icon: '💬', label: 'Review Comment' },
-            comment: { icon: '💬', label: 'Comment' },
-            review_requested: { icon: '👁️', label: 'Review Requested' },
-            ready_for_review: { icon: '👁️', label: 'Ready for Review' },
-            label_added: { icon: '🏷️', label: 'Label Added' },
-            label_removed: { icon: '🏷️', label: 'Label Removed' },
-            verified: { icon: '🛡️', label: 'Verified' },
-            approved_label: { icon: '✅', label: 'Approved' },
-            lgtm: { icon: '👍', label: 'LGTM' },
-            check_run: { icon: '▶️', label: 'Check Run' }
-        };
-
-        return configs[eventType] || { icon: '●', label: eventType };
-    }
-
-    /**
-     * Format timestamp for display
-     */
-    formatTimestamp(timestamp) {
-        try {
-            const date = new Date(timestamp);
-            const now = new Date();
-            const diff = now - date;
-            const minutes = Math.floor(diff / 60000);
-            const hours = Math.floor(diff / 3600000);
-            const days = Math.floor(diff / 86400000);
-
-            if (minutes < 1) return 'just now';
-            if (minutes < 60) return `${minutes}m ago`;
-            if (hours < 24) return `${hours}h ago`;
-            if (days < 7) return `${days}d ago`;
-
-            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        } catch {
-            return timestamp;
+            storyPanel.innerHTML = `<div class="error-message">Failed to load PR timeline: ${escapeHtml(error.message)}</div>`;
         }
     }
 
@@ -1251,7 +1097,7 @@ class TurnaroundMetrics {
         }
 
         const colspan = category === 'pr_creators' ? 5 : category === 'pr_reviewers' ? 4 : 3;
-        tableBody.innerHTML = `<tr><td colspan="${colspan}" style="text-align: center; padding: 20px; color: var(--error-color);">Error: ${this.escapeHtml(message)}</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="${colspan}" style="text-align: center; padding: 20px; color: var(--error-color);">Error: ${escapeHtml(message)}</td></tr>`;
     }
 
     /**
@@ -1282,6 +1128,13 @@ class TurnaroundMetrics {
                     this.contributorMetrics[category].currentPage = 1;
                     this.loadContributorCategory(category, this.getTimeFilters());
                 }
+            });
+
+            // Initialize with empty state - will be updated when data loads
+            this.contributorMetrics[category].paginationComponent.update({
+                total: 0,
+                page: 1,
+                pageSize: 10
             });
         });
     }

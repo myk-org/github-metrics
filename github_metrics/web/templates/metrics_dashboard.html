@@ -42,6 +42,18 @@
             </span>
             <span class="nav-text">Contributors</span>
           </a>
+          <a href="#team-dynamics" class="nav-item" data-page="team-dynamics">
+            <span class="nav-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                <circle cx="16" cy="11" r="2"></circle>
+              </svg>
+            </span>
+            <span class="nav-text">Team Dynamics</span>
+          </a>
         </nav>
         <div class="sidebar-footer">
           <button
@@ -528,6 +540,227 @@
             </div>
           </div>
         </div>
+
+        <div class="page" id="page-team-dynamics">
+          <div class="container">
+            <div class="header">
+              <div>
+                <h1>Team Dynamics</h1>
+                <p>Workload distribution, review efficiency, and approval bottlenecks</p>
+              </div>
+            </div>
+
+            <!-- Loading State -->
+            <div id="team-dynamics-loading" class="loading-state" style="display: none;">
+              <div class="spinner" aria-hidden="true"></div>
+              <p>Loading team dynamics metrics...</p>
+            </div>
+
+            <!-- Error State -->
+            <div id="team-dynamics-error" class="error-state" style="display: none;">
+              <p class="error-message"></p>
+            </div>
+
+            <!-- Metrics Content -->
+            <div id="team-dynamics-content" style="display: none;">
+              <!-- WORKLOAD DISTRIBUTION SECTION -->
+              <div class="chart-container full-width" data-section="workload-distribution">
+                <div class="panel-header">
+                  <h3>Workload Distribution</h3>
+                  <button class="btn-icon collapse-btn" data-section="workload-distribution" aria-label="Toggle Workload Distribution section" title="Toggle Workload Distribution section" aria-expanded="true" aria-controls="workload-distribution-content">▼</button>
+                </div>
+                <div class="panel-content" id="workload-distribution-content">
+                  <!-- KPI Cards -->
+                  <div class="kpi-cards-grid">
+                    <div class="kpi-card">
+                      <div class="kpi-label">Active Contributors</div>
+                      <div class="kpi-value" id="kpi-active-contributors">-</div>
+                      <div class="kpi-unit">users</div>
+                    </div>
+                    <div class="kpi-card">
+                      <div class="kpi-label">Avg PRs per User</div>
+                      <div class="kpi-value" id="kpi-avg-prs-per-user">-</div>
+                      <div class="kpi-unit">PRs</div>
+                    </div>
+                    <div class="kpi-card">
+                      <div class="kpi-label">Top Contributor</div>
+                      <div class="kpi-value" id="kpi-top-contributor">-</div>
+                      <div class="kpi-unit"></div>
+                    </div>
+                    <div class="kpi-card">
+                      <div class="kpi-label">Workload Balance (Gini)</div>
+                      <div class="kpi-value" id="kpi-gini-coefficient">-</div>
+                      <div class="kpi-unit"></div>
+                    </div>
+                  </div>
+
+                  <!-- Chart Container -->
+                  <div id="workload-distribution-chart" class="chart-placeholder">
+                    <!-- Chart will be rendered here by JavaScript -->
+                  </div>
+
+                  <!-- Workload Table -->
+                  <div class="chart-container full-width" data-section="workload-table">
+                    <div class="chart-header">
+                      <h2>Contributor Workload</h2>
+                      <div class="chart-header-actions">
+                        <button class="btn-icon download-btn" data-section="workloadTable" data-format="csv" title="Download as CSV" aria-label="Download workload data as CSV">⬇️ CSV</button>
+                        <button class="btn-icon download-btn" data-section="workloadTable" data-format="json" title="Download as JSON" aria-label="Download workload data as JSON">⬇️ JSON</button>
+                      </div>
+                    </div>
+                    <div class="chart-content">
+                      <div class="table-wrapper">
+                        <table id="workloadTable">
+                          <caption class="sr-only">Contributor workload metrics</caption>
+                          <thead>
+                            <tr>
+                              <th scope="col" class="sortable" data-column="contributor">Contributor</th>
+                              <th scope="col" class="sortable" data-column="prs_created">PRs Created</th>
+                              <th scope="col" class="sortable" data-column="prs_reviewed">PRs Reviewed</th>
+                              <th scope="col" class="sortable" data-column="prs_approved">PRs Approved</th>
+                            </tr>
+                          </thead>
+                          <tbody id="workload-table-body">
+                            <tr class="loading-row">
+                              <td colspan="4">Loading...</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      <div id="workloadTable-pagination" class="pagination-container">
+                        <!-- Pagination component will be rendered here -->
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- REVIEW EFFICIENCY SECTION -->
+              <div class="chart-container full-width" data-section="review-efficiency">
+                <div class="panel-header">
+                  <h3>Review Efficiency</h3>
+                  <button class="btn-icon collapse-btn" data-section="review-efficiency" aria-label="Toggle Review Efficiency section" title="Toggle Review Efficiency section" aria-expanded="true" aria-controls="review-efficiency-content">▼</button>
+                </div>
+                <div class="panel-content" id="review-efficiency-content">
+                  <!-- KPI Cards -->
+                  <div class="kpi-cards-grid">
+                    <div class="kpi-card">
+                      <div class="kpi-label">Avg Review Time</div>
+                      <div class="kpi-value" id="kpi-avg-review-time">-</div>
+                      <div class="kpi-unit"></div>
+                    </div>
+                    <div class="kpi-card">
+                      <div class="kpi-label">Median Review Time</div>
+                      <div class="kpi-value" id="kpi-median-review-time">-</div>
+                      <div class="kpi-unit"></div>
+                    </div>
+                    <div class="kpi-card">
+                      <div class="kpi-label">Fastest Reviewer</div>
+                      <div class="kpi-value" id="kpi-fastest-reviewer">-</div>
+                      <div class="kpi-unit"></div>
+                    </div>
+                    <div class="kpi-card">
+                      <div class="kpi-label">Slowest Reviewer</div>
+                      <div class="kpi-value" id="kpi-slowest-reviewer">-</div>
+                      <div class="kpi-unit"></div>
+                    </div>
+                  </div>
+
+                  <!-- Chart Container -->
+                  <div id="review-efficiency-chart" class="chart-placeholder">
+                    <!-- Chart will be rendered here by JavaScript -->
+                  </div>
+
+                  <!-- Review Efficiency Table -->
+                  <div class="chart-container full-width" data-section="review-efficiency-table">
+                    <div class="chart-header">
+                      <h2>Reviewer Efficiency</h2>
+                      <div class="chart-header-actions">
+                        <button class="btn-icon download-btn" data-section="reviewEfficiencyTable" data-format="csv" title="Download as CSV" aria-label="Download review efficiency data as CSV">⬇️ CSV</button>
+                        <button class="btn-icon download-btn" data-section="reviewEfficiencyTable" data-format="json" title="Download as JSON" aria-label="Download review efficiency data as JSON">⬇️ JSON</button>
+                      </div>
+                    </div>
+                    <div class="chart-content">
+                      <div class="table-wrapper">
+                        <table id="reviewEfficiencyTable">
+                          <caption class="sr-only">Review efficiency metrics</caption>
+                          <thead>
+                            <tr>
+                              <th scope="col" class="sortable" data-column="reviewer">Reviewer</th>
+                              <th scope="col" class="sortable" data-column="avg_time">Avg Time</th>
+                              <th scope="col" class="sortable" data-column="median_time">Median Time</th>
+                              <th scope="col" class="sortable" data-column="total_reviews">Total Reviews</th>
+                            </tr>
+                          </thead>
+                          <tbody id="review-efficiency-table-body">
+                            <tr class="loading-row">
+                              <td colspan="4">Loading...</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      <div id="reviewEfficiencyTable-pagination" class="pagination-container">
+                        <!-- Pagination component will be rendered here -->
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- APPROVAL BOTTLENECKS SECTION -->
+              <div class="chart-container full-width" data-section="approval-bottlenecks">
+                <div class="panel-header">
+                  <h3>Approval Bottlenecks</h3>
+                  <button class="btn-icon collapse-btn" data-section="approval-bottlenecks" aria-label="Toggle Approval Bottlenecks section" title="Toggle Approval Bottlenecks section" aria-expanded="true" aria-controls="approval-bottlenecks-content">▼</button>
+                </div>
+                <div class="panel-content" id="approval-bottlenecks-content">
+                  <!-- Alert Cards -->
+                  <div id="approval-alerts-container" class="alert-cards-container">
+                    <!-- Alert cards will be rendered here by JavaScript -->
+                  </div>
+
+                  <!-- Heatmap Container -->
+                  <div id="approval-bottlenecks-heatmap" class="chart-placeholder">
+                    <!-- Heatmap will be rendered here by JavaScript -->
+                  </div>
+
+                  <!-- Approvers Table -->
+                  <div class="chart-container full-width" data-section="approvers-table">
+                    <div class="chart-header">
+                      <h2>Approvers</h2>
+                      <div class="chart-header-actions">
+                        <button class="btn-icon download-btn" data-section="approversTable" data-format="csv" title="Download as CSV" aria-label="Download approvers data as CSV">⬇️ CSV</button>
+                        <button class="btn-icon download-btn" data-section="approversTable" data-format="json" title="Download as JSON" aria-label="Download approvers data as JSON">⬇️ JSON</button>
+                      </div>
+                    </div>
+                    <div class="chart-content">
+                      <div class="table-wrapper">
+                        <table id="approversTable">
+                          <caption class="sr-only">Approver metrics</caption>
+                          <thead>
+                            <tr>
+                              <th scope="col" class="sortable" data-column="approver">Approver</th>
+                              <th scope="col" class="sortable" data-column="avg_approval_time">Avg Approval Time</th>
+                              <th scope="col" class="sortable" data-column="total_approvals">Total Approvals</th>
+                            </tr>
+                          </thead>
+                          <tbody id="approvers-table-body">
+                            <tr class="loading-row">
+                              <td colspan="3">Loading...</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      <div id="approversTable-pagination" class="pagination-container">
+                        <!-- Pagination component will be rendered here -->
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </main>
     </div>
 
@@ -556,6 +789,7 @@
     <script type="module" src="/static/js/metrics/combo-box.js?v={{ cache_bust }}"></script>
     <script type="module" src="/static/js/metrics/pr-story.js?v={{ cache_bust }}"></script>
     <script type="module" src="/static/js/metrics/turnaround.js?v={{ cache_bust }}"></script>
+    <script type="module" src="/static/js/metrics/team-dynamics.js?v={{ cache_bust }}"></script>
     <script type="module" src="/static/js/metrics/navigation.js?v={{ cache_bust }}"></script>
     <script type="module" src="/static/js/metrics/dashboard.js?v={{ cache_bust }}"></script>
   </body>

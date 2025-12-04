@@ -553,7 +553,7 @@ class TestDashboardNavigation:
         await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
 
         nav_items = page_with_js_coverage.locator(".nav-item")
-        await expect(nav_items).to_have_count(2)
+        await expect(nav_items).to_have_count(3)
 
         # Check Overview nav item
         overview_nav = page_with_js_coverage.locator('.nav-item[data-page="overview"]')
@@ -564,6 +564,11 @@ class TestDashboardNavigation:
         contributors_nav = page_with_js_coverage.locator('.nav-item[data-page="contributors"]')
         await expect(contributors_nav).to_be_visible()
         await expect(contributors_nav).to_have_attribute("href", "#contributors")
+
+        # Check Team Dynamics nav item
+        team_dynamics_nav = page_with_js_coverage.locator('.nav-item[data-page="team-dynamics"]')
+        await expect(team_dynamics_nav).to_be_visible()
+        await expect(team_dynamics_nav).to_have_attribute("href", "#team-dynamics")
 
     async def test_mobile_menu_toggle_button(self, page_with_js_coverage: Page) -> None:
         """Verify mobile menu toggle button exists."""

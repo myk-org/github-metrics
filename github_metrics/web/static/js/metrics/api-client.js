@@ -431,6 +431,108 @@ class MetricsAPIClient {
     }
 
     /**
+     * Fetch team dynamics metrics.
+     *
+     * Returns metrics about team workload distribution, review efficiency, and bottlenecks.
+     *
+     * @param {string|null} startTime - ISO 8601 start time filter (optional)
+     * @param {string|null} endTime - ISO 8601 end time filter (optional)
+     * @param {string|null} repository - Filter by repository (optional)
+     * @param {string|null} user - Filter by user (optional)
+     * @param {number} page - Page number for pagination (optional)
+     * @param {number} pageSize - Number of items per page (optional)
+     * @returns {Promise<Object>} Team dynamics data or error object
+     *
+     * Response format (success):
+     * {
+     *     workload: {
+     *         summary: {
+     *             total_contributors: 25,
+     *             avg_prs_per_contributor: 8.4,
+     *             top_contributor: { user: 'user1', total_prs: 42 },
+     *             workload_gini: 0.35
+     *         },
+     *         by_contributor: [
+     *             {
+     *                 user: 'user1',
+     *                 prs_created: 42,
+     *                 prs_merged: 38,
+     *                 workload_percentage: 15.2
+     *             }
+     *         ],
+     *         pagination: {
+     *             total: 100,
+     *             page: 1,
+     *             page_size: 25,
+     *             total_pages: 4,
+     *             has_next: true,
+     *             has_prev: false
+     *         }
+     *     },
+     *     review_efficiency: {
+     *         summary: {
+     *             avg_review_time_hours: 4.2,
+     *             median_review_time_hours: 2.8,
+     *             fastest_reviewer: { user: 'user2', avg_hours: 1.5 },
+     *             slowest_reviewer: { user: 'user3', avg_hours: 12.5 }
+     *         },
+     *         by_reviewer: [
+     *             {
+     *                 user: 'user2',
+     *                 avg_review_time_hours: 1.5,
+     *                 median_review_time_hours: 1.2,
+     *                 total_reviews: 85
+     *             }
+     *         ],
+     *         pagination: {
+     *             total: 50,
+     *             page: 1,
+     *             page_size: 25,
+     *             total_pages: 2,
+     *             has_next: true,
+     *             has_prev: false
+     *         }
+     *     },
+     *     bottlenecks: {
+     *         by_approver: [
+     *             {
+     *                 approver: 'user4',
+     *                 total_approvals: 12,
+     *                 avg_approval_hours: 48.3
+     *             }
+     *         ],
+     *         pagination: {
+     *             total: 30,
+     *             page: 1,
+     *             page_size: 25,
+     *             total_pages: 2,
+     *             has_next: true,
+     *             has_prev: false
+     *         },
+     *         alerts: [
+     *             {
+     *                 severity: 'critical',
+     *                 approver: 'user4',
+     *                 team_pending_count: 12,
+     *                 avg_approval_hours: 48.3
+     *             }
+     *         ]
+     *     }
+     * }
+     */
+    async fetchTeamDynamics(startTime = null, endTime = null, repository = null, user = null, page = null, pageSize = null) {
+        const params = {};
+        if (startTime) params.start_time = startTime;
+        if (endTime) params.end_time = endTime;
+        if (repository) params.repository = repository;
+        if (user) params.user = user;
+        if (page !== null && page !== undefined) params.page = page;
+        if (pageSize !== null && pageSize !== undefined) params.page_size = pageSize;
+
+        return await this._fetch('/team-dynamics', params);
+    }
+
+    /**
      * Internal fetch wrapper with timeout and error handling.
      *
      * @private
