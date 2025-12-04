@@ -934,19 +934,13 @@ class TurnaroundMetrics {
     }
 
     /**
-     * Render user PRs with pagination
+     * Render all user PRs without pagination
      */
     renderUserPrsWithPagination() {
-        const { allPrs, currentPage, pageSize } = this.userPrsPagination;
+        const { allPrs } = this.userPrsPagination;
 
-        // Calculate pagination
-        const totalItems = allPrs.length;
-        const startIdx = (currentPage - 1) * pageSize;
-        const endIdx = Math.min(startIdx + pageSize, totalItems);
-        const prsOnPage = allPrs.slice(startIdx, endIdx);
-
-        // Render current page of PRs
-        const prsListHtml = this.renderUserPrsListHtml(prsOnPage);
+        // Render all PRs (no pagination)
+        const prsListHtml = this.renderUserPrsListHtml(allPrs);
         this.userPrsModal.setBody(prsListHtml);
 
         // Set up delegated click listener for PR items
@@ -973,38 +967,6 @@ class TurnaroundMetrics {
             // Add delegated click listener
             listPanel.addEventListener('click', this._prItemClickHandler);
         }
-
-        // Set up pagination component
-        const paginationContainer = document.querySelector('#userPrsModal .user-prs-pagination');
-        if (paginationContainer) {
-            // Destroy existing pagination component if it exists
-            if (this.userPrsPagination.paginationComponent) {
-                this.userPrsPagination.paginationComponent = null;
-            }
-
-            // Create new pagination component
-            this.userPrsPagination.paginationComponent = new Pagination({
-                container: paginationContainer,
-                pageSize: pageSize,
-                pageSizeOptions: [10, 25, 50, 100],
-                onPageChange: (page) => {
-                    this.userPrsPagination.currentPage = page;
-                    this.renderUserPrsWithPagination();
-                },
-                onPageSizeChange: (newPageSize) => {
-                    this.userPrsPagination.pageSize = newPageSize;
-                    this.userPrsPagination.currentPage = 1;
-                    this.renderUserPrsWithPagination();
-                }
-            });
-
-            // Update pagination state
-            this.userPrsPagination.paginationComponent.update({
-                total: totalItems,
-                page: currentPage,
-                pageSize: pageSize
-            });
-        }
     }
 
     /**
@@ -1026,18 +988,14 @@ class TurnaroundMetrics {
      */
     renderUserPrsListHtml(prs) {
         if (!prs || prs.length === 0) {
-            return '<div class="empty-state">No PRs found on this page.</div>';
+            return '<div class="empty-state">No PRs found.</div>';
         }
 
-        // Create PR list items - use global index from allPrs to maintain unique IDs
-        const { currentPage, pageSize } = this.userPrsPagination;
-        const startIdx = (currentPage - 1) * pageSize;
-
-        const listPanelHtml = prs.map((pr, localIndex) => {
-            const globalIndex = startIdx + localIndex;
+        // Create PR list items - use index to maintain unique IDs
+        const listPanelHtml = prs.map((pr, index) => {
             const stateClass = pr.merged ? 'merged' : pr.state === 'closed' ? 'closed' : 'open';
             const stateLabel = pr.merged ? 'merged' : pr.state;
-            const prId = `user-pr-${globalIndex}`;
+            const prId = `user-pr-${index}`;
 
             return `
                 <div class="user-pr-item" data-pr-id="${prId}" data-repo="${this.escapeHtml(pr.repository)}" data-pr-number="${pr.number}">
@@ -1054,14 +1012,13 @@ class TurnaroundMetrics {
             `;
         }).join('');
 
-        // Build the two-panel layout with pagination controls
+        // Build the two-panel layout without pagination controls
         return `
             <div class="user-prs-container">
                 <div class="user-prs-list-panel">
                     <div class="user-prs-list-content">
                         ${listPanelHtml}
                     </div>
-                    <div class="user-prs-pagination"></div>
                 </div>
                 <div class="user-prs-story-panel">
                     <div class="empty-state">Select a PR to view its timeline</div>
