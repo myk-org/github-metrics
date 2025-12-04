@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import math
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
@@ -11,13 +10,13 @@ from fastapi import status as http_status
 from simple_logger.logger import get_logger
 
 from github_metrics.database import DatabaseManager
+from github_metrics.utils.contributor_queries import get_pr_creators_count_query, get_pr_creators_data_query
 from github_metrics.utils.datetime_utils import parse_datetime_string
+from github_metrics.utils.query_builders import QueryParams, build_repository_filter, build_time_filter
+from github_metrics.utils.response_formatters import format_pagination_metadata
 
 # Module-level logger
 LOGGER = get_logger(name="github_metrics.routes.api.contributors")
-
-# Maximum pagination offset to prevent expensive deep queries
-MAX_OFFSET = 10000
 
 router = APIRouter(prefix="/api/metrics")
 
@@ -34,7 +33,7 @@ async def get_metrics_contributors(
     user: str | None = Query(default=None, description="Filter by username"),
     repository: str | None = Query(default=None, description="Filter by repository (org/repo format)"),
     page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
-    page_size: int = Query(default=10, ge=1, le=100, description="Items per page (1-100)"),
+    page_size: int = Query(default=10, ge=1, description="Items per page"),
 ) -> dict[str, Any]:
     """Get PR contributors statistics (creators, reviewers, approvers, LGTM).
 
@@ -56,7 +55,7 @@ async def get_metrics_contributors(
     - `user` (str, optional): Filter by username
     - `repository` (str, optional): Filter by repository (org/repo format)
     - `page` (int, default=1): Page number (1-indexed)
-    - `page_size` (int, default=10): Items per page (1-100)
+    - `page_size` (int, default=10): Items per page
 
     **Pagination:**
     - Each category (pr_creators, pr_reviewers, pr_approvers, pr_lgtm) includes pagination metadata
@@ -163,29 +162,14 @@ async def get_metrics_contributors(
     start_datetime = parse_datetime_string(start_time, "start_time")
     end_datetime = parse_datetime_string(end_time, "end_time")
 
-    # Build filter clause with time, user, and repository filters
-    time_filter = ""
-    params: list[Any] = []
-    param_count = 0
-
-    if start_datetime:
-        param_count += 1
-        time_filter += " AND created_at >= $" + str(param_count)
-        params.append(start_datetime)
-
-    if end_datetime:
-        param_count += 1
-        time_filter += " AND created_at <= $" + str(param_count)
-        params.append(end_datetime)
-
-    # Add repository filter if provided
-    repository_filter = ""
-    if repository:
-        param_count += 1
-        repository_filter = " AND repository = $" + str(param_count)
-        params.append(repository)
+    # Build base filter parameters (time + repository filters)
+    params = QueryParams()
+    time_filter = build_time_filter(params, start_datetime, end_datetime)
+    repository_filter = build_repository_filter(params, repository)
 
     # Build category-specific user filters to align with per-category "user" semantics
+    # NOTE: These role definitions are the SOURCE OF TRUTH and are mirrored in:
+    #       github_metrics/utils/contributor_queries.py (ROLE_CONFIGS)
     # PR Creators: user = pr_author (extracted at insert-time from payload)
     # PR Reviewers: user = sender (reviewer who submitted the review)
     # PR Approvers: user = SUBSTRING(label_name FROM 10) where label_name LIKE 'approved-%'
@@ -194,141 +178,32 @@ async def get_metrics_contributors(
     user_filter_reviewers = ""
     user_filter_approvers = ""
     user_filter_lgtm = ""
+    user_filter_creators = ""
 
     if user:
-        param_count += 1
-        user_param_idx = param_count
-        params.append(user)
+        user_placeholder = params.add(user)
 
-        # PR Reviewers: filter on sender (correct as-is)
-        user_filter_reviewers = " AND sender = $" + str(user_param_idx)
+        # PR Creators: filter on pr_creator
+        user_filter_creators = f" AND pr_creator = {user_placeholder}"
+        # PR Reviewers: filter on sender
+        user_filter_reviewers = f" AND sender = {user_placeholder}"
         # PR Approvers: filter using label_name with prefix (index-friendly)
-        user_filter_approvers = " AND label_name = 'approved-' || $" + str(user_param_idx)
+        user_filter_approvers = f" AND label_name = 'approved-' || {user_placeholder}"
         # PR LGTM: filter using label_name with prefix (index-friendly)
-        user_filter_lgtm = " AND label_name = 'lgtm-' || $" + str(user_param_idx)
+        user_filter_lgtm = f" AND label_name = 'lgtm-' || {user_placeholder}"
 
-    # Calculate offset for pagination
-    offset = (page - 1) * page_size
-    if offset > MAX_OFFSET:
-        raise HTTPException(
-            status_code=http_status.HTTP_400_BAD_REQUEST,
-            detail=f"Pagination offset exceeds maximum ({MAX_OFFSET}). Use time filters to narrow results.",
-        )
+    # Mark pagination start before adding pagination parameters
+    params.mark_pagination_start()
+    # Add pagination parameters and use placeholders directly
+    page_size_placeholder = params.add(page_size)
+    offset_placeholder = params.add((page - 1) * page_size)
 
-    # Add page_size and offset to params
-    param_count += 1
-    page_size_param = param_count
-    param_count += 1
-    offset_param = param_count
-    params.extend([page_size, offset])
+    # Count query for PR Creators - use shared function
+    pr_creators_count_query = get_pr_creators_count_query(time_filter, repository_filter, user_filter_creators)
 
-    # Count query for PR Creators
-    pr_creators_count_query = (
-        """
-        WITH pr_creators AS (
-            SELECT DISTINCT ON (repository, pr_number)
-                repository,
-                pr_number,
-                CASE event_type
-                    WHEN 'pull_request' THEN pr_author
-                    WHEN 'pull_request_review' THEN pr_author
-                    WHEN 'pull_request_review_comment' THEN pr_author
-                    WHEN 'issue_comment' THEN COALESCE(
-                        pr_author,
-                        payload->'issue'->'user'->>'login'
-                    )
-                END as pr_creator
-            FROM webhooks
-            WHERE pr_number IS NOT NULL
-              AND event_type IN (
-                  'pull_request',
-                  'pull_request_review',
-                  'pull_request_review_comment',
-                  'issue_comment'
-              )
-              """
-        + time_filter
-        + repository_filter
-        + """
-            ORDER BY repository, pr_number, created_at ASC
-        )
-        SELECT COUNT(DISTINCT pr_creator) as total
-        FROM pr_creators
-        WHERE pr_creator IS NOT NULL"""
-        + (" AND pr_creator = $" + str(user_param_idx) if user else "")
-    )
-
-    # Query PR Creators (from any event with pr_number)
-    pr_creators_query = (
-        """
-        WITH pr_creators AS (
-            SELECT DISTINCT ON (repository, pr_number)
-                repository,
-                pr_number,
-                CASE event_type
-                    WHEN 'pull_request' THEN pr_author
-                    WHEN 'pull_request_review' THEN pr_author
-                    WHEN 'pull_request_review_comment' THEN pr_author
-                    WHEN 'issue_comment' THEN COALESCE(
-                        pr_author,
-                        payload->'issue'->'user'->>'login'
-                    )
-                END as pr_creator
-            FROM webhooks
-            WHERE pr_number IS NOT NULL
-              AND event_type IN (
-                  'pull_request',
-                  'pull_request_review',
-                  'pull_request_review_comment',
-                  'issue_comment'
-              )
-              """
-        + time_filter
-        + repository_filter
-        + """
-            ORDER BY repository, pr_number, created_at ASC
-        ),
-        user_prs AS (
-            SELECT
-                pc.pr_creator,
-                w.pr_number,
-                COALESCE(w.pr_commits_count, 0) as commits,
-                COALESCE(w.pr_merged, false) as is_merged,
-                (w.pr_state = 'closed' AND COALESCE(w.pr_merged, false) = false) as is_closed
-            FROM webhooks w
-            INNER JOIN pr_creators pc ON w.repository = pc.repository AND w.pr_number = pc.pr_number
-            WHERE w.pr_number IS NOT NULL
-              """
-        + time_filter
-        + repository_filter
-        + """
-        )
-        SELECT
-            pr_creator as user,
-            COUNT(DISTINCT pr_number) as total_prs,
-            COUNT(DISTINCT pr_number) FILTER (WHERE is_merged) as merged_prs,
-            COUNT(DISTINCT pr_number) FILTER (WHERE is_closed) as closed_prs,
-            ROUND(AVG(max_commits), 1) as avg_commits
-        FROM (
-            SELECT
-                pr_creator,
-                pr_number,
-                MAX(commits) as max_commits,
-                BOOL_OR(is_merged) as is_merged,
-                BOOL_OR(is_closed) as is_closed
-            FROM user_prs
-            WHERE pr_creator IS NOT NULL
-            GROUP BY pr_creator, pr_number
-        ) pr_stats
-        WHERE 1=1"""
-        + (" AND pr_creator = $" + str(user_param_idx) if user else "")
-        + """
-        GROUP BY pr_creator
-        ORDER BY total_prs DESC
-        LIMIT $"""
-        + str(page_size_param)
-        + " OFFSET $"
-        + str(offset_param)
+    # Query PR Creators - use shared function
+    pr_creators_query = get_pr_creators_data_query(
+        time_filter, repository_filter, user_filter_creators, page_size_placeholder, offset_placeholder
     )
 
     # Count query for PR Reviewers
@@ -360,13 +235,11 @@ async def get_metrics_contributors(
         + time_filter
         + user_filter_reviewers
         + repository_filter
-        + """
+        + f"""
         GROUP BY sender
         ORDER BY total_reviews DESC
-        LIMIT $"""
-        + str(page_size_param)
-        + " OFFSET $"
-        + str(offset_param)
+        LIMIT {page_size_placeholder} OFFSET {offset_placeholder}
+        """
     )
 
     # Count query for PR Approvers
@@ -400,13 +273,11 @@ async def get_metrics_contributors(
         + time_filter
         + user_filter_approvers
         + repository_filter
-        + """
+        + f"""
         GROUP BY SUBSTRING(label_name FROM 10)
         ORDER BY total_approvals DESC
-        LIMIT $"""
-        + str(page_size_param)
-        + " OFFSET $"
-        + str(offset_param)
+        LIMIT {page_size_placeholder} OFFSET {offset_placeholder}
+        """
     )
 
     # Count query for LGTM
@@ -439,18 +310,20 @@ async def get_metrics_contributors(
         + time_filter
         + user_filter_lgtm
         + repository_filter
-        + """
+        + f"""
         GROUP BY SUBSTRING(label_name FROM 6)
         ORDER BY total_lgtm DESC
-        LIMIT $"""
-        + str(page_size_param)
-        + " OFFSET $"
-        + str(offset_param)
+        LIMIT {page_size_placeholder} OFFSET {offset_placeholder}
+        """
     )
 
     try:
+        # Get params for count queries (without LIMIT/OFFSET)
+        params_without_pagination = params.get_params_excluding_pagination()
+        # Get all params for data queries
+        all_params = params.get_params()
+
         # Execute all count queries in parallel (params without LIMIT/OFFSET)
-        params_without_pagination = params[:-2]
         (
             pr_creators_total,
             pr_reviewers_total,
@@ -471,10 +344,10 @@ async def get_metrics_contributors(
 
         # Execute all data queries in parallel for better performance
         pr_creators_rows, pr_reviewers_rows, pr_approvers_rows, pr_lgtm_rows = await asyncio.gather(
-            db_manager.fetch(pr_creators_query, *params),
-            db_manager.fetch(pr_reviewers_query, *params),
-            db_manager.fetch(pr_approvers_query, *params),
-            db_manager.fetch(pr_lgtm_query, *params),
+            db_manager.fetch(pr_creators_query, *all_params),
+            db_manager.fetch(pr_reviewers_query, *all_params),
+            db_manager.fetch(pr_approvers_query, *all_params),
+            db_manager.fetch(pr_lgtm_query, *all_params),
         )
 
         # Format PR creators
@@ -520,12 +393,7 @@ async def get_metrics_contributors(
             for row in pr_lgtm_rows
         ]
 
-        # Calculate pagination metadata for each category
-        total_pages_creators = math.ceil(pr_creators_total / page_size) if pr_creators_total > 0 else 0
-        total_pages_reviewers = math.ceil(pr_reviewers_total / page_size) if pr_reviewers_total > 0 else 0
-        total_pages_approvers = math.ceil(pr_approvers_total / page_size) if pr_approvers_total > 0 else 0
-        total_pages_lgtm = math.ceil(pr_lgtm_total / page_size) if pr_lgtm_total > 0 else 0
-
+        # Calculate pagination metadata for each category using shared formatter
         return {
             "time_range": {
                 "start_time": start_datetime.isoformat() if start_datetime else None,
@@ -533,55 +401,24 @@ async def get_metrics_contributors(
             },
             "pr_creators": {
                 "data": pr_creators,
-                "pagination": {
-                    "total": pr_creators_total,
-                    "page": page,
-                    "page_size": page_size,
-                    "total_pages": total_pages_creators,
-                    "has_next": page < total_pages_creators,
-                    "has_prev": page > 1,
-                },
+                "pagination": format_pagination_metadata(pr_creators_total, page, page_size),
             },
             "pr_reviewers": {
                 "data": pr_reviewers,
-                "pagination": {
-                    "total": pr_reviewers_total,
-                    "page": page,
-                    "page_size": page_size,
-                    "total_pages": total_pages_reviewers,
-                    "has_next": page < total_pages_reviewers,
-                    "has_prev": page > 1,
-                },
+                "pagination": format_pagination_metadata(pr_reviewers_total, page, page_size),
             },
             "pr_approvers": {
                 "data": pr_approvers,
-                "pagination": {
-                    "total": pr_approvers_total,
-                    "page": page,
-                    "page_size": page_size,
-                    "total_pages": total_pages_approvers,
-                    "has_next": page < total_pages_approvers,
-                    "has_prev": page > 1,
-                },
+                "pagination": format_pagination_metadata(pr_approvers_total, page, page_size),
             },
             "pr_lgtm": {
                 "data": pr_lgtm,
-                "pagination": {
-                    "total": pr_lgtm_total,
-                    "page": page,
-                    "page_size": page_size,
-                    "total_pages": total_pages_lgtm,
-                    "has_next": page < total_pages_lgtm,
-                    "has_prev": page > 1,
-                },
+                "pagination": format_pagination_metadata(pr_lgtm_total, page, page_size),
             },
         }
-    except asyncio.CancelledError as ex:
+    except asyncio.CancelledError:
         LOGGER.debug("Contributors metrics request was cancelled")
-        raise HTTPException(
-            status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Request was cancelled",
-        ) from ex
+        raise  # Re-raise directly, let FastAPI handle
     except HTTPException:
         raise
     except Exception as ex:

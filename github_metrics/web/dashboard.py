@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -69,13 +70,21 @@ class MetricsDashboardController:
             FileNotFoundError: If template file cannot be found
             IOError: If template file cannot be read
         """
-        template_path = Path(__file__).parent / "templates" / "metrics_dashboard.html"
-
         try:
-            with open(template_path, encoding="utf-8") as f:
-                return f.read()
+            # Read the template file
+            template_path = Path(__file__).parent / "templates" / "metrics_dashboard.html"
+            html_content = template_path.read_text(encoding="utf-8")
+
+            # Use timestamp for cache busting to ensure fresh JS/CSS files
+            cache_bust = int(time.time())
+
+            # Simple string replacement for cache_bust
+            html_content = html_content.replace("{{ cache_bust }}", str(cache_bust))
+
+            return html_content
+
         except FileNotFoundError:
-            self.logger.exception(f"Metrics dashboard template not found at {template_path}")
+            self.logger.exception("Metrics dashboard template not found")
             return self._get_fallback_html()
         except OSError:
             self.logger.exception("Failed to read metrics dashboard template")

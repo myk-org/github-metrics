@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import math
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
@@ -12,12 +11,11 @@ from simple_logger.logger import get_logger
 
 from github_metrics.database import DatabaseManager
 from github_metrics.utils.datetime_utils import parse_datetime_string
+from github_metrics.utils.query_builders import QueryParams, build_pagination_sql, build_time_filter
+from github_metrics.utils.response_formatters import format_paginated_response
 
 # Module-level logger
 LOGGER = get_logger(name="github_metrics.routes.api.webhooks")
-
-# Maximum pagination offset to prevent expensive deep queries
-MAX_OFFSET = 10000
 
 router = APIRouter(prefix="/api/metrics")
 
@@ -33,7 +31,7 @@ async def get_webhook_events(
     start_time: str | None = Query(default=None, description="Start time in ISO 8601 format"),
     end_time: str | None = Query(default=None, description="End time in ISO 8601 format"),
     page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
-    page_size: int = Query(default=100, ge=1, le=1000, description="Items per page"),
+    page_size: int = Query(default=100, ge=1, description="Items per page"),
 ) -> dict[str, Any]:
     """Retrieve webhook events with filtering and pagination."""
     if db_manager is None:
@@ -45,7 +43,9 @@ async def get_webhook_events(
     start_datetime = parse_datetime_string(start_time, "start_time")
     end_datetime = parse_datetime_string(end_time, "end_time")
 
-    # Build query
+    # Build query with QueryParams
+    params = QueryParams()
+
     query = """
         SELECT
             delivery_id, repository, event_type, action, pr_number, sender,
@@ -53,47 +53,34 @@ async def get_webhook_events(
             api_calls_count, token_spend, token_remaining, error_message
         FROM webhooks WHERE 1=1
     """
-    params: list[Any] = []
-    param_idx = 1
 
     if repository:
-        query += " AND repository = $" + str(param_idx)
-        params.append(repository)
-        param_idx += 1
+        query += f" AND repository = {params.add(repository)}"
 
     if event_type:
-        query += " AND event_type = $" + str(param_idx)
-        params.append(event_type)
-        param_idx += 1
+        query += f" AND event_type = {params.add(event_type)}"
 
     if status:
-        query += " AND status = $" + str(param_idx)
-        params.append(status)
-        param_idx += 1
+        query += f" AND status = {params.add(status)}"
 
-    if start_datetime:
-        query += " AND created_at >= $" + str(param_idx)
-        params.append(start_datetime)
-        param_idx += 1
+    # Add time filters
+    query += build_time_filter(params, start_datetime, end_datetime)
 
-    if end_datetime:
-        query += " AND created_at <= $" + str(param_idx)
-        params.append(end_datetime)
-        param_idx += 1
-
-    offset = (page - 1) * page_size
-    if offset > MAX_OFFSET:
-        raise HTTPException(
-            status_code=http_status.HTTP_400_BAD_REQUEST,
-            detail=f"Pagination offset exceeds maximum ({MAX_OFFSET}). Use time filters to narrow results.",
-        )
+    # Build count query before adding pagination
     count_query = "SELECT COUNT(*) FROM (" + query + ") AS filtered"
-    query += " ORDER BY created_at DESC LIMIT $" + str(param_idx) + " OFFSET $" + str(param_idx + 1)
-    params.extend([page_size, offset])
+    # Capture params snapshot before adding pagination (for count query)
+    count_params = params.get_params()
+
+    # Add pagination to main query (modifies params)
+    pagination_sql = build_pagination_sql(params, page, page_size)
+    query += " ORDER BY created_at DESC " + pagination_sql
 
     try:
-        total_count = await db_manager.fetchval(count_query, *params[:-2])
-        rows = await db_manager.fetch(query, *params)
+        # Get all params for data query (includes pagination)
+        all_params = params.get_params()
+
+        total_count = await db_manager.fetchval(count_query, *count_params)
+        rows = await db_manager.fetch(query, *all_params)
 
         events = [
             {
@@ -115,19 +102,7 @@ async def get_webhook_events(
             for row in rows
         ]
 
-        total_pages = math.ceil(total_count / page_size) if total_count > 0 else 0
-
-        return {
-            "data": events,
-            "pagination": {
-                "total": total_count,
-                "page": page,
-                "page_size": page_size,
-                "total_pages": total_pages,
-                "has_next": page < total_pages,
-                "has_prev": page > 1,
-            },
-        }
+        return format_paginated_response(events, total_count, page, page_size)
     except asyncio.CancelledError:
         raise
     except HTTPException:

@@ -9,7 +9,8 @@ Tests dashboard functionality including:
 
 from __future__ import annotations
 
-from unittest.mock import Mock, mock_open, patch
+from pathlib import Path
+from unittest.mock import Mock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -78,7 +79,7 @@ class TestMetricsDashboardController:
         """Test _get_dashboard_html returns template content."""
         mock_template_content = "<html><body>Test Dashboard</body></html>"
 
-        with patch("builtins.open", mock_open(read_data=mock_template_content)):
+        with patch.object(Path, "read_text", return_value=mock_template_content):
             result = dashboard_controller._get_dashboard_html()
 
             assert result == mock_template_content
@@ -89,7 +90,7 @@ class TestMetricsDashboardController:
         mock_logger: Mock,
     ) -> None:
         """Test _get_dashboard_html returns fallback on FileNotFoundError."""
-        with patch("builtins.open", side_effect=FileNotFoundError("Template not found")):
+        with patch.object(Path, "read_text", side_effect=FileNotFoundError("Template not found")):
             result = dashboard_controller._get_dashboard_html()
 
             assert "Metrics Dashboard Template Error" in result
@@ -102,7 +103,7 @@ class TestMetricsDashboardController:
         mock_logger: Mock,
     ) -> None:
         """Test _get_dashboard_html returns fallback on OSError."""
-        with patch("builtins.open", side_effect=OSError("Permission denied")):
+        with patch.object(Path, "read_text", side_effect=OSError("Permission denied")):
             result = dashboard_controller._get_dashboard_html()
 
             assert "Metrics Dashboard Template Error" in result

@@ -79,7 +79,7 @@ class TestDashboardPageLoad:
         await expect(refresh_button).to_have_text("Refresh")
 
     async def test_all_dashboard_sections_render(self, page_with_js_coverage: Page) -> None:
-        """Verify all dashboard sections are present."""
+        """Verify all dashboard sections are present on Overview page."""
         await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
         await page_with_js_coverage.wait_for_load_state("networkidle")
 
@@ -92,13 +92,6 @@ class TestDashboardPageLoad:
         recent_events = page_with_js_coverage.locator('#page-overview .chart-container[data-section="recent-events"]')
         await expect(recent_events).to_be_attached()
         await expect(recent_events.locator("h2")).to_have_text("Recent Events")
-
-        # PR Contributors section
-        pr_contributors = page_with_js_coverage.locator(
-            '#page-overview .chart-container[data-section="pr-contributors"]'
-        )
-        await expect(pr_contributors).to_be_attached()
-        await expect(pr_contributors.locator("h2")).to_have_text("PR Contributors")
 
         # User PRs section
         user_prs = page_with_js_coverage.locator('#page-overview .chart-container[data-section="user-prs"]')
@@ -244,63 +237,6 @@ class TestDashboardTables:
         await expect(headers.nth(2)).to_have_text("Event")
         await expect(headers.nth(3)).to_have_text("Status")
 
-    async def test_pr_creators_table_structure(self, page_with_js_coverage: Page) -> None:
-        """Verify PR creators table has correct structure."""
-        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
-
-        table = page_with_js_coverage.locator("#prCreatorsTable")
-        await expect(table).to_be_visible()
-
-        # Check headers
-        headers = table.locator("thead th")
-        await expect(headers).to_have_count(5)
-        await expect(headers.nth(0)).to_have_text("User")
-        await expect(headers.nth(1)).to_have_text("Total PRs")
-        await expect(headers.nth(2)).to_have_text("Merged")
-        await expect(headers.nth(3)).to_have_text("Closed")
-        await expect(headers.nth(4)).to_have_text("Avg Commits")
-
-        # Table body should exist
-        tbody = table.locator("tbody#pr-creators-table-body")
-        await expect(tbody).to_be_visible()
-
-    async def test_pr_reviewers_table_structure(self, page_with_js_coverage: Page) -> None:
-        """Verify PR reviewers table has correct structure."""
-        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
-
-        table = page_with_js_coverage.locator("#prReviewersTable")
-        await expect(table).to_be_visible()
-
-        # Check headers
-        headers = table.locator("thead th")
-        await expect(headers).to_have_count(4)
-        await expect(headers.nth(0)).to_have_text("User")
-        await expect(headers.nth(1)).to_have_text("Total Reviews")
-        await expect(headers.nth(2)).to_have_text("PRs Reviewed")
-        await expect(headers.nth(3)).to_have_text("Avg/PR")
-
-        # Table body should exist
-        tbody = table.locator("tbody#pr-reviewers-table-body")
-        await expect(tbody).to_be_visible()
-
-    async def test_pr_approvers_table_structure(self, page_with_js_coverage: Page) -> None:
-        """Verify PR approvers table has correct structure."""
-        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
-
-        table = page_with_js_coverage.locator("#prApproversTable")
-        await expect(table).to_be_visible()
-
-        # Check headers
-        headers = table.locator("thead th")
-        await expect(headers).to_have_count(3)
-        await expect(headers.nth(0)).to_have_text("User")
-        await expect(headers.nth(1)).to_have_text("Total Approvals")
-        await expect(headers.nth(2)).to_have_text("PRs Approved")
-
-        # Table body should exist
-        tbody = table.locator("tbody#pr-approvers-table-body")
-        await expect(tbody).to_be_visible()
-
     async def test_user_prs_table_structure(self, page_with_js_coverage: Page) -> None:
         """Verify user PRs table has correct structure."""
         await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
@@ -325,7 +261,7 @@ class TestDashboardTables:
         await expect(tbody).to_be_visible()
 
     async def test_sortable_table_headers(self, page_with_js_coverage: Page) -> None:
-        """Verify table headers have sortable class."""
+        """Verify table headers have sortable class on Overview page."""
         await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
 
         # Top repositories sortable headers
@@ -336,9 +272,9 @@ class TestDashboardTables:
         recent_events_headers = page_with_js_coverage.locator("#recentEventsTable thead th.sortable")
         await expect(recent_events_headers).to_have_count(4)
 
-        # PR creators sortable headers
-        pr_creators_headers = page_with_js_coverage.locator("#prCreatorsTable thead th.sortable")
-        await expect(pr_creators_headers).to_have_count(5)
+        # User PRs sortable headers
+        user_prs_headers = page_with_js_coverage.locator("#userPrsTable thead th.sortable")
+        await expect(user_prs_headers).to_have_count(8)
 
 
 @pytest.mark.usefixtures("dev_server")
@@ -398,13 +334,6 @@ class TestDashboardCollapsiblePanels:
         collapse_btn = page_with_js_coverage.locator('[data-section="recent-events"] .collapse-btn')
         await expect(collapse_btn).to_be_visible()
 
-    async def test_pr_contributors_has_collapse_button(self, page_with_js_coverage: Page) -> None:
-        """Verify PR contributors section has collapse button."""
-        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
-
-        collapse_btn = page_with_js_coverage.locator('[data-section="pr-contributors"] .collapse-btn')
-        await expect(collapse_btn).to_be_visible()
-
     async def test_user_prs_has_collapse_button(self, page_with_js_coverage: Page) -> None:
         """Verify user PRs section has collapse button."""
         await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
@@ -424,12 +353,12 @@ class TestDashboardCollapsiblePanels:
         await expect(collapse_btn).to_be_visible()
 
     async def test_collapse_all_sections(self, page_with_js_coverage: Page) -> None:
-        """Test collapsing all collapsible sections."""
+        """Test collapsing all collapsible sections on Overview page."""
         await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
         await page_with_js_coverage.wait_for_load_state("networkidle")
 
-        # Collapse each section
-        sections = ["control-panel", "top-repositories", "recent-events", "pr-contributors", "user-prs"]
+        # Collapse each section on Overview page
+        sections = ["control-panel", "top-repositories", "recent-events", "user-prs"]
 
         for section in sections:
             btn = page_with_js_coverage.locator(f'.collapse-btn[data-section="{section}"]')
@@ -551,7 +480,7 @@ class TestDashboardResponsiveness:
             page_with_js_coverage.locator('#page-overview .chart-container[data-section="recent-events"]')
         ).to_be_visible()
         await expect(
-            page_with_js_coverage.locator('#page-overview .chart-container[data-section="pr-contributors"]')
+            page_with_js_coverage.locator('#page-overview .chart-container[data-section="user-prs"]')
         ).to_be_visible()
 
     async def test_dashboard_renders_on_desktop_viewport(self, page_with_js_coverage: Page) -> None:
@@ -568,9 +497,6 @@ class TestDashboardResponsiveness:
             page_with_js_coverage.locator('#page-overview .chart-container[data-section="recent-events"]')
         ).to_be_visible()
         await expect(
-            page_with_js_coverage.locator('#page-overview .chart-container[data-section="pr-contributors"]')
-        ).to_be_visible()
-        await expect(
             page_with_js_coverage.locator('#page-overview .chart-container[data-section="user-prs"]')
         ).to_be_visible()
 
@@ -585,7 +511,7 @@ class TestDashboardStaticAssets:
         await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
 
         # Check CSS link exists
-        css_link = page_with_js_coverage.locator('link[href="/static/css/metrics_dashboard.css"]')
+        css_link = page_with_js_coverage.locator('link[href^="/static/css/metrics_dashboard.css"]')
         await expect(css_link).to_be_attached()
 
     async def test_javascript_modules_load(self, page_with_js_coverage: Page) -> None:
@@ -805,28 +731,13 @@ class TestDashboardTableUpdates:
         await expect(page_with_js_coverage.locator("#topRepositoriesTable")).to_be_visible()
 
     async def test_table_body_content_loads(self, page_with_js_coverage: Page) -> None:
-        """Verify table bodies can load content."""
+        """Verify table bodies can load content on Overview page."""
         await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
         await page_with_js_coverage.wait_for_load_state("networkidle")
 
-        # Check table bodies exist and are ready for content
+        # Check table bodies exist and are ready for content on Overview page
         await expect(page_with_js_coverage.locator("#repository-table-body")).to_be_visible()
-        await expect(page_with_js_coverage.locator("#pr-creators-table-body")).to_be_visible()
-        await expect(page_with_js_coverage.locator("#pr-reviewers-table-body")).to_be_visible()
-
-    async def test_contributors_tabs_switch(self, page_with_js_coverage: Page) -> None:
-        """Test switching between contributor tabs."""
-        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
-        await page_with_js_coverage.wait_for_load_state("networkidle")
-
-        # Look for tab buttons in PR contributors section
-        tabs = page_with_js_coverage.locator('[data-section="pr-contributors"] .tab-btn, .contributor-tab')
-        count = await tabs.count()
-
-        if count > 1:
-            # Click second tab
-            await tabs.nth(1).click()
-            await expect(tabs.nth(1)).to_have_class(re.compile(r"\bactive\b"), timeout=TIMEOUT)
+        await expect(page_with_js_coverage.locator("#user-prs-table-body")).to_be_visible()
 
 
 @pytest.mark.usefixtures("dev_server")
@@ -919,13 +830,13 @@ class TestDashboardPagination:
     """Tests for table data loading."""
 
     async def test_tables_load_data(self, page_with_js_coverage: Page) -> None:
-        """Verify tables attempt to load data."""
+        """Verify tables attempt to load data on Overview page."""
         await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
         await page_with_js_coverage.wait_for_load_state("networkidle")
 
-        # Tables should be present and ready
+        # Tables should be present and ready on Overview page
         await expect(page_with_js_coverage.locator("#topRepositoriesTable")).to_be_visible()
-        await expect(page_with_js_coverage.locator("#prCreatorsTable")).to_be_visible()
+        await expect(page_with_js_coverage.locator("#userPrsTable")).to_be_visible()
 
     async def test_table_sorting_by_click(self, page_with_js_coverage: Page) -> None:
         """Verify table headers are sortable by click."""
@@ -1145,20 +1056,6 @@ class TestDashboardTableInteractions:
         # Table should still be visible
         await expect(page_with_js_coverage.locator("#topRepositoriesTable")).to_be_visible()
 
-    async def test_sort_pr_creators_table(self, page_with_js_coverage: Page) -> None:
-        """Test sorting PR creators table."""
-        await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
-        await page_with_js_coverage.wait_for_load_state("networkidle")
-
-        headers = page_with_js_coverage.locator("#prCreatorsTable th.sortable")
-        count = await headers.count()
-
-        for i in range(min(count, 3)):
-            await headers.nth(i).click()
-
-        # Table should still be visible
-        await expect(page_with_js_coverage.locator("#prCreatorsTable")).to_be_visible()
-
     async def test_sort_recent_events_table(self, page_with_js_coverage: Page) -> None:
         """Test sorting recent events table."""
         await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
@@ -1257,12 +1154,10 @@ class TestDashboardDownloadButtons:
         await page_with_js_coverage.wait_for_load_state("networkidle")
 
         # Define Overview page sections that should have download buttons (using camelCase as in HTML)
+        # Overview page only has: topRepositories, recentEvents, userPrs
         sections = [
             "topRepositories",
             "recentEvents",
-            "prCreators",
-            "prReviewers",
-            "prApprovers",
             "userPrs",
         ]
 
@@ -1275,17 +1170,18 @@ class TestDashboardDownloadButtons:
             await expect(json_button).to_be_visible()
 
     async def test_download_button_attributes(self, page_with_js_coverage: Page) -> None:
-        """Verify download buttons have correct data attributes."""
+        """Verify download buttons have correct data attributes on Overview page."""
         await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
         await page_with_js_coverage.wait_for_load_state("networkidle")
 
-        # Get all download buttons
-        download_buttons = page_with_js_coverage.locator(".download-btn")
+        # Get all download buttons on Overview page
+        download_buttons = page_with_js_coverage.locator("#page-overview .download-btn")
         button_count = await download_buttons.count()
 
-        # Should have 16 buttons (8 sections x 2 formats: 6 overview + 2 contributors)
-        # Contributors page sections (turnaroundByRepo, turnaroundByReviewer) are counted separately
-        await expect(download_buttons).to_have_count(16)
+        # Should have 6 buttons on Overview page (3 sections x 2 formats)
+        # Overview page: 3 sections (topRepositories, recentEvents, userPrs)
+        # Total: 3 sections x 2 formats (CSV + JSON) = 6 buttons
+        await expect(download_buttons).to_have_count(6)
 
         # Verify each button has required attributes
         for i in range(button_count):
@@ -1303,7 +1199,7 @@ class TestDashboardDownloadButtons:
             assert "download-btn" in class_attr, f"Missing download-btn class: {class_attr}"
 
     async def test_download_button_visibility(self, page_with_js_coverage: Page) -> None:
-        """Verify download buttons are visible and clickable."""
+        """Verify download buttons are visible and clickable on Overview page."""
         await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
         await page_with_js_coverage.wait_for_load_state("networkidle")
 
@@ -1332,37 +1228,6 @@ class TestDashboardDownloadButtons:
         await expect(recent_events_csv).to_be_enabled()
         await expect(recent_events_json).to_be_visible()
         await expect(recent_events_json).to_be_enabled()
-
-        # Test PR creators download buttons
-        pr_creators_csv = page_with_js_coverage.locator('.download-btn[data-section="prCreators"][data-format="csv"]')
-        pr_creators_json = page_with_js_coverage.locator('.download-btn[data-section="prCreators"][data-format="json"]')
-
-        await expect(pr_creators_csv).to_be_visible()
-        await expect(pr_creators_csv).to_be_enabled()
-        await expect(pr_creators_json).to_be_visible()
-        await expect(pr_creators_json).to_be_enabled()
-
-        # Test PR reviewers download buttons
-        pr_reviewers_csv = page_with_js_coverage.locator('.download-btn[data-section="prReviewers"][data-format="csv"]')
-        pr_reviewers_json = page_with_js_coverage.locator(
-            '.download-btn[data-section="prReviewers"][data-format="json"]'
-        )
-
-        await expect(pr_reviewers_csv).to_be_visible()
-        await expect(pr_reviewers_csv).to_be_enabled()
-        await expect(pr_reviewers_json).to_be_visible()
-        await expect(pr_reviewers_json).to_be_enabled()
-
-        # Test PR approvers download buttons
-        pr_approvers_csv = page_with_js_coverage.locator('.download-btn[data-section="prApprovers"][data-format="csv"]')
-        pr_approvers_json = page_with_js_coverage.locator(
-            '.download-btn[data-section="prApprovers"][data-format="json"]'
-        )
-
-        await expect(pr_approvers_csv).to_be_visible()
-        await expect(pr_approvers_csv).to_be_enabled()
-        await expect(pr_approvers_json).to_be_visible()
-        await expect(pr_approvers_json).to_be_enabled()
 
         # Test user PRs download buttons
         user_prs_csv = page_with_js_coverage.locator('.download-btn[data-section="userPrs"][data-format="csv"]')
@@ -1461,16 +1326,14 @@ class TestDashboardDownloadButtons:
             assert len(title_attr) > 0, f"Button {i} has empty title attribute"
 
     async def test_all_sections_have_both_download_formats(self, page_with_js_coverage: Page) -> None:
-        """Verify each section has both CSV and JSON download options."""
+        """Verify each section has both CSV and JSON download options on Overview page."""
         await page_with_js_coverage.goto(DASHBOARD_URL, timeout=TIMEOUT)
         await page_with_js_coverage.wait_for_load_state("networkidle")
 
+        # Overview page only has these sections
         sections = [
             "topRepositories",
             "recentEvents",
-            "prCreators",
-            "prReviewers",
-            "prApprovers",
             "userPrs",
         ]
 

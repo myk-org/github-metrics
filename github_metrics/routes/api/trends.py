@@ -11,6 +11,7 @@ from simple_logger.logger import get_logger
 
 from github_metrics.database import DatabaseManager
 from github_metrics.utils.datetime_utils import parse_datetime_string
+from github_metrics.utils.query_builders import QueryParams, build_time_filter
 
 # Module-level logger
 LOGGER = get_logger(name="github_metrics.routes.api.trends")
@@ -67,30 +68,17 @@ async def get_metrics_trends(
     start_datetime = parse_datetime_string(start_time, "start_time")
     end_datetime = parse_datetime_string(end_time, "end_time")
 
+    params = QueryParams()
     where_clause = "WHERE 1=1"
-    params: list[Any] = []
-    param_idx = 1
-
-    if start_datetime:
-        where_clause += " AND created_at >= $" + str(param_idx)
-        params.append(start_datetime)
-        param_idx += 1
-
-    if end_datetime:
-        where_clause += " AND created_at <= $" + str(param_idx)
-        params.append(end_datetime)
-        param_idx += 1
+    where_clause += build_time_filter(params, start_datetime, end_datetime)
 
     # Add bucket parameter
-    params.append(bucket)
-    bucket_param_idx = param_idx
+    bucket_placeholder = params.add(bucket)
 
     query = (
-        """
+        f"""
         SELECT
-            date_trunc($"""
-        + str(bucket_param_idx)
-        + """, created_at) as bucket,
+            date_trunc({bucket_placeholder}, created_at) as bucket,
             COUNT(*) as total_events,
             COUNT(*) FILTER (WHERE status = 'success') as successful_events,
             COUNT(*) FILTER (WHERE status IN ('error', 'partial')) as failed_events
@@ -104,7 +92,7 @@ async def get_metrics_trends(
     )
 
     try:
-        rows = await db_manager.fetch(query, *params)
+        rows = await db_manager.fetch(query, *params.get_params())
 
         trends = [
             {

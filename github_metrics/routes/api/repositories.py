@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
@@ -11,12 +10,11 @@ from simple_logger.logger import get_logger
 
 from github_metrics.database import DatabaseManager
 from github_metrics.utils.datetime_utils import parse_datetime_string
+from github_metrics.utils.query_builders import QueryParams, build_pagination_sql, build_time_filter
+from github_metrics.utils.response_formatters import format_pagination_metadata
 
 # Module-level logger
 LOGGER = get_logger(name="github_metrics.routes.api.repositories")
-
-# Maximum pagination offset to prevent expensive deep queries
-MAX_OFFSET = 10000
 
 router = APIRouter(prefix="/api/metrics")
 
@@ -29,7 +27,7 @@ async def get_repository_statistics(
     start_time: str | None = Query(default=None, description="Start time in ISO 8601 format"),
     end_time: str | None = Query(default=None, description="End time in ISO 8601 format"),
     page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
-    page_size: int = Query(default=10, ge=1, le=100, description="Items per page"),
+    page_size: int = Query(default=10, ge=1, description="Items per page"),
 ) -> dict[str, Any]:
     """Get aggregated statistics per repository."""
     if db_manager is None:
@@ -42,32 +40,17 @@ async def get_repository_statistics(
         start_datetime = parse_datetime_string(start_time, "start_time")
         end_datetime = parse_datetime_string(end_time, "end_time")
 
+        params = QueryParams()
         where_clause = "WHERE 1=1"
-        params: list[Any] = []
-        param_idx = 1
-
-        if start_datetime:
-            where_clause += " AND created_at >= $" + str(param_idx)
-            params.append(start_datetime)
-            param_idx += 1
-
-        if end_datetime:
-            where_clause += " AND created_at <= $" + str(param_idx)
-            params.append(end_datetime)
-            param_idx += 1
-
-        offset = (page - 1) * page_size
-        if offset > MAX_OFFSET:
-            raise HTTPException(
-                status_code=http_status.HTTP_400_BAD_REQUEST,
-                detail=f"Pagination offset exceeds maximum ({MAX_OFFSET}). Use time filters to narrow results.",
-            )
+        where_clause += build_time_filter(params, start_datetime, end_datetime)
 
         count_query = (
             """
         SELECT COUNT(DISTINCT repository) as total FROM webhooks """
             + where_clause
         )
+
+        pagination_sql = build_pagination_sql(params, page, page_size)
 
         query = (
             """
@@ -89,14 +72,17 @@ async def get_repository_statistics(
             + """
         GROUP BY repository
         ORDER BY total_events DESC
-        LIMIT $"""
-            + str(param_idx)
-            + " OFFSET $"
-            + str(param_idx + 1)
+        """
+            + pagination_sql
         )
-        params.extend([page_size, offset])
-        total_count = await db_manager.fetchval(count_query, *params[:-2])
-        rows = await db_manager.fetch(query, *params)
+
+        # Get params for count query (without LIMIT/OFFSET)
+        count_params = params.get_params_excluding_pagination()
+        # Get all params for data query
+        all_params = params.get_params()
+
+        total_count = await db_manager.fetchval(count_query, *count_params)
+        rows = await db_manager.fetch(query, *all_params)
 
         repositories = [
             {
@@ -112,22 +98,13 @@ async def get_repository_statistics(
             for row in rows
         ]
 
-        total_pages = math.ceil(total_count / page_size) if total_count > 0 else 0
-
         return {
             "time_range": {
                 "start_time": start_datetime.isoformat() if start_datetime else None,
                 "end_time": end_datetime.isoformat() if end_datetime else None,
             },
             "repositories": repositories,
-            "pagination": {
-                "total": total_count,
-                "page": page,
-                "page_size": page_size,
-                "total_pages": total_pages,
-                "has_next": page < total_pages,
-                "has_prev": page > 1,
-            },
+            "pagination": format_pagination_metadata(total_count, page, page_size),
         }
     except HTTPException:
         raise

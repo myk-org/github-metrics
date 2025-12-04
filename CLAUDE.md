@@ -177,6 +177,63 @@ raise KeyError("Required field missing")  # Clear error
 
 ---
 
+## STRICT RULE: Code Reuse and Search-First Development
+
+**CRITICAL: Always search for existing code before implementing new functionality.**
+
+### Search-First Rule
+
+**Before writing ANY new code:**
+1. **SEARCH** the codebase for existing implementations
+2. **CHECK** utility modules (`utils/`) for shared functions
+3. **VERIFY** no similar logic exists in other files
+4. **ASK** if unsure whether something already exists
+
+❌ **NEVER** duplicate logic that exists elsewhere
+❌ **NEVER** add inline SQL/logic when a shared module exists
+❌ **NEVER** implement a pattern differently in two places
+
+### Code Unification Rules
+
+**All shared logic MUST live in dedicated modules:**
+
+| Logic Type | Location |
+|------------|----------|
+| Role-based queries (PR creators, reviewers, etc.) | `utils/contributor_queries.py` |
+| SQL query building (params, filters, pagination) | `utils/query_builders.py` |
+| Response formatting (pagination metadata) | `utils/response_formatters.py` |
+| Time/date utilities | `utils/datetime_utils.py` |
+| Security utilities | `utils/security.py` |
+
+**When multiple endpoints need the same logic:**
+1. Create a shared function in the appropriate `utils/` module
+2. Have ALL endpoints call that shared function
+3. NEVER copy-paste and modify - always extract to shared code
+
+### Single Source of Truth Principle
+
+**Each piece of business logic has ONE canonical implementation:**
+
+- If `contributors.py` and `user_prs.py` both need PR creator logic → it lives in `contributor_queries.py`
+- If table counts and popup counts should match → they use the SAME query function
+- If you find duplicate logic → STOP and refactor to shared module first
+
+### Enforcement
+
+Before implementing:
+
+```bash
+1. grep/search for similar patterns
+2. Check utils/ modules
+3. If exists → USE IT
+4. If doesn't exist → CREATE shared function, then use it
+5. NEVER inline logic that could be shared
+```
+
+**Rationale:** Duplicate code leads to bugs when logic drifts between copies. We spent significant effort fixing count mismatches between table and popup because queries weren't unified. This is preventable.
+
+---
+
 ## Architecture Overview
 
 This is a FastAPI-based metrics service that receives GitHub webhooks, stores event data in PostgreSQL, and provides a real-time dashboard for monitoring.
@@ -794,4 +851,123 @@ Dashboard must be usable on mobile, tablet, and desktop:
 
 <!-- ❌ WRONG - No accessible label -->
 <button class="download-btn">📥</button>
+```
+
+### Component Reusability
+
+**MANDATORY:** Always reuse existing UI components instead of duplicating code.
+
+**Rules:**
+
+- Create reusable JavaScript components for repeated UI elements
+- Never copy-paste HTML/JS for UI elements - create a component class instead
+- Same UI elements across pages MUST have unified look and behavior
+- Components should be in `/github_metrics/web/static/js/components/`
+
+**Mandatory Reusable Components:**
+
+- **Pagination** - Table pagination with page size selector
+- **Modal** - Popup dialogs with close/cancel/submit actions
+- **DataTable** - Sortable tables with column headers (see [Table Features](#table-features))
+- **TimeFilter** - Date range picker with preset ranges
+- **ComboBox** - Searchable dropdown with keyboard navigation
+- **TableToolbar** - Download buttons (CSV/JSON) for data export
+
+**Accessibility Requirements:**
+
+All shared components MUST meet WCAG 2.1 AA standards (see [Accessibility](#accessibility)):
+
+- **Keyboard navigation** - All interactive elements accessible via keyboard (Tab, Enter, Escape)
+- **ARIA roles and labels** - Proper semantic markup (`role`, `aria-label`, `aria-describedby`)
+- **Focus management** - Visible focus indicators, logical tab order, focus trapping in modals
+- **Screen reader support** - Announce state changes, provide text alternatives for visual elements
+
+**Component Contract:**
+
+Each reusable component should define:
+
+```javascript
+/**
+ * Component responsibilities:
+ * - Render: Display the component UI in the specified container
+ * - State: Manage internal state (current page, selected items, etc.)
+ * - Events: Emit events for parent components (onPageChange, onSelect, etc.)
+ * - API: Public methods for external control (setPage, reset, destroy)
+ * - Tests: Unit tests for rendering, state changes, and user interactions
+ */
+```
+
+**Example:**
+
+```javascript
+// ❌ WRONG - Duplicated pagination HTML in template
+<div class="pagination-controls">...</div> // Copied 4 times
+
+// ✅ CORRECT - Reusable Pagination component
+import { Pagination } from './components/pagination.js';
+const pagination = new Pagination({
+    container: element,
+    totalItems: 100,
+    pageSize: 25,
+    onPageChange: (page) => fetchData(page)
+});
+```
+
+---
+
+## API Design Principles
+
+### No Artificial Result Limits
+
+**MANDATORY:** Neither API endpoints nor frontend code may impose artificial limits on data access.
+
+#### Backend Rules
+
+- ❌ **NEVER** use `le=100` or similar upper bounds on `page_size` parameters
+- ❌ **NEVER** use `MAX_OFFSET` or similar constants to cap pagination depth
+- ❌ **NEVER** hardcode `LIMIT` values for user-facing data (aggregation queries are OK)
+- ✅ **DO** use pagination for large datasets (page/page_size parameters)
+- ✅ **DO** let clients request any page_size they need
+- ✅ **DO** return total count in pagination metadata
+
+#### Frontend Rules
+
+- ❌ **NEVER** hardcode `page_size: 100` or similar limits in API calls
+- ❌ **NEVER** fetch a fixed number of items and do client-side pagination only
+- ✅ **DO** use server-side pagination with proper page navigation
+- ✅ **DO** let users navigate through ALL their data via pagination controls
+- ✅ **DO** use the reusable Pagination component for consistency
+
+**Rationale:**
+
+- Users must be able to access ALL their data, not just the first N items
+- Artificial limits cause UX issues when users have more data than the limit
+- Pagination handles large datasets efficiently without arbitrary caps
+- Deep pagination may be slow, but that's the user's choice
+
+**Example - Backend:**
+
+```python
+# ❌ WRONG - Artificial limits
+page_size: int = Query(default=10, ge=1, le=100)
+MAX_OFFSET = 10000
+if offset > MAX_OFFSET:
+    raise HTTPException(...)
+
+# ✅ CORRECT - No upper limit
+page_size: int = Query(default=10, ge=1)
+# Let pagination work naturally
+```
+
+**Example - Frontend:**
+
+```javascript
+// ❌ WRONG - Hardcoded limit, client-side pagination
+const response = await fetch(`/api/data?page_size=100`);
+const allData = response.data;  // Only 100 items!
+// Then paginate client-side... user can't see item #101
+
+// ✅ CORRECT - Server-side pagination
+const response = await fetch(`/api/data?page=${currentPage}&page_size=${pageSize}`);
+// Show pagination controls, let user navigate to any page
 ```

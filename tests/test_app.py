@@ -10,6 +10,7 @@ Tests HTTP endpoints including:
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import hashlib
 import hmac
 import json
@@ -1158,14 +1159,15 @@ class TestContributorsEndpoint:
 
     def test_get_contributors_cancelled_error(self) -> None:
         """Test contributors handles asyncio.CancelledError."""
+
         with patch("github_metrics.routes.api.contributors.db_manager") as mock_db:
             mock_db.fetchval = AsyncMock(side_effect=asyncio.CancelledError)
 
             client = TestClient(app)
-            response = client.get("/api/metrics/contributors")
-
-            assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
-            assert response.json()["detail"] == "Request was cancelled"
+            # CancelledError is re-raised and handled by FastAPI/ASGI server
+            # TestClient may wrap it in concurrent.futures.CancelledError (detect cancellation, not specific type)
+            with pytest.raises((asyncio.CancelledError, concurrent.futures.CancelledError)):
+                client.get("/api/metrics/contributors")
 
 
 class TestUserPullRequestsEndpoint:
@@ -1885,10 +1887,10 @@ class TestReviewTurnaroundEndpoint:
             mock_db.fetchrow = AsyncMock(side_effect=asyncio.CancelledError)
 
             client = TestClient(app)
-            response = client.get("/api/metrics/turnaround")
-
-            assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
-            assert response.json()["detail"] == "Request was cancelled"
+            # CancelledError is re-raised and handled by FastAPI/ASGI server
+            # TestClient may wrap it in concurrent.futures.CancelledError (detect cancellation, not specific type)
+            with pytest.raises((asyncio.CancelledError, concurrent.futures.CancelledError)):
+                client.get("/api/metrics/turnaround")
 
 
 class TestNoCacheMiddleware:

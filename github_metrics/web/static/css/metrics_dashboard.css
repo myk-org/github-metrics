@@ -1391,11 +1391,44 @@ tbody td {
   gap: 10px;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.page-number-input {
+  width: 60px;
+  padding: 4px 8px;
+  border: 1px solid var(--input-border);
+  background-color: var(--input-bg);
+  color: var(--text-color);
+  border-radius: 4px;
+  font-size: 0.875rem;
+  text-align: center;
+  transition: border-color 0.2s;
+}
+
+.page-number-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.page-number-input:invalid {
+  border-color: var(--error-color);
+}
+
 .pagination-info {
   font-size: 0.875rem;
   color: var(--text-secondary);
-  min-width: 100px;
-  text-align: center;
+  min-width: 40px;
+  text-align: left;
 }
 
 .btn-pagination {
@@ -1997,4 +2030,369 @@ a:hover {
   margin: 0;
   font-size: 0.875rem;
   text-align: center;
+}
+
+/* ==========================================================================
+   User PRs Modal
+   ========================================================================== */
+
+/* User PRs Modal - Wider for two-panel layout (matches PR Story modal size) */
+#userPrsModal .modal-content {
+  width: 90vw;
+  max-width: 1200px;
+  height: 90vh;
+  background: var(--container-bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Modal header - fixed height */
+#userPrsModal .modal-header {
+  flex: 0 0 auto;
+}
+
+/* Override modal-body default overflow for User PRs modal */
+#userPrsModal .modal-body {
+  overflow: hidden;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Two-panel container */
+#userPrsModal .user-prs-container {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Left panel - PR list */
+#userPrsModal .user-prs-list-panel {
+  width: 40%;
+  border-right: 1px solid var(--border-color);
+  background: var(--container-bg);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* PR list content area - scrollable */
+#userPrsModal .user-prs-list-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Pagination controls in modal */
+#userPrsModal .pagination-controls {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--border-color);
+  padding: 10px 15px;
+}
+
+/* Right panel - PR story */
+#userPrsModal .user-prs-story-panel {
+  width: 60%;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 15px;
+  background: var(--bg-color);
+}
+
+/* Tablet breakpoint - adjust two-panel layout for better usability */
+@media (min-width: 768px) and (max-width: 1024px) {
+  #userPrsModal .user-prs-list-panel {
+    width: 45%;
+  }
+
+  #userPrsModal .user-prs-story-panel {
+    width: 55%;
+  }
+}
+
+/* Empty state for story panel */
+#userPrsModal .user-prs-story-panel .empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+/* PR Item - No border, just subtle separation */
+#userPrsModal .user-pr-item {
+  background: var(--container-bg);
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+#userPrsModal .user-pr-item:last-child {
+  border-bottom: none;
+}
+
+/* PR Header - Clickable item */
+#userPrsModal .user-pr-header {
+  padding: 15px;
+  cursor: pointer;
+  background: var(--container-bg);
+  transition: background-color 0.2s ease;
+}
+
+#userPrsModal .user-pr-header:hover {
+  background: var(--input-bg);
+}
+
+/* Selected PR */
+#userPrsModal .user-pr-item.selected .user-pr-header {
+  background: var(--input-bg);
+  border-left: 3px solid var(--primary-color);
+}
+
+/* PR Title Row */
+#userPrsModal .user-pr-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+#userPrsModal .pr-number {
+  font-weight: 700;
+  color: var(--primary-color);
+}
+
+#userPrsModal .pr-title {
+  color: var(--text-color);
+  font-weight: 600;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* PR Meta Row */
+#userPrsModal .user-pr-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+}
+
+#userPrsModal .pr-repo {
+  font-family: monospace;
+  color: var(--text-color);
+}
+
+#userPrsModal .pr-date,
+#userPrsModal .pr-commits {
+  color: var(--text-secondary);
+}
+
+/* PR Story in right panel - no separate container needed */
+#userPrsModal .user-prs-story-panel .pr-story-content {
+  width: 100%;
+}
+
+.pr-state {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.pr-state-merged {
+  background: var(--success-color);
+  color: white;
+}
+
+.pr-state-closed {
+  background: var(--error-color);
+  color: white;
+}
+
+.pr-state-open {
+  background: var(--chart-success);
+  color: white;
+}
+
+.pr-story-loading {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-secondary);
+}
+
+.pr-story-summary {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 10px;
+  background: var(--container-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  margin-bottom: 15px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+
+.pr-story-summary span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* PR Timeline */
+.pr-timeline {
+  position: relative;
+  padding-left: 30px;
+}
+
+.pr-timeline::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--border-color);
+}
+
+.timeline-event-item {
+  position: relative;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+}
+
+.timeline-event-marker {
+  position: absolute;
+  left: -24px;
+  top: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  z-index: 1;
+}
+
+.timeline-event-content {
+  margin-left: 10px;
+}
+
+.timeline-event-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.timeline-event-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.timeline-event-title {
+  font-weight: 600;
+  color: var(--text-color);
+  font-size: 0.875rem;
+  flex: 1;
+}
+
+.timeline-event-time {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.timeline-event-description {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  margin-left: 32px;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+/* Loading Spinner */
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+.loading .spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--border-color);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 15px;
+}
+
+.loading p {
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.error-message {
+  color: var(--error-color);
+  padding: 20px;
+  text-align: center;
+  background: var(--container-bg);
+  border: 1px solid var(--error-color);
+  border-radius: 6px;
+  margin: 10px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  /* Stack two-panel layout vertically on mobile */
+  #userPrsModal .user-prs-container {
+    flex-direction: column;
+  }
+
+  #userPrsModal .user-prs-list-panel {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+    max-height: 40vh;
+  }
+
+  #userPrsModal .user-prs-story-panel {
+    width: 100%;
+    max-height: 60vh;
+  }
+
+  .user-pr-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .pr-story-summary {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
 }

@@ -12,6 +12,10 @@
  */
 
 import { apiClient } from './api-client.js';
+import { Pagination } from '../components/pagination.js';
+import { SortableTable } from '../components/sortable-table.js';
+import { DownloadButtons } from '../components/download-buttons.js';
+import { Modal } from '../components/modal.js';
 
 class TurnaroundMetrics {
     constructor() {
@@ -31,6 +35,40 @@ class TurnaroundMetrics {
         this.repoTableBody = document.getElementById('turnaround-by-repo-body');
         this.reviewerTableBody = document.getElementById('turnaround-by-reviewer-body');
 
+        // Contributor metrics table bodies
+        this.prCreatorsTableBody = document.getElementById('pr-creators-metrics-body');
+        this.prReviewersTableBody = document.getElementById('pr-reviewers-metrics-body');
+        this.prApproversTableBody = document.getElementById('pr-approvers-metrics-body');
+        this.prLgtmTableBody = document.getElementById('pr-lgtm-metrics-body');
+
+        // SortableTable instances
+        this.sortableTables = {
+            by_repository: null,
+            by_reviewer: null,
+            pr_creators: null,
+            pr_reviewers: null,
+            pr_approvers: null,
+            pr_lgtm: null
+        };
+
+        // Contributor metrics data and pagination state
+        this.contributorMetrics = {
+            pr_creators: { data: [], pagination: null, currentPage: 1, paginationComponent: null },
+            pr_reviewers: { data: [], pagination: null, currentPage: 1, paginationComponent: null },
+            pr_approvers: { data: [], pagination: null, currentPage: 1, paginationComponent: null },
+            pr_lgtm: { data: [], pagination: null, currentPage: 1, paginationComponent: null }
+        };
+
+        // User PRs modal state with pagination
+        this.userPrsPagination = {
+            username: null,
+            category: null,
+            allPrs: [], // Store all PRs
+            currentPage: 1,
+            pageSize: 10,
+            paginationComponent: null
+        };
+
         // Filter timeouts for debouncing
         this.filterTimeouts = {
             repo: null,
@@ -49,14 +87,37 @@ class TurnaroundMetrics {
         // Listen for page navigation to Contributors
         this.setupPageChangeListener();
 
-        // Set up table sorting
-        this.setupTableSorting();
+        // Initialize SortableTable instances
+        this.initializeSortableTables();
 
-        // Set up download buttons
+        // Set up download buttons (using DownloadButtons component)
         this.setupDownloadButtons();
+
+        // Set up contributor metrics pagination
+        this.setupContributorPagination();
+
+        // Initialize modal component for user PRs
+        this.initializeUserPrsModal();
 
         // Check if we should load metrics (handles direct navigation to #contributors)
         this.checkAndLoadMetrics();
+    }
+
+    /**
+     * Initialize the user PRs modal using Modal component
+     */
+    initializeUserPrsModal() {
+        this.userPrsModal = new Modal({
+            id: 'userPrsModal',
+            onOpen: (data) => {
+                console.log('[Turnaround] User PRs modal opened with data:', data);
+            },
+            onClose: () => {
+                console.log('[Turnaround] User PRs modal closed');
+            },
+            closeOnOverlay: true,
+            closeOnEscape: true
+        });
     }
 
     /**
@@ -178,6 +239,17 @@ class TurnaroundMetrics {
             this.updateKPIs(response.summary);
             this.updateRepositoryTable(response.by_repository || []);
             this.updateReviewerTable(response.by_reviewer || []);
+
+            // Update SortableTable instances with new data
+            if (this.sortableTables.by_repository) {
+                this.sortableTables.by_repository.update(response.by_repository || []);
+            }
+            if (this.sortableTables.by_reviewer) {
+                this.sortableTables.by_reviewer.update(response.by_reviewer || []);
+            }
+
+            // Load contributor metrics (each category separately)
+            await this.loadContributorMetrics();
 
             // Show content
             this.showContent();
@@ -348,6 +420,11 @@ class TurnaroundMetrics {
      */
     escapeHtml(text) {
         if (!text) return '';
+        // Use shared utility if available
+        if (window.MetricsUtils?.escapeHTML) {
+            return window.MetricsUtils.escapeHTML(text);
+        }
+        // Fallback: use DOM createElement approach
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
@@ -396,205 +473,860 @@ class TurnaroundMetrics {
     }
 
     /**
-     * Set up table sorting
+     * Initialize SortableTable instances for all tables
      */
-    setupTableSorting() {
+    initializeSortableTables() {
+        // Table configurations with column types
+        const tableConfigs = {
+            by_repository: {
+                tableId: 'turnaroundByRepoTable',
+                columns: {
+                    repository: { type: 'string' },
+                    avg_time_to_first_review_hours: { type: 'number' },
+                    avg_time_to_approval_hours: { type: 'number' },
+                    avg_pr_lifecycle_hours: { type: 'number' },
+                    total_prs: { type: 'number' }
+                }
+            },
+            by_reviewer: {
+                tableId: 'turnaroundByReviewerTable',
+                columns: {
+                    reviewer: { type: 'string' },
+                    avg_response_time_hours: { type: 'number' },
+                    total_reviews: { type: 'number' },
+                    repositories_reviewed: { type: 'string' }
+                }
+            },
+            pr_creators: {
+                tableId: 'prCreatorsMetricsTable',
+                columns: {
+                    user: { type: 'string' },
+                    total_prs: { type: 'number' },
+                    merged_prs: { type: 'number' },
+                    closed_prs: { type: 'number' },
+                    avg_commits_per_pr: { type: 'number' }
+                }
+            },
+            pr_reviewers: {
+                tableId: 'prReviewersMetricsTable',
+                columns: {
+                    user: { type: 'string' },
+                    total_reviews: { type: 'number' },
+                    prs_reviewed: { type: 'number' },
+                    avg_reviews_per_pr: { type: 'number' }
+                }
+            },
+            pr_approvers: {
+                tableId: 'prApproversMetricsTable',
+                columns: {
+                    user: { type: 'string' },
+                    total_approvals: { type: 'number' },
+                    prs_approved: { type: 'number' }
+                }
+            },
+            pr_lgtm: {
+                tableId: 'prLgtmMetricsTable',
+                columns: {
+                    user: { type: 'string' },
+                    total_lgtm: { type: 'number' },
+                    prs_lgtm: { type: 'number' }
+                }
+            }
+        };
+
+        Object.keys(tableConfigs).forEach(key => {
+            const config = tableConfigs[key];
+            const table = document.getElementById(config.tableId);
+
+            if (!table) {
+                console.warn(`[Turnaround] Table not found: ${config.tableId}`);
+                return;
+            }
+
+            // Get initial data
+            const data = this.getTableData(key);
+
+            // Initialize SortableTable instance
+            this.sortableTables[key] = new SortableTable({
+                table: table,
+                data: data,
+                columns: config.columns,
+                onSort: (sortedData, column, direction) => {
+                    console.log(`[Turnaround] Table ${key} sorted by ${column} ${direction}`);
+                    this.handleTableSorted(key, sortedData);
+                }
+            });
+
+            console.log(`[Turnaround] SortableTable initialized for ${key}`);
+        });
+    }
+
+    /**
+     * Get table data for a given key
+     * @param {string} key - Data key
+     * @returns {Array} Table data
+     */
+    getTableData(key) {
+        if (key === 'by_repository') {
+            return this.data?.by_repository || [];
+        } else if (key === 'by_reviewer') {
+            return this.data?.by_reviewer || [];
+        } else if (key.startsWith('pr_')) {
+            return this.contributorMetrics[key]?.data || [];
+        }
+        return [];
+    }
+
+    /**
+     * Handle table sorted callback - update the appropriate table with sorted data
+     * @param {string} key - Table key
+     * @param {Array} sortedData - Sorted data array
+     */
+    handleTableSorted(key, sortedData) {
+        if (key === 'by_repository') {
+            this.updateRepositoryTable(sortedData);
+        } else if (key === 'by_reviewer') {
+            this.updateReviewerTable(sortedData);
+        } else if (key.startsWith('pr_')) {
+            // Store sorted data and re-render contributor table
+            this.contributorMetrics[key].data = sortedData;
+            this.updateContributorTable(key);
+        }
+    }
+
+    /**
+     * Set up download buttons using DownloadButtons component
+     */
+    setupDownloadButtons() {
+        this.downloadButtons = {};
+
         // Repository table
-        const repoTable = document.getElementById('turnaroundByRepoTable');
-        if (repoTable) {
-            this.setupTableSortingForTable(repoTable, 'by_repository');
+        const repoContainer = document.querySelector('[data-section="turnaround-by-repo"] .table-controls');
+        if (repoContainer) {
+            this.downloadButtons.byRepository = new DownloadButtons({
+                container: repoContainer,
+                section: 'turnaround_by_repository',
+                getData: () => this.data?.by_repository || []
+            });
         }
 
         // Reviewer table
-        const reviewerTable = document.getElementById('turnaroundByReviewerTable');
-        if (reviewerTable) {
-            this.setupTableSortingForTable(reviewerTable, 'by_reviewer');
-        }
-    }
-
-    /**
-     * Set up sorting for a specific table
-     */
-    setupTableSortingForTable(table, dataKey) {
-        const headers = table.querySelectorAll('th.sortable');
-        headers.forEach(header => {
-            header.addEventListener('click', () => {
-                const column = header.dataset.column;
-                this.sortTable(table, dataKey, column);
+        const reviewerContainer = document.querySelector('[data-section="turnaround-by-reviewer"] .table-controls');
+        if (reviewerContainer) {
+            this.downloadButtons.byReviewer = new DownloadButtons({
+                container: reviewerContainer,
+                section: 'turnaround_by_reviewer',
+                getData: () => this.data?.by_reviewer || []
             });
-        });
-    }
-
-    /**
-     * Sort table by column
-     */
-    sortTable(table, dataKey, column) {
-        if (!this.data || !this.data[dataKey]) {
-            return;
         }
 
-        const headers = table.querySelectorAll('th.sortable');
-        const clickedHeader = Array.from(headers).find(h => h.dataset.column === column);
-
-        // Determine sort direction
-        let direction = 'asc';
-        if (clickedHeader.classList.contains('sort-asc')) {
-            direction = 'desc';
-        } else if (clickedHeader.classList.contains('sort-desc')) {
-            direction = 'asc';
-        }
-
-        // Clear all sort indicators
-        headers.forEach(h => {
-            h.classList.remove('sort-asc', 'sort-desc');
-        });
-
-        // Set new sort indicator
-        clickedHeader.classList.add(direction === 'asc' ? 'sort-asc' : 'sort-desc');
-
-        // Sort data
-        const sortedData = [...this.data[dataKey]].sort((a, b) => {
-            const aVal = a[column];
-            const bVal = b[column];
-
-            // Handle null/undefined
-            if (aVal === null || aVal === undefined) return 1;
-            if (bVal === null || bVal === undefined) return -1;
-
-            // Compare values
-            if (typeof aVal === 'number' && typeof bVal === 'number') {
-                return direction === 'asc' ? aVal - bVal : bVal - aVal;
-            } else {
-                const aStr = String(aVal).toLowerCase();
-                const bStr = String(bVal).toLowerCase();
-                return direction === 'asc'
-                    ? aStr.localeCompare(bStr)
-                    : bStr.localeCompare(aStr);
-            }
-        });
-
-        // Update table
-        if (dataKey === 'by_repository') {
-            this.updateRepositoryTable(sortedData);
-        } else if (dataKey === 'by_reviewer') {
-            this.updateReviewerTable(sortedData);
-        }
-    }
-
-    /**
-     * Set up download buttons
-     */
-    setupDownloadButtons() {
-        // Repository download buttons
-        const repoButtons = document.querySelectorAll('[data-section="turnaroundByRepo"]');
-        repoButtons.forEach(button => {
-            button.addEventListener('click', (e) => {
-                const format = e.currentTarget.dataset.format;
-                this.downloadData('by_repository', 'turnaround_by_repository', format);
+        // PR Creators
+        const creatorsContainer = document.querySelector('[data-section="pr-creators-metrics"] .table-controls');
+        if (creatorsContainer) {
+            this.downloadButtons.prCreators = new DownloadButtons({
+                container: creatorsContainer,
+                section: 'pr_creators',
+                getData: () => this.contributorMetrics.pr_creators.data
             });
-        });
+        }
 
-        // Reviewer download buttons
-        const reviewerButtons = document.querySelectorAll('[data-section="turnaroundByReviewer"]');
-        reviewerButtons.forEach(button => {
-            button.addEventListener('click', (e) => {
-                const format = e.currentTarget.dataset.format;
-                this.downloadData('by_reviewer', 'turnaround_by_reviewer', format);
+        // PR Reviewers
+        const reviewersContainer = document.querySelector('[data-section="pr-reviewers-metrics"] .table-controls');
+        if (reviewersContainer) {
+            this.downloadButtons.prReviewers = new DownloadButtons({
+                container: reviewersContainer,
+                section: 'pr_reviewers',
+                getData: () => this.contributorMetrics.pr_reviewers.data
             });
-        });
+        }
+
+        // PR Approvers
+        const approversContainer = document.querySelector('[data-section="pr-approvers-metrics"] .table-controls');
+        if (approversContainer) {
+            this.downloadButtons.prApprovers = new DownloadButtons({
+                container: approversContainer,
+                section: 'pr_approvers',
+                getData: () => this.contributorMetrics.pr_approvers.data
+            });
+        }
+
+        // PR LGTM
+        const lgtmContainer = document.querySelector('[data-section="pr-lgtm-metrics"] .table-controls');
+        if (lgtmContainer) {
+            this.downloadButtons.prLgtm = new DownloadButtons({
+                container: lgtmContainer,
+                section: 'pr_lgtm',
+                getData: () => this.contributorMetrics.pr_lgtm.data
+            });
+        }
     }
 
     /**
-     * Download data as CSV or JSON
+     * Load contributor metrics from API
      */
-    downloadData(dataKey, filename, format) {
-        if (!this.data || !this.data[dataKey]) {
-            console.warn('[Turnaround] No data available for download');
-            return;
-        }
+    async loadContributorMetrics() {
+        console.log('[Turnaround] Loading contributor metrics');
 
-        const data = this.data[dataKey];
+        // Get filters
+        const filters = this.getTimeFilters();
 
-        if (format === 'csv') {
-            this.downloadCSV(data, filename);
-        } else if (format === 'json') {
-            this.downloadJSON(data, filename);
-        }
+        // Fetch all contributor categories in parallel
+        await Promise.all([
+            this.loadContributorCategory('pr_creators', filters),
+            this.loadContributorCategory('pr_reviewers', filters),
+            this.loadContributorCategory('pr_approvers', filters),
+            this.loadContributorCategory('pr_lgtm', filters)
+        ]);
     }
 
     /**
-     * Sanitize CSV values to prevent formula injection
+     * Load a specific contributor category
      */
-    sanitizeCSVValue(value) {
-        const str = String(value || '');
-        const escaped = str.replace(/"/g, '""');
-        // Prefix dangerous characters with single quote
-        if (/^[=+\-@]/.test(escaped)) {
-            return "'" + escaped;
-        }
-        return escaped;
-    }
+    async loadContributorCategory(category, filters = {}) {
+        try {
+            const page = this.contributorMetrics[category].currentPage;
 
-    /**
-     * Download data as CSV
-     */
-    downloadCSV(data, filename) {
-        if (!data || data.length === 0) {
-            console.warn('[Turnaround] No data to download');
-            return;
-        }
+            // Get page size from the Pagination instance associated with this category
+            const paginationComponent = this.contributorMetrics[category].paginationComponent;
+            const pageSize = paginationComponent?.pageSize || 10;
 
-        // Get headers from first object
-        const headers = Object.keys(data[0]);
-        const csvRows = [];
+            const params = {
+                ...filters,
+                page: page,
+                page_size: pageSize
+            };
 
-        // Add header row
-        csvRows.push(headers.join(','));
+            console.log(`[Turnaround] Fetching ${category} metrics, page ${page}, page_size ${pageSize}`);
 
-        // Add data rows
-        data.forEach(row => {
-            const values = headers.map(header => {
-                const value = row[header];
-                // Handle arrays (e.g., repositories_reviewed)
-                if (Array.isArray(value)) {
-                    const arrayStr = value.join('; ');
-                    return `"${this.sanitizeCSVValue(arrayStr)}"`;
+            const response = await apiClient.fetchContributors(
+                params.start_time,
+                params.end_time,
+                pageSize,
+                {
+                    repository: params.repository,
+                    user: params.user,
+                    page: params.page,
+                    page_size: params.page_size
                 }
-                // Sanitize and escape quotes and wrap in quotes if contains comma
-                const sanitized = this.sanitizeCSVValue(value);
-                return sanitized.includes(',') ? `"${sanitized}"` : sanitized;
+            );
+
+            if (response.error) {
+                console.error(`[Turnaround] Error loading ${category}:`, response.error);
+                this.showContributorCategoryError(category, response.detail || response.error);
+                return;
+            }
+
+            // Store data and pagination
+            this.contributorMetrics[category].data = response[category]?.data || [];
+            this.contributorMetrics[category].pagination = response[category]?.pagination || null;
+
+            console.log(`[Turnaround] ${category} loaded:`, {
+                count: this.contributorMetrics[category].data.length,
+                pagination: this.contributorMetrics[category].pagination
             });
-            csvRows.push(values.join(','));
+
+            // Update table
+            this.updateContributorTable(category);
+            this.updateContributorPagination(category);
+
+            // Update SortableTable instance with new data
+            if (this.sortableTables[category]) {
+                this.sortableTables[category].update(this.contributorMetrics[category].data);
+            }
+
+        } catch (error) {
+            console.error(`[Turnaround] Error loading ${category}:`, error);
+            this.showContributorCategoryError(category, error.message);
+        }
+    }
+
+    /**
+     * Update contributor table with data
+     */
+    updateContributorTable(category) {
+        const tableBodyMap = {
+            pr_creators: this.prCreatorsTableBody,
+            pr_reviewers: this.prReviewersTableBody,
+            pr_approvers: this.prApproversTableBody,
+            pr_lgtm: this.prLgtmTableBody
+        };
+
+        const tableBody = tableBodyMap[category];
+        if (!tableBody) {
+            console.warn(`[Turnaround] Table body not found for ${category}`);
+            return;
+        }
+
+        const data = this.contributorMetrics[category].data;
+
+        // Clear existing rows
+        tableBody.innerHTML = '';
+
+        // Handle empty data
+        if (!data || data.length === 0) {
+            const colspan = category === 'pr_creators' ? 5 : category === 'pr_reviewers' ? 4 : 3;
+            tableBody.innerHTML = `<tr><td colspan="${colspan}" style="text-align: center; padding: 20px; color: var(--text-secondary);">No data available</td></tr>`;
+            return;
+        }
+
+        // Populate table based on category
+        data.forEach(item => {
+            const row = document.createElement('tr');
+
+            if (category === 'pr_creators') {
+                row.innerHTML = `
+                    <td><a href="#" class="clickable-username" data-username="${this.escapeHtml(item.user)}" data-category="${category}">${this.escapeHtml(item.user)}</a></td>
+                    <td>${item.total_prs || 0}</td>
+                    <td>${item.merged_prs || 0}</td>
+                    <td>${item.closed_prs || 0}</td>
+                    <td>${item.avg_commits_per_pr ? parseFloat(item.avg_commits_per_pr).toFixed(1) : '0.0'}</td>
+                `;
+            } else if (category === 'pr_reviewers') {
+                row.innerHTML = `
+                    <td><a href="#" class="clickable-username" data-username="${this.escapeHtml(item.user)}" data-category="${category}">${this.escapeHtml(item.user)}</a></td>
+                    <td>${item.total_reviews || 0}</td>
+                    <td>${item.prs_reviewed || 0}</td>
+                    <td>${item.avg_reviews_per_pr ? parseFloat(item.avg_reviews_per_pr).toFixed(1) : '0.0'}</td>
+                `;
+            } else if (category === 'pr_approvers') {
+                row.innerHTML = `
+                    <td><a href="#" class="clickable-username" data-username="${this.escapeHtml(item.user)}" data-category="${category}">${this.escapeHtml(item.user)}</a></td>
+                    <td>${item.total_approvals || 0}</td>
+                    <td>${item.prs_approved || 0}</td>
+                `;
+            } else if (category === 'pr_lgtm') {
+                row.innerHTML = `
+                    <td><a href="#" class="clickable-username" data-username="${this.escapeHtml(item.user)}" data-category="${category}">${this.escapeHtml(item.user)}</a></td>
+                    <td>${item.total_lgtm || 0}</td>
+                    <td>${item.prs_lgtm || 0}</td>
+                `;
+            }
+
+            tableBody.appendChild(row);
         });
 
-        // Create blob and download
-        const csvContent = csvRows.join('\n');
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        this.downloadBlob(blob, `${filename}.csv`);
+        // Set up click handlers for usernames
+        this.setupUsernameClickHandlers(tableBody);
     }
 
     /**
-     * Download data as JSON
+     * Set up click handlers for usernames
      */
-    downloadJSON(data, filename) {
-        const jsonContent = JSON.stringify(data, null, 2);
-        const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
-        this.downloadBlob(blob, `${filename}.json`);
+    setupUsernameClickHandlers(tableBody) {
+        const usernameLinks = tableBody.querySelectorAll('.clickable-username');
+        console.log(`[Turnaround] Setting up click handlers for ${usernameLinks.length} username links`);
+        usernameLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                console.log('[Turnaround] Username link clicked:', e.currentTarget);
+                console.log('[Turnaround] data-username value:', e.currentTarget.dataset.username);
+                e.preventDefault();
+                e.stopPropagation(); // Prevent dashboard.js global handler from firing
+                const username = e.currentTarget.dataset.username;
+                const category = e.currentTarget.dataset.category;
+                if (username) {
+                    console.log(`[Turnaround] Opening PRs modal for: ${username}, category: ${category}`);
+                    this.showUserPrsModal(username, category);
+                } else {
+                    console.warn('[Turnaround] No username found in dataset');
+                }
+            });
+        });
     }
 
     /**
-     * Download blob as file
+     * Show modal with user's PRs
      */
-    downloadBlob(blob, filename) {
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        // Delay URL.revokeObjectURL to ensure download starts
-        setTimeout(() => URL.revokeObjectURL(url), 100);
+    async showUserPrsModal(username, category = 'pr_creators') {
+        console.log(`[Turnaround] Opening PRs modal for ${username}, category: ${category}`);
+
+        // Store username and category
+        this.userPrsPagination.username = username;
+        this.userPrsPagination.category = category;
+
+        // Open modal with username data
+        this.userPrsModal.open({ username, category });
+
+        // Set username in title (count and role will be added after data loads)
+        this.userPrsModal.setTitle(username);
+
+        // Show loading state
+        this.userPrsModal.showLoading('Loading user PRs...');
+
+        // Load all PRs
+        await this.loadUserPrsPage();
+    }
+
+    /**
+     * Load all user PRs from the API
+     */
+    async loadUserPrsPage() {
+        const { username, category } = this.userPrsPagination;
+
+        try {
+            const filters = this.getTimeFilters();
+
+            // First, fetch with minimal page size to get total count
+            const countParams = {
+                user: username,
+                role: category,
+                page: 1,
+                page_size: 1
+            };
+
+            if (filters.repository) {
+                countParams.repository = filters.repository;
+            }
+
+            const countData = await apiClient.fetchUserPRs(
+                filters.start_time,
+                filters.end_time,
+                countParams
+            );
+
+            if (countData.error) {
+                throw new Error(countData.detail || countData.error);
+            }
+
+            const totalItems = countData.pagination?.total || 0;
+
+            // Update title with PR count and role description
+            const roleText = this.getRoleDescription(category);
+            this.userPrsModal.setTitle(`PRs ${roleText} ${username} (${totalItems})`);
+
+            if (totalItems === 0) {
+                this.userPrsModal.setBody('<div class="empty-state">No PRs found for this user in the selected time range.</div>');
+                return;
+            }
+
+            // Now fetch all PRs using the total count
+            const allParams = {
+                user: username,
+                role: category,
+                page: 1,
+                page_size: totalItems
+            };
+
+            if (filters.repository) {
+                allParams.repository = filters.repository;
+            }
+
+            const allData = await apiClient.fetchUserPRs(
+                filters.start_time,
+                filters.end_time,
+                allParams
+            );
+
+            if (allData.error) {
+                throw new Error(allData.detail || allData.error);
+            }
+
+            // Store all PRs in state
+            this.userPrsPagination.allPrs = allData.data || [];
+            this.userPrsPagination.currentPage = 1;
+
+            // Render PRs with pagination
+            this.renderUserPrsWithPagination();
+
+        } catch (error) {
+            console.error('[Turnaround] Error loading user PRs:', error);
+            this.userPrsModal.setBody(`<div class="error-message">Failed to load PRs: ${this.escapeHtml(error.message)}</div>`);
+        }
+    }
+
+    /**
+     * Render user PRs with pagination
+     */
+    renderUserPrsWithPagination() {
+        const { allPrs, currentPage, pageSize } = this.userPrsPagination;
+
+        // Calculate pagination
+        const totalItems = allPrs.length;
+        const startIdx = (currentPage - 1) * pageSize;
+        const endIdx = Math.min(startIdx + pageSize, totalItems);
+        const prsOnPage = allPrs.slice(startIdx, endIdx);
+
+        // Render current page of PRs
+        const prsListHtml = this.renderUserPrsListHtml(prsOnPage);
+        this.userPrsModal.setBody(prsListHtml);
+
+        // Set up delegated click listener for PR items
+        const listPanel = document.querySelector('#userPrsModal .user-prs-list-panel');
+        if (listPanel) {
+            // Remove existing listener if any (to prevent duplicates)
+            listPanel.removeEventListener('click', this._prItemClickHandler);
+
+            // Create bound handler if not exists
+            if (!this._prItemClickHandler) {
+                this._prItemClickHandler = (e) => {
+                    const prItem = e.target.closest('.user-pr-item');
+                    if (prItem) {
+                        const prId = prItem.dataset.prId;
+                        const repo = prItem.dataset.repo;
+                        const prNumber = parseInt(prItem.dataset.prNumber, 10);
+                        if (prId && repo && prNumber) {
+                            this.selectPr(prId, repo, prNumber);
+                        }
+                    }
+                };
+            }
+
+            // Add delegated click listener
+            listPanel.addEventListener('click', this._prItemClickHandler);
+        }
+
+        // Set up pagination component
+        const paginationContainer = document.querySelector('#userPrsModal .user-prs-pagination');
+        if (paginationContainer) {
+            // Destroy existing pagination component if it exists
+            if (this.userPrsPagination.paginationComponent) {
+                this.userPrsPagination.paginationComponent = null;
+            }
+
+            // Create new pagination component
+            this.userPrsPagination.paginationComponent = new Pagination({
+                container: paginationContainer,
+                pageSize: pageSize,
+                pageSizeOptions: [10, 25, 50, 100],
+                onPageChange: (page) => {
+                    this.userPrsPagination.currentPage = page;
+                    this.renderUserPrsWithPagination();
+                },
+                onPageSizeChange: (newPageSize) => {
+                    this.userPrsPagination.pageSize = newPageSize;
+                    this.userPrsPagination.currentPage = 1;
+                    this.renderUserPrsWithPagination();
+                }
+            });
+
+            // Update pagination state
+            this.userPrsPagination.paginationComponent.update({
+                total: totalItems,
+                page: currentPage,
+                pageSize: pageSize
+            });
+        }
+    }
+
+    /**
+     * Get role description for modal title
+     */
+    getRoleDescription(category) {
+        const roleMap = {
+            pr_creators: 'created by',
+            pr_reviewers: 'reviewed by',
+            pr_approvers: 'approved by',
+            pr_lgtm: 'with LGTM by'
+        };
+        return roleMap[category] || 'for';
+    }
+
+    /**
+     * Render list of user PRs in two-panel layout
+     * Returns HTML string for modal body
+     */
+    renderUserPrsListHtml(prs) {
+        if (!prs || prs.length === 0) {
+            return '<div class="empty-state">No PRs found on this page.</div>';
+        }
+
+        // Create PR list items - use global index from allPrs to maintain unique IDs
+        const { currentPage, pageSize } = this.userPrsPagination;
+        const startIdx = (currentPage - 1) * pageSize;
+
+        const listPanelHtml = prs.map((pr, localIndex) => {
+            const globalIndex = startIdx + localIndex;
+            const stateClass = pr.merged ? 'merged' : pr.state === 'closed' ? 'closed' : 'open';
+            const stateLabel = pr.merged ? 'merged' : pr.state;
+            const prId = `user-pr-${globalIndex}`;
+
+            return `
+                <div class="user-pr-item" data-pr-id="${prId}" data-repo="${this.escapeHtml(pr.repository)}" data-pr-number="${pr.number}">
+                    <div class="user-pr-header">
+                        <div class="user-pr-title">
+                            <span class="pr-number">#${pr.number}</span>
+                            <span class="pr-title">${this.escapeHtml(pr.title)}</span>
+                        </div>
+                        <div class="user-pr-meta">
+                            <span class="pr-state pr-state-${stateClass}">${stateLabel}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // Build the two-panel layout with pagination controls
+        return `
+            <div class="user-prs-container">
+                <div class="user-prs-list-panel">
+                    <div class="user-prs-list-content">
+                        ${listPanelHtml}
+                    </div>
+                    <div class="user-prs-pagination"></div>
+                </div>
+                <div class="user-prs-story-panel">
+                    <div class="empty-state">Select a PR to view its timeline</div>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Select a PR and show its timeline in the right panel
+     */
+    async selectPr(prId, repository, prNumber) {
+        // Remove selection from all PR items
+        const allPrItems = document.querySelectorAll('#userPrsModal .user-pr-item');
+        allPrItems.forEach(item => item.classList.remove('selected'));
+
+        // Add selection to clicked item
+        const selectedItem = document.querySelector(`#userPrsModal .user-pr-item[data-pr-id="${prId}"]`);
+        if (selectedItem) {
+            selectedItem.classList.add('selected');
+        }
+
+        // Get the story panel
+        const storyPanel = document.querySelector('#userPrsModal .user-prs-story-panel');
+        if (!storyPanel) return;
+
+        // Show loading state
+        storyPanel.innerHTML = '<div class="pr-story-loading">Loading PR timeline...</div>';
+
+        // Load PR story
+        await this.loadPrStoryToPanel(repository, prNumber, storyPanel);
+    }
+
+    /**
+     * Load and render PR story timeline to the story panel
+     */
+    async loadPrStoryToPanel(repository, prNumber, storyPanel) {
+        try {
+            const data = await apiClient.fetchPRStory(repository, prNumber);
+
+            if (data.error) {
+                throw new Error(data.detail || data.error);
+            }
+
+            // Render PR story timeline
+            storyPanel.innerHTML = `<div class="pr-story-content">${this.renderPrStoryTimeline(data)}</div>`;
+
+        } catch (error) {
+            console.error(`[Turnaround] Error loading PR story for ${repository}#${prNumber}:`, error);
+            storyPanel.innerHTML = `<div class="error-message">Failed to load PR timeline: ${this.escapeHtml(error.message)}</div>`;
+        }
+    }
+
+    /**
+     * Render PR story timeline
+     */
+    renderPrStoryTimeline(storyData) {
+        // Safely derive events and summary with defaults
+        const events = storyData?.events || [];
+        const summary = storyData?.summary || {
+            total_commits: 0,
+            total_reviews: 0,
+            total_check_runs: 0,
+            total_comments: 0
+        };
+
+        if (events.length === 0) {
+            return '<div class="empty-state">No timeline events found for this PR.</div>';
+        }
+
+        // Summary header
+        const summaryHtml = `
+            <div class="pr-story-summary">
+                <span>📝 ${summary.total_commits} commits</span>
+                <span>💬 ${summary.total_reviews} reviews</span>
+                <span>▶️ ${summary.total_check_runs} check runs</span>
+                <span>💭 ${summary.total_comments} comments</span>
+            </div>
+        `;
+
+        // Timeline events
+        const eventsHtml = events.map(event => this.renderTimelineEvent(event)).join('');
+
+        return `
+            ${summaryHtml}
+            <div class="pr-timeline">
+                ${eventsHtml}
+            </div>
+        `;
+    }
+
+    /**
+     * Render a single timeline event
+     */
+    renderTimelineEvent(event) {
+        const eventConfig = this.getEventConfig(event.event_type);
+        const icon = eventConfig.icon;
+        const label = eventConfig.label;
+
+        let descriptionHtml = '';
+        if (event.description) {
+            descriptionHtml = `<div class="timeline-event-description">${this.escapeHtml(event.description)}</div>`;
+        }
+
+        const timeStr = this.formatTimestamp(event.timestamp);
+
+        return `
+            <div class="timeline-event-item">
+                <div class="timeline-event-marker"></div>
+                <div class="timeline-event-content">
+                    <div class="timeline-event-header">
+                        <span class="timeline-event-icon">${icon}</span>
+                        <span class="timeline-event-title">${this.escapeHtml(label)}</span>
+                        <span class="timeline-event-time">${timeStr}</span>
+                    </div>
+                    ${descriptionHtml}
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Get event configuration (icon, label)
+     */
+    getEventConfig(eventType) {
+        const configs = {
+            pr_opened: { icon: '🔀', label: 'PR Opened' },
+            pr_closed: { icon: '❌', label: 'PR Closed' },
+            pr_merged: { icon: '🟣', label: 'Merged' },
+            pr_reopened: { icon: '🔄', label: 'Reopened' },
+            commit: { icon: '📝', label: 'Commit' },
+            review_approved: { icon: '✅', label: 'Approved' },
+            review_changes: { icon: '🔄', label: 'Changes Requested' },
+            review_comment: { icon: '💬', label: 'Review Comment' },
+            comment: { icon: '💬', label: 'Comment' },
+            review_requested: { icon: '👁️', label: 'Review Requested' },
+            ready_for_review: { icon: '👁️', label: 'Ready for Review' },
+            label_added: { icon: '🏷️', label: 'Label Added' },
+            label_removed: { icon: '🏷️', label: 'Label Removed' },
+            verified: { icon: '🛡️', label: 'Verified' },
+            approved_label: { icon: '✅', label: 'Approved' },
+            lgtm: { icon: '👍', label: 'LGTM' },
+            check_run: { icon: '▶️', label: 'Check Run' }
+        };
+
+        return configs[eventType] || { icon: '●', label: eventType };
+    }
+
+    /**
+     * Format timestamp for display
+     */
+    formatTimestamp(timestamp) {
+        try {
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diff = now - date;
+            const minutes = Math.floor(diff / 60000);
+            const hours = Math.floor(diff / 3600000);
+            const days = Math.floor(diff / 86400000);
+
+            if (minutes < 1) return 'just now';
+            if (minutes < 60) return `${minutes}m ago`;
+            if (hours < 24) return `${hours}h ago`;
+            if (days < 7) return `${days}d ago`;
+
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        } catch {
+            return timestamp;
+        }
+    }
+
+    /**
+     * Format date for PR list
+     */
+    formatDate(timestamp) {
+        try {
+            const date = new Date(timestamp);
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        } catch {
+            return timestamp;
+        }
+    }
+
+    /**
+     * Update pagination controls for a contributor category
+     */
+    updateContributorPagination(category) {
+        const pagination = this.contributorMetrics[category].pagination;
+        const paginationComponent = this.contributorMetrics[category].paginationComponent;
+
+        if (!pagination || !paginationComponent) {
+            return;
+        }
+
+        // Update the pagination component with new state
+        paginationComponent.update({
+            total: pagination.total,
+            page: pagination.page,
+            pageSize: pagination.page_size
+        });
+    }
+
+    /**
+     * Get category prefix for element IDs
+     */
+    getCategoryPrefix(category) {
+        const prefixMap = {
+            pr_creators: 'prCreators',
+            pr_reviewers: 'prReviewers',
+            pr_approvers: 'prApprovers',
+            pr_lgtm: 'prLgtm'
+        };
+        return prefixMap[category] || category;
+    }
+
+    /**
+     * Show error for a specific contributor category
+     */
+    showContributorCategoryError(category, message) {
+        const tableBodyMap = {
+            pr_creators: this.prCreatorsTableBody,
+            pr_reviewers: this.prReviewersTableBody,
+            pr_approvers: this.prApproversTableBody,
+            pr_lgtm: this.prLgtmTableBody
+        };
+
+        const tableBody = tableBodyMap[category];
+        if (!tableBody) {
+            return;
+        }
+
+        const colspan = category === 'pr_creators' ? 5 : category === 'pr_reviewers' ? 4 : 3;
+        tableBody.innerHTML = `<tr><td colspan="${colspan}" style="text-align: center; padding: 20px; color: var(--error-color);">Error: ${this.escapeHtml(message)}</td></tr>`;
+    }
+
+    /**
+     * Set up pagination controls for contributor metrics
+     */
+    setupContributorPagination() {
+        const categories = ['pr_creators', 'pr_reviewers', 'pr_approvers', 'pr_lgtm'];
+
+        categories.forEach(category => {
+            const categoryPrefix = this.getCategoryPrefix(category);
+            const container = document.getElementById(`${categoryPrefix}-pagination`);
+
+            if (!container) {
+                console.warn(`[Turnaround] Pagination container not found for ${category}`);
+                return;
+            }
+
+            // Initialize Pagination component
+            this.contributorMetrics[category].paginationComponent = new Pagination({
+                container: container,
+                pageSize: 10,
+                pageSizeOptions: [10, 25, 50, 100],
+                onPageChange: (page) => {
+                    this.contributorMetrics[category].currentPage = page;
+                    this.loadContributorCategory(category, this.getTimeFilters());
+                },
+                onPageSizeChange: () => {
+                    this.contributorMetrics[category].currentPage = 1;
+                    this.loadContributorCategory(category, this.getTimeFilters());
+                }
+            });
+        });
     }
 }
 

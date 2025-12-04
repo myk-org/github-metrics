@@ -11,6 +11,7 @@ from simple_logger.logger import get_logger
 
 from github_metrics.database import DatabaseManager
 from github_metrics.utils.datetime_utils import parse_datetime_string
+from github_metrics.utils.query_builders import QueryParams, build_time_filter
 
 # Module-level logger
 LOGGER = get_logger(name="github_metrics.routes.api.summary")
@@ -193,34 +194,14 @@ async def get_metrics_summary(
         prev_end_datetime = end_datetime - period_duration
 
     # Build query with time filters for current period
+    current_params = QueryParams()
     where_clause = "WHERE 1=1"
-    params: list[Any] = []
-    param_idx = 1
-
-    if start_datetime:
-        where_clause += " AND created_at >= $" + str(param_idx)
-        params.append(start_datetime)
-        param_idx += 1
-
-    if end_datetime:
-        where_clause += " AND created_at <= $" + str(param_idx)
-        params.append(end_datetime)
-        param_idx += 1
+    where_clause += build_time_filter(current_params, start_datetime, end_datetime)
 
     # Build query with time filters for previous period
+    previous_params = QueryParams()
     prev_where_clause = "WHERE 1=1"
-    prev_params: list[Any] = []
-    prev_param_idx = 1
-
-    if prev_start_datetime:
-        prev_where_clause += " AND created_at >= $" + str(prev_param_idx)
-        prev_params.append(prev_start_datetime)
-        prev_param_idx += 1
-
-    if prev_end_datetime:
-        prev_where_clause += " AND created_at <= $" + str(prev_param_idx)
-        prev_params.append(prev_end_datetime)
-        prev_param_idx += 1
+    prev_where_clause += build_time_filter(previous_params, prev_start_datetime, prev_end_datetime)
 
     # Main summary query
     summary_query = (
@@ -320,18 +301,22 @@ async def get_metrics_summary(
     )
 
     try:
+        # Get actual parameter lists
+        current_query_params = current_params.get_params()
+        previous_query_params = previous_params.get_params()
+
         # Execute independent queries in parallel for better performance
         summary_row, top_repos_rows, event_type_rows, time_range_row = await asyncio.gather(
-            db_manager.fetchrow(summary_query, *params),
-            db_manager.fetch(top_repos_query, *params),
-            db_manager.fetch(event_type_query, *params),
-            db_manager.fetchrow(time_range_query, *params),
+            db_manager.fetchrow(summary_query, *current_query_params),
+            db_manager.fetch(top_repos_query, *current_query_params),
+            db_manager.fetch(event_type_query, *current_query_params),
+            db_manager.fetchrow(time_range_query, *current_query_params),
         )
 
         # Execute previous period query if time range is specified
         prev_summary_row = None
         if prev_start_datetime and prev_end_datetime:
-            prev_summary_row = await db_manager.fetchrow(prev_summary_query, *prev_params)
+            prev_summary_row = await db_manager.fetchrow(prev_summary_query, *previous_query_params)
 
         # Ensure summary_row is not None before processing
         if summary_row is None:
