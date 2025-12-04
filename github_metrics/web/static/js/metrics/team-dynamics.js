@@ -61,13 +61,10 @@ class TeamDynamics {
         };
 
         // User PRs modal state
-        this.userPrsPagination = {
+        this.DEFAULT_PAGE_SIZE = 50;
+        this.userPrsState = {
             username: null,
-            category: null,
-            allPrs: [],
-            currentPage: 1,
-            pageSize: 10,
-            paginationComponent: null
+            category: null
         };
 
         this.initialize();
@@ -280,12 +277,19 @@ class TeamDynamics {
                 : 'N/A';
         }
 
-        // Update table
-        this.updateWorkloadTable(workloadData.by_contributor || []);
-
         // Update SortableTable instance
         if (this.sortableTables.workload) {
             this.sortableTables.workload.update(workloadData.by_contributor || []);
+        }
+
+        // Update table with pagination
+        const paginationComponent = this.paginationState.workload.paginationComponent;
+        if (paginationComponent) {
+            const pageSize = paginationComponent.state.pageSize;
+            this.renderPaginatedTable('workload', 1, pageSize);
+        } else {
+            // Fallback if pagination not initialized
+            this.updateWorkloadTable(workloadData.by_contributor || []);
         }
     }
 
@@ -313,12 +317,19 @@ class TeamDynamics {
             this.kpiSlowestReviewer.textContent = summary.slowest_reviewer?.user || 'N/A';
         }
 
-        // Update table
-        this.updateReviewEfficiencyTable(reviewEfficiencyData.by_reviewer || []);
-
         // Update SortableTable instance
         if (this.sortableTables.reviewEfficiency) {
             this.sortableTables.reviewEfficiency.update(reviewEfficiencyData.by_reviewer || []);
+        }
+
+        // Update table with pagination
+        const paginationComponent = this.paginationState.reviewEfficiency.paginationComponent;
+        if (paginationComponent) {
+            const pageSize = paginationComponent.state.pageSize;
+            this.renderPaginatedTable('reviewEfficiency', 1, pageSize);
+        } else {
+            // Fallback if pagination not initialized
+            this.updateReviewEfficiencyTable(reviewEfficiencyData.by_reviewer || []);
         }
     }
 
@@ -331,15 +342,22 @@ class TeamDynamics {
             return;
         }
 
-        // Update table
-        this.updateBottlenecksTable(bottlenecksData.by_approver || []);
-
         // Update alert cards
         this.renderAlertCards(bottlenecksData.alerts || []);
 
         // Update SortableTable instance
         if (this.sortableTables.bottlenecks) {
             this.sortableTables.bottlenecks.update(bottlenecksData.by_approver || []);
+        }
+
+        // Update table with pagination
+        const paginationComponent = this.paginationState.bottlenecks.paginationComponent;
+        if (paginationComponent) {
+            const pageSize = paginationComponent.state.pageSize;
+            this.renderPaginatedTable('bottlenecks', 1, pageSize);
+        } else {
+            // Fallback if pagination not initialized
+            this.updateBottlenecksTable(bottlenecksData.by_approver || []);
         }
     }
 
@@ -511,8 +529,8 @@ class TeamDynamics {
         console.log(`[TeamDynamics] Opening PRs modal for ${username}, category: ${category}`);
 
         // Store username and category
-        this.userPrsPagination.username = username;
-        this.userPrsPagination.category = category;
+        this.userPrsState.username = username;
+        this.userPrsState.category = category;
 
         // Open modal with username data
         this.userPrsModal.open({ username, category });
@@ -524,14 +542,15 @@ class TeamDynamics {
         this.userPrsModal.showLoading('Loading user PRs...');
 
         // Load PRs from user-prs endpoint
-        await this.loadUserPrsPage();
+        await this.loadUserPrs();
     }
 
     /**
      * Load user PRs from the API
+     * Uses a reasonable page size (not totalItems) per API design principles
      */
-    async loadUserPrsPage() {
-        const { username } = this.userPrsPagination;
+    async loadUserPrs() {
+        const { username, category } = this.userPrsState;
 
         try {
             const filters = this.getTimeFilters();
@@ -542,31 +561,31 @@ class TeamDynamics {
                 reviewEfficiency: 'pr_reviewers',
                 bottlenecks: 'pr_approvers'
             };
-            const role = roleMap[this.userPrsPagination.category] || 'pr_creators';
+            const role = roleMap[category] || 'pr_creators';
 
-            // Fetch count first
-            const countParams = {
+            // Fetch PRs with a reasonable page size
+            const params = {
                 user: username,
                 role: role,
                 page: 1,
-                page_size: 1
+                page_size: this.DEFAULT_PAGE_SIZE
             };
 
             if (filters.repository) {
-                countParams.repository = filters.repository;
+                params.repository = filters.repository;
             }
 
-            const countData = await apiClient.fetchUserPRs(
+            const data = await apiClient.fetchUserPRs(
                 filters.start_time,
                 filters.end_time,
-                countParams
+                params
             );
 
-            if (countData.error) {
-                throw new Error(countData.detail || countData.error);
+            if (data.error) {
+                throw new Error(data.detail || data.error);
             }
 
-            const totalItems = countData.pagination?.total || 0;
+            const totalItems = data.pagination?.total || 0;
 
             // Update title with PR count
             this.userPrsModal.setTitle(`PRs for ${username} (${totalItems})`);
@@ -576,34 +595,8 @@ class TeamDynamics {
                 return;
             }
 
-            // Fetch all PRs
-            const allParams = {
-                user: username,
-                role: role,
-                page: 1,
-                page_size: totalItems
-            };
-
-            if (filters.repository) {
-                allParams.repository = filters.repository;
-            }
-
-            const allData = await apiClient.fetchUserPRs(
-                filters.start_time,
-                filters.end_time,
-                allParams
-            );
-
-            if (allData.error) {
-                throw new Error(allData.detail || allData.error);
-            }
-
-            // Store all PRs
-            this.userPrsPagination.allPrs = allData.data || [];
-            this.userPrsPagination.currentPage = 1;
-
             // Render PRs
-            this.renderUserPrsWithPagination();
+            this.renderUserPrsList(data.data || []);
 
         } catch (error) {
             console.error('[TeamDynamics] Error loading user PRs:', error);
@@ -612,12 +605,10 @@ class TeamDynamics {
     }
 
     /**
-     * Render user PRs list (reuse from turnaround.js)
+     * Render user PRs list
      */
-    renderUserPrsWithPagination() {
-        const { allPrs } = this.userPrsPagination;
-
-        const prsListHtml = this.renderUserPrsListHtml(allPrs);
+    renderUserPrsList(prs) {
+        const prsListHtml = this.renderUserPrsListHtml(prs);
         this.userPrsModal.setBody(prsListHtml);
 
         // Set up delegated click listener for PR items
@@ -1038,11 +1029,122 @@ class TeamDynamics {
     }
 
     /**
-     * Set up pagination (placeholder for future implementation)
+     * Set up pagination for the three data tables
      */
     setupPagination() {
-        // Pagination components can be added here if needed in the future
-        console.log('[TeamDynamics] Pagination setup (not implemented yet)');
+        console.log('[TeamDynamics] Setting up pagination for data tables');
+
+        const DEFAULT_TABLE_PAGE_SIZE = 25;
+        const TABLE_PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
+        // Workload table pagination
+        const workloadPaginationContainer = document.getElementById('workloadTable-pagination');
+        if (workloadPaginationContainer) {
+            this.paginationState.workload.paginationComponent = new Pagination({
+                container: workloadPaginationContainer,
+                pageSize: DEFAULT_TABLE_PAGE_SIZE,
+                pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
+                onPageChange: (page, pageSize) => {
+                    console.log(`[TeamDynamics] Workload table page changed: ${page}, size: ${pageSize}`);
+                    this.paginationState.workload.currentPage = page;
+                    this.renderPaginatedTable('workload', page, pageSize);
+                },
+                onPageSizeChange: (pageSize) => {
+                    console.log(`[TeamDynamics] Workload table page size changed: ${pageSize}`);
+                    this.paginationState.workload.currentPage = 1;
+                    this.renderPaginatedTable('workload', 1, pageSize);
+                }
+            });
+            // Initially hide pagination until data is loaded
+            this.paginationState.workload.paginationComponent.hide();
+        }
+
+        // Review efficiency table pagination
+        const reviewEfficiencyPaginationContainer = document.getElementById('reviewEfficiencyTable-pagination');
+        if (reviewEfficiencyPaginationContainer) {
+            this.paginationState.reviewEfficiency.paginationComponent = new Pagination({
+                container: reviewEfficiencyPaginationContainer,
+                pageSize: DEFAULT_TABLE_PAGE_SIZE,
+                pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
+                onPageChange: (page, pageSize) => {
+                    console.log(`[TeamDynamics] Review efficiency table page changed: ${page}, size: ${pageSize}`);
+                    this.paginationState.reviewEfficiency.currentPage = page;
+                    this.renderPaginatedTable('reviewEfficiency', page, pageSize);
+                },
+                onPageSizeChange: (pageSize) => {
+                    console.log(`[TeamDynamics] Review efficiency table page size changed: ${pageSize}`);
+                    this.paginationState.reviewEfficiency.currentPage = 1;
+                    this.renderPaginatedTable('reviewEfficiency', 1, pageSize);
+                }
+            });
+            // Initially hide pagination until data is loaded
+            this.paginationState.reviewEfficiency.paginationComponent.hide();
+        }
+
+        // Bottlenecks table pagination
+        const bottlenecksPaginationContainer = document.getElementById('approversTable-pagination');
+        if (bottlenecksPaginationContainer) {
+            this.paginationState.bottlenecks.paginationComponent = new Pagination({
+                container: bottlenecksPaginationContainer,
+                pageSize: DEFAULT_TABLE_PAGE_SIZE,
+                pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
+                onPageChange: (page, pageSize) => {
+                    console.log(`[TeamDynamics] Bottlenecks table page changed: ${page}, size: ${pageSize}`);
+                    this.paginationState.bottlenecks.currentPage = page;
+                    this.renderPaginatedTable('bottlenecks', page, pageSize);
+                },
+                onPageSizeChange: (pageSize) => {
+                    console.log(`[TeamDynamics] Bottlenecks table page size changed: ${pageSize}`);
+                    this.paginationState.bottlenecks.currentPage = 1;
+                    this.renderPaginatedTable('bottlenecks', 1, pageSize);
+                }
+            });
+            // Initially hide pagination until data is loaded
+            this.paginationState.bottlenecks.paginationComponent.hide();
+        }
+    }
+
+    /**
+     * Render a paginated table with client-side pagination
+     */
+    renderPaginatedTable(tableKey, page, pageSize) {
+        // Get all data for this table
+        const allData = this.getTableData(tableKey);
+
+        if (!allData || allData.length === 0) {
+            return;
+        }
+
+        // Calculate pagination
+        const startIndex = (page - 1) * pageSize;
+        const endIndex = startIndex + pageSize;
+        const pageData = allData.slice(startIndex, endIndex);
+
+        // Update table with page data
+        if (tableKey === 'workload') {
+            this.updateWorkloadTable(pageData);
+        } else if (tableKey === 'reviewEfficiency') {
+            this.updateReviewEfficiencyTable(pageData);
+        } else if (tableKey === 'bottlenecks') {
+            this.updateBottlenecksTable(pageData);
+        }
+
+        // Update pagination component
+        const paginationComponent = this.paginationState[tableKey].paginationComponent;
+        if (paginationComponent) {
+            paginationComponent.update({
+                total: allData.length,
+                page: page,
+                pageSize: pageSize
+            });
+
+            // Show/hide pagination based on data size
+            if (allData.length > pageSize) {
+                paginationComponent.show();
+            } else {
+                paginationComponent.hide();
+            }
+        }
     }
 
     /**

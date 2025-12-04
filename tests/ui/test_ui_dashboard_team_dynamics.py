@@ -477,17 +477,20 @@ class TestTeamDynamicsAccessibility:
         # Workload collapse button
         workload_btn = page_with_js_coverage.locator('.collapse-btn[data-section="workload-distribution"]')
         aria_label = await workload_btn.get_attribute("aria-label")
-        assert aria_label is not None and len(aria_label) > 0, "Workload collapse button missing aria-label"
+        assert aria_label is not None, "Workload collapse button aria-label is None"
+        assert len(aria_label) > 0, "Workload collapse button aria-label is empty"
 
         # Review efficiency collapse button
         review_btn = page_with_js_coverage.locator('.collapse-btn[data-section="review-efficiency"]')
         aria_label = await review_btn.get_attribute("aria-label")
-        assert aria_label is not None and len(aria_label) > 0, "Review efficiency collapse button missing aria-label"
+        assert aria_label is not None, "Review efficiency collapse button aria-label is None"
+        assert len(aria_label) > 0, "Review efficiency collapse button aria-label is empty"
 
         # Bottlenecks collapse button
         bottleneck_btn = page_with_js_coverage.locator('.collapse-btn[data-section="approval-bottlenecks"]')
         aria_label = await bottleneck_btn.get_attribute("aria-label")
-        assert aria_label is not None and len(aria_label) > 0, "Bottleneck collapse button missing aria-label"
+        assert aria_label is not None, "Approval bottlenecks collapse button aria-label is None"
+        assert len(aria_label) > 0, "Approval bottlenecks collapse button aria-label is empty"
 
     async def test_download_buttons_have_aria_labels(self, page_with_js_coverage: Page) -> None:
         """Verify download buttons have aria-label attributes."""

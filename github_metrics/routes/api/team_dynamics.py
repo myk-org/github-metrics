@@ -253,12 +253,17 @@ async def get_team_dynamics(
               AND w.action = 'submitted'
               AND w.sender IS DISTINCT FROM w.pr_author
               AND w.created_at >= po.opened_at
+        ),
+        overall_median AS (
+            SELECT ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY hours_to_review)::numeric, 1) as median_hours
+            FROM review_times
         )
         SELECT
             reviewer as user,
             ROUND(AVG(hours_to_review)::numeric, 1) as avg_review_time_hours,
             ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY hours_to_review)::numeric, 1) as median_review_time_hours,
-            COUNT(*) as total_reviews
+            COUNT(*) as total_reviews,
+            (SELECT median_hours FROM overall_median) as overall_median_hours
         FROM review_times
         WHERE reviewer IS NOT NULL
         GROUP BY reviewer
@@ -409,9 +414,8 @@ async def get_team_dynamics(
 
         if review_data:
             avg_review_time = round(sum(r["avg_review_time_hours"] for r in review_data) / len(review_data), 1)
-            # Calculate overall median from all review times
-            all_medians = [r["median_review_time_hours"] for r in review_data]
-            median_review_time = round(sorted(all_medians)[len(all_medians) // 2], 1)
+            # Use proper aggregate median from database query
+            median_review_time = float(review_rows[0]["overall_median_hours"] or 0) if review_rows else 0.0
 
             fastest = min(review_data, key=lambda x: x["avg_review_time_hours"])
             fastest_reviewer = {"user": fastest["user"], "avg_hours": fastest["avg_review_time_hours"]}
@@ -436,18 +440,19 @@ async def get_team_dynamics(
             for row in approval_rows
         ]
 
-        # Generate bottleneck alerts
+        # Generate bottleneck alerts (based on approval time only)
         pending_count = pending_row["pending_count"] if pending_row else 0
         alerts = []
 
         for approver_data in approval_data:
             avg_hours = approver_data["avg_approval_hours"]
 
-            # Critical: >48 hours OR >5 pending PRs
-            # Warning: >24 hours OR >3 pending PRs
-            if avg_hours > 48 or pending_count > 5:
+            # Severity based on approval time only
+            # Critical: >48 hours
+            # Warning: >24 hours
+            if avg_hours > 48:
                 severity = "critical"
-            elif avg_hours > 24 or pending_count > 3:
+            elif avg_hours > 24:
                 severity = "warning"
             else:
                 continue
@@ -459,8 +464,8 @@ async def get_team_dynamics(
                 "severity": severity,
             })
 
-        # Sort alerts by severity (critical first) then by avg_approval_hours
-        alerts.sort(key=lambda x: (x["severity"] != "critical", x["avg_approval_hours"]), reverse=True)
+        # Sort alerts: critical first (False < True), then by avg_approval_hours descending
+        alerts.sort(key=lambda x: (x["severity"] != "critical", -x["avg_approval_hours"]))
 
     except asyncio.CancelledError:
         raise

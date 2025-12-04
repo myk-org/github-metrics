@@ -58,13 +58,26 @@ class TestTeamDynamicsEndpoint:
     def mock_review_rows(self) -> list[dict[str, Any]]:
         """Create mock review efficiency data."""
         return [
-            {"user": "bob", "avg_review_time_hours": 1.2, "median_review_time_hours": 0.8, "total_reviews": 150},
-            {"user": "alice", "avg_review_time_hours": 2.5, "median_review_time_hours": 1.5, "total_reviews": 120},
+            {
+                "user": "bob",
+                "avg_review_time_hours": 1.2,
+                "median_review_time_hours": 0.8,
+                "total_reviews": 150,
+                "overall_median_hours": 1.5,
+            },
+            {
+                "user": "alice",
+                "avg_review_time_hours": 2.5,
+                "median_review_time_hours": 1.5,
+                "total_reviews": 120,
+                "overall_median_hours": 1.5,
+            },
             {
                 "user": "charlie",
                 "avg_review_time_hours": 12.5,
                 "median_review_time_hours": 8.0,
                 "total_reviews": 50,
+                "overall_median_hours": 1.5,
             },
         ]
 
@@ -232,7 +245,13 @@ class TestTeamDynamicsEndpoint:
         """Test bottleneck alert with warning severity."""
         workload_rows = [{"user": "alice", "prs_created": 10, "prs_reviewed": 20, "prs_approved": 15}]
         review_rows = [
-            {"user": "alice", "avg_review_time_hours": 2.0, "median_review_time_hours": 1.5, "total_reviews": 20}
+            {
+                "user": "alice",
+                "avg_review_time_hours": 2.0,
+                "median_review_time_hours": 1.5,
+                "total_reviews": 20,
+                "overall_median_hours": 1.5,
+            }
         ]
         approval_rows = [{"approver": "alice", "avg_approval_hours": 30.0, "total_approvals": 15}]
         pending_row = {"pending_count": 4}
@@ -255,7 +274,13 @@ class TestTeamDynamicsEndpoint:
         """Test bottleneck with no alerts (fast approval times)."""
         workload_rows = [{"user": "alice", "prs_created": 10, "prs_reviewed": 20, "prs_approved": 15}]
         review_rows = [
-            {"user": "alice", "avg_review_time_hours": 2.0, "median_review_time_hours": 1.5, "total_reviews": 20}
+            {
+                "user": "alice",
+                "avg_review_time_hours": 2.0,
+                "median_review_time_hours": 1.5,
+                "total_reviews": 20,
+                "overall_median_hours": 1.5,
+            }
         ]
         approval_rows = [{"approver": "alice", "avg_approval_hours": 4.0, "total_approvals": 15}]
         pending_row = {"pending_count": 2}
