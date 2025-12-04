@@ -413,6 +413,9 @@ async def get_team_dynamics(
         slowest_reviewer = None
 
         if review_data:
+            # Note: avg_review_time is an unweighted average-of-averages (approximation).
+            # For accurate aggregate statistics, use median_review_time which is computed
+            # directly from the database using PERCENTILE_CONT(0.5).
             avg_review_time = round(sum(r["avg_review_time_hours"] for r in review_data) / len(review_data), 1)
             # Use proper aggregate median from database query
             median_review_time = float(review_rows[0]["overall_median_hours"] or 0) if review_rows else 0.0

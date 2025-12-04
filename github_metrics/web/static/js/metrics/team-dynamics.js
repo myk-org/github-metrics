@@ -64,8 +64,13 @@ class TeamDynamics {
         this.DEFAULT_PAGE_SIZE = 50;
         this.userPrsState = {
             username: null,
-            category: null
+            category: null,
+            page: 1
         };
+
+        // Event listener references for cleanup
+        this.hashChangeHandler = null;
+        this.timeFiltersUpdatedHandler = null;
 
         this.initialize();
     }
@@ -151,22 +156,24 @@ class TeamDynamics {
      */
     setupPageChangeListener() {
         // Listen for hash changes - load metrics directly when navigating to team-dynamics
-        window.addEventListener('hashchange', () => {
+        this.hashChangeHandler = () => {
             const hash = window.location.hash.slice(1);
             if (hash === 'team-dynamics') {
                 console.log('[TeamDynamics] Navigated to team-dynamics page, loading metrics');
                 this.loadMetrics();
             }
-        });
+        };
+        window.addEventListener('hashchange', this.hashChangeHandler);
 
         // Listen for time filter updates from dashboard (custom event)
-        document.addEventListener('timeFiltersUpdated', () => {
+        this.timeFiltersUpdatedHandler = () => {
             const hash = window.location.hash.slice(1);
             if (hash === 'team-dynamics') {
                 console.log('[TeamDynamics] Time filters updated, refreshing metrics');
                 this.loadMetrics();
             }
-        });
+        };
+        document.addEventListener('timeFiltersUpdated', this.timeFiltersUpdatedHandler);
     }
 
     /**
@@ -485,12 +492,12 @@ class TeamDynamics {
 
         // Render alert cards
         alerts.forEach(alert => {
-            const alertClass = alert.type === 'critical' ? 'alert-critical' : 'alert-warning';
+            const alertClass = alert.severity === 'critical' ? 'alert-critical' : 'alert-warning';
             const alertCard = document.createElement('div');
             alertCard.className = `alert-card ${alertClass}`;
             alertCard.innerHTML = `
                 <div class="alert-header">
-                    <span class="alert-icon">${alert.type === 'critical' ? '🚨' : '⚠️'}</span>
+                    <span class="alert-icon">${alert.severity === 'critical' ? '🚨' : '⚠️'}</span>
                     <span class="alert-title">${this.escapeHtml(alert.approver)}</span>
                 </div>
                 <div class="alert-body">
@@ -528,9 +535,10 @@ class TeamDynamics {
     async showUserPrsModal(username, category = 'workload') {
         console.log(`[TeamDynamics] Opening PRs modal for ${username}, category: ${category}`);
 
-        // Store username and category
+        // Store username and category, reset page to 1
         this.userPrsState.username = username;
         this.userPrsState.category = category;
+        this.userPrsState.page = 1;
 
         // Open modal with username data
         this.userPrsModal.open({ username, category });
@@ -550,7 +558,7 @@ class TeamDynamics {
      * Uses a reasonable page size (not totalItems) per API design principles
      */
     async loadUserPrs() {
-        const { username, category } = this.userPrsState;
+        const { username, category, page } = this.userPrsState;
 
         try {
             const filters = this.getTimeFilters();
@@ -567,7 +575,7 @@ class TeamDynamics {
             const params = {
                 user: username,
                 role: role,
-                page: 1,
+                page: page,
                 page_size: this.DEFAULT_PAGE_SIZE
             };
 
@@ -586,6 +594,7 @@ class TeamDynamics {
             }
 
             const totalItems = data.pagination?.total || 0;
+            const totalPages = Math.ceil(totalItems / this.DEFAULT_PAGE_SIZE);
 
             // Update title with PR count
             this.userPrsModal.setTitle(`PRs for ${username} (${totalItems})`);
@@ -596,7 +605,7 @@ class TeamDynamics {
             }
 
             // Render PRs
-            this.renderUserPrsList(data.data || []);
+            this.renderUserPrsList(data.data || [], totalItems, page, totalPages);
 
         } catch (error) {
             console.error('[TeamDynamics] Error loading user PRs:', error);
@@ -607,8 +616,8 @@ class TeamDynamics {
     /**
      * Render user PRs list
      */
-    renderUserPrsList(prs) {
-        const prsListHtml = this.renderUserPrsListHtml(prs);
+    renderUserPrsList(prs, totalItems, currentPage, totalPages) {
+        const prsListHtml = this.renderUserPrsListHtml(prs, totalItems, currentPage, totalPages);
         this.userPrsModal.setBody(prsListHtml);
 
         // Set up delegated click listener for PR items
@@ -632,12 +641,17 @@ class TeamDynamics {
 
             listPanel.addEventListener('click', this._prItemClickHandler);
         }
+
+        // Set up pagination controls
+        if (totalPages > 1) {
+            this.setupUserPrsPaginationControls(currentPage, totalPages);
+        }
     }
 
     /**
      * Render list of user PRs
      */
-    renderUserPrsListHtml(prs) {
+    renderUserPrsListHtml(prs, totalItems, currentPage, totalPages) {
         if (!prs || prs.length === 0) {
             return '<div class="empty-state">No PRs found.</div>';
         }
@@ -662,9 +676,34 @@ class TeamDynamics {
             `;
         }).join('');
 
+        // Show pagination info or controls if needed
+        let paginationHtml = '';
+        if (totalPages > 1) {
+            const startItem = (currentPage - 1) * this.DEFAULT_PAGE_SIZE + 1;
+            const endItem = Math.min(currentPage * this.DEFAULT_PAGE_SIZE, totalItems);
+            paginationHtml = `
+                <div class="user-prs-pagination">
+                    <div class="pagination-info">Showing ${startItem}-${endItem} of ${totalItems} PRs</div>
+                    <div class="pagination-controls">
+                        <button class="pagination-btn" id="user-prs-prev-btn" ${currentPage === 1 ? 'disabled' : ''}>← Previous</button>
+                        <span class="pagination-page-info">Page ${currentPage} of ${totalPages}</span>
+                        <button class="pagination-btn" id="user-prs-next-btn" ${currentPage === totalPages ? 'disabled' : ''}>Next →</button>
+                    </div>
+                </div>
+            `;
+        } else if (totalItems > this.DEFAULT_PAGE_SIZE) {
+            // Showing first X of Y message if there are more items than page size but only one page shown
+            paginationHtml = `
+                <div class="user-prs-pagination">
+                    <div class="pagination-info">Showing first ${prs.length} of ${totalItems} PRs</div>
+                </div>
+            `;
+        }
+
         return `
             <div class="user-prs-container">
                 <div class="user-prs-list-panel">
+                    ${paginationHtml}
                     <div class="user-prs-list-content">
                         ${listPanelHtml}
                     </div>
@@ -674,6 +713,34 @@ class TeamDynamics {
                 </div>
             </div>
         `;
+    }
+
+    /**
+     * Set up pagination controls for user PRs modal
+     */
+    setupUserPrsPaginationControls(currentPage, totalPages) {
+        const prevBtn = document.getElementById('user-prs-prev-btn');
+        const nextBtn = document.getElementById('user-prs-next-btn');
+
+        if (prevBtn) {
+            prevBtn.onclick = async () => {
+                if (currentPage > 1) {
+                    this.userPrsState.page = currentPage - 1;
+                    this.userPrsModal.showLoading('Loading PRs...');
+                    await this.loadUserPrs();
+                }
+            };
+        }
+
+        if (nextBtn) {
+            nextBtn.onclick = async () => {
+                if (currentPage < totalPages) {
+                    this.userPrsState.page = currentPage + 1;
+                    this.userPrsModal.showLoading('Loading PRs...');
+                    await this.loadUserPrs();
+                }
+            };
+        }
     }
 
     /**
@@ -1165,7 +1232,82 @@ class TeamDynamics {
      */
     destroy() {
         console.log('[TeamDynamics] Destroying team dynamics module');
-        // Clean up event listeners and components if needed
+
+        // Remove event listeners
+        if (this.hashChangeHandler) {
+            window.removeEventListener('hashchange', this.hashChangeHandler);
+            this.hashChangeHandler = null;
+        }
+
+        if (this.timeFiltersUpdatedHandler) {
+            document.removeEventListener('timeFiltersUpdated', this.timeFiltersUpdatedHandler);
+            this.timeFiltersUpdatedHandler = null;
+        }
+
+        // Destroy modal
+        if (this.userPrsModal && typeof this.userPrsModal.destroy === 'function') {
+            this.userPrsModal.destroy();
+            this.userPrsModal = null;
+        }
+
+        // Destroy sortable tables
+        if (this.sortableTables) {
+            Object.keys(this.sortableTables).forEach(key => {
+                const table = this.sortableTables[key];
+                if (table && typeof table.destroy === 'function') {
+                    table.destroy();
+                }
+            });
+            this.sortableTables = { workload: null, reviewEfficiency: null, bottlenecks: null };
+        }
+
+        // Destroy pagination components
+        if (this.paginationState) {
+            Object.keys(this.paginationState).forEach(key => {
+                const pagination = this.paginationState[key]?.paginationComponent;
+                if (pagination && typeof pagination.destroy === 'function') {
+                    pagination.destroy();
+                }
+            });
+            this.paginationState = {
+                workload: { currentPage: 1, paginationComponent: null },
+                reviewEfficiency: { currentPage: 1, paginationComponent: null },
+                bottlenecks: { currentPage: 1, paginationComponent: null }
+            };
+        }
+
+        // Destroy download buttons
+        if (this.downloadButtons) {
+            Object.keys(this.downloadButtons).forEach(key => {
+                const downloadBtn = this.downloadButtons[key];
+                if (downloadBtn && typeof downloadBtn.destroy === 'function') {
+                    downloadBtn.destroy();
+                }
+            });
+            this.downloadButtons = null;
+        }
+
+        // Clear DOM references
+        this.loadingElement = null;
+        this.errorElement = null;
+        this.contentElement = null;
+        this.kpiTotalContributors = null;
+        this.kpiAvgPrsPerContributor = null;
+        this.kpiTopContributor = null;
+        this.kpiWorkloadGini = null;
+        this.kpiAvgReviewTime = null;
+        this.kpiMedianReviewTime = null;
+        this.kpiFastestReviewer = null;
+        this.kpiSlowestReviewer = null;
+        this.workloadTableBody = null;
+        this.reviewEfficiencyTableBody = null;
+        this.bottlenecksTableBody = null;
+        this.bottleneckAlertsContainer = null;
+
+        // Clear data
+        this.data = null;
+
+        console.log('[TeamDynamics] Team dynamics module destroyed');
     }
 }
 
