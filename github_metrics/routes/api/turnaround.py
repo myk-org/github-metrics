@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi import status as http_status
@@ -28,8 +28,9 @@ async def get_review_turnaround(
         default=None, description="Start time in ISO 8601 format (e.g., 2024-01-01T00:00:00Z)"
     ),
     end_time: str | None = Query(default=None, description="End time in ISO 8601 format (e.g., 2024-01-31T23:59:59Z)"),
-    repository: str | None = Query(default=None, description="Filter by repository (org/repo format)"),
-    user: str | None = Query(default=None, description="Filter by reviewer username"),
+    repositories: Annotated[list[str] | None, Query(description="Filter by repositories (org/repo format)")] = None,
+    users: Annotated[list[str] | None, Query(description="Filter by reviewer usernames (include)")] = None,
+    exclude_users: Annotated[list[str] | None, Query(description="Exclude reviewers from results")] = None,
 ) -> dict[str, Any]:
     """Get PR review turnaround time metrics.
 
@@ -50,11 +51,12 @@ async def get_review_turnaround(
       Default: No time filter (all-time stats)
     - `end_time` (str, optional): End of time range in ISO 8601 format
       Default: No time filter (up to current time)
-    - `repository` (str, optional): Filter by repository (org/repo format)
-    - `user` (str, optional): Filter by reviewer username
-      Note: The user filter only affects reviewer-centric metrics (time_to_first_review,
+    - `repositories` (list[str], optional): Filter by repositories (org/repo format)
+    - `users` (list[str], optional): Filter by reviewer usernames to include
+      Note: The users filter only affects reviewer-centric metrics (time_to_first_review,
       by_repository breakdown, by_reviewer stats). Approval and lifecycle metrics remain
       global for the given time/repository filters since they track PR completion states.
+    - `exclude_users` (list[str], optional): Exclude reviewers from results
 
     **Return Structure:**
     ```json
@@ -126,15 +128,19 @@ async def get_review_turnaround(
     # These are used by ALL queries
     base_params = QueryParams()
     time_filter = build_time_filter(base_params, start_datetime, end_datetime)
-    repository_filter = build_repository_filter(base_params, repository)
+    repository_filter = build_repository_filter(base_params, repositories)
 
-    # Build reviewer parameters (base params + user filter)
+    # Build reviewer parameters (base params + user filters)
     # These are used only by queries that filter by reviewer
     reviewer_params = base_params.clone()
 
     user_filter_reviewer = ""
-    if user:
-        user_filter_reviewer = f" AND w.sender = {reviewer_params.add(user)}"
+    if users:
+        user_filter_reviewer = f" AND w.sender = ANY({reviewer_params.add(users)})"
+
+    exclude_user_filter_reviewer = ""
+    if exclude_users:
+        exclude_user_filter_reviewer = f" AND w.sender != ALL({reviewer_params.add(exclude_users)})"
 
     # Query 1: Time to first review per PR (for overall summary)
     # Find the first 'pull_request_review' event for each PR after it was opened
@@ -167,6 +173,7 @@ async def get_review_turnaround(
               AND w.sender IS DISTINCT FROM w.pr_author
               """
         + user_filter_reviewer
+        + exclude_user_filter_reviewer
         + """
             GROUP BY w.repository, w.pr_number
         )
@@ -283,6 +290,7 @@ async def get_review_turnaround(
               AND w.sender IS DISTINCT FROM w.pr_author
               """
         + user_filter_reviewer
+        + exclude_user_filter_reviewer
         + """
             GROUP BY w.repository, w.pr_number
         ),
@@ -362,6 +370,7 @@ async def get_review_turnaround(
           AND w.sender IS DISTINCT FROM w.pr_author
           """
         + user_filter_reviewer
+        + exclude_user_filter_reviewer
         + """
         GROUP BY w.sender
         ORDER BY total_reviews DESC

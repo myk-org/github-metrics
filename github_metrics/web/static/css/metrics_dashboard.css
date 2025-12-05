@@ -752,6 +752,8 @@ h3 {
   font-size: 14px;
   color: var(--text-color);
   transition: background-color 0.15s;
+  display: flex;
+  align-items: center;
 }
 
 .combo-box-option:hover,
@@ -771,12 +773,104 @@ h3 {
   color: white;
 }
 
+/* Multi-select checkbox styles */
+.combo-box-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-color, #666);
+  border-radius: 3px;
+  margin-right: 8px;
+  flex-shrink: 0;
+  background: transparent;
+}
+
+.combo-box-checkbox.checked {
+  background: var(--primary-color, #007bff);
+  border-color: var(--primary-color, #007bff);
+}
+
+.combo-box-checkbox.checked::after {
+  content: '✓';
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.combo-box-option-label {
+  flex: 1;
+}
+
 .combo-box-no-results {
   padding: 8px 12px;
   font-size: 14px;
   color: var(--text-secondary);
   text-align: center;
   font-style: italic;
+}
+
+/* Multi-select chips */
+.selected-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+  min-height: 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background-color: var(--primary-color, #3498db);
+  color: white;
+  border-radius: 16px;
+  font-size: 0.85em;
+  line-height: 1.4;
+  user-select: none;
+  transition: all 0.2s ease;
+}
+
+.chip:hover {
+  background-color: var(--primary-dark, #2980b9);
+}
+
+.chip-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.chip-remove {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 1.3em;
+  line-height: 1;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+}
+
+.chip-remove:hover {
+  opacity: 1;
+}
+
+.chip-remove:focus {
+  outline: 2px solid white;
+  outline-offset: 2px;
+  border-radius: 50%;
+  opacity: 1;
 }
 
 /* Toggle switch */

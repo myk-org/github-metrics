@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi import status as http_status
@@ -16,7 +16,6 @@ from github_metrics.utils.contributor_queries import (
     get_pr_creators_cte,
     get_pr_merged_status_cte,
     get_role_base_conditions,
-    get_role_user_filter,
 )
 from github_metrics.utils.datetime_utils import parse_datetime_string
 from github_metrics.utils.query_builders import QueryParams
@@ -33,7 +32,10 @@ db_manager: DatabaseManager | None = None
 
 @router.get("/user-prs", operation_id="get_user_pull_requests")
 async def get_user_pull_requests(
-    user: str | None = Query(None, description="GitHub username (optional - shows all PRs if not specified)"),
+    users: Annotated[
+        list[str] | None, Query(description="GitHub usernames (optional - shows all PRs if not specified)")
+    ] = None,
+    exclude_users: Annotated[list[str] | None, Query(description="Exclude users from results")] = None,
     role: str | None = Query(
         None,
         description=(
@@ -41,7 +43,7 @@ async def get_user_pull_requests(
             "pr_approvers (approved), pr_lgtm (lgtm label)"
         ),
     ),
-    repository: str | None = Query(None, description="Filter by repository (org/repo)"),
+    repositories: Annotated[list[str] | None, Query(description="Filter by repositories (org/repo)")] = None,
     start_time: str | None = Query(
         default=None, description="Start time in ISO 8601 format (e.g., 2024-01-01T00:00:00Z)"
     ),
@@ -64,13 +66,14 @@ async def get_user_pull_requests(
     - Filter PR activity by repository or time period
 
     **Parameters:**
-    - `user` (str, optional): GitHub username to filter by (shows all PRs if not specified)
+    - `users` (list[str], optional): GitHub usernames to filter by (shows all PRs if not specified)
+    - `exclude_users` (list[str], optional): Exclude users from results
     - `role` (str, optional): Filter by user role:
-        - `pr_creators`: PRs created by the user
-        - `pr_reviewers`: PRs reviewed by the user
-        - `pr_approvers`: PRs approved by the user
-        - `pr_lgtm`: PRs where user added LGTM label
-    - `repository` (str, optional): Filter by specific repository (format: org/repo)
+        - `pr_creators`: PRs created by the users
+        - `pr_reviewers`: PRs reviewed by the users
+        - `pr_approvers`: PRs approved by the users
+        - `pr_lgtm`: PRs where users added LGTM label
+    - `repositories` (list[str], optional): Filter by specific repositories (format: org/repo)
     - `start_time` (str, optional): Start of time range in ISO 8601 format
     - `end_time` (str, optional): End of time range in ISO 8601 format
     - `page` (int, optional): Page number for pagination (default: 1)
@@ -139,9 +142,25 @@ async def get_user_pull_requests(
         # Build event filters
         event_filters = [get_role_base_conditions(role_enum)]
 
-        if user and user.strip():
-            user_placeholder = params.add(user.strip())
-            event_filters.append(get_role_user_filter(role_enum, user_placeholder))
+        if users:
+            users_param = params.add(users)
+            # For label-based roles, check SUBSTRING result; for other roles, check field directly
+            if role_enum in (ContributorRole.PR_APPROVERS, ContributorRole.PR_LGTM):
+                # For label roles: SUBSTRING(label_name FROM N) = ANY(array)
+                label_offset = 10 if role_enum == ContributorRole.PR_APPROVERS else 6
+                event_filters.append(f"SUBSTRING(events.label_name FROM {label_offset}) = ANY({users_param})")
+            else:
+                # For PR_REVIEWERS: sender = ANY(array)
+                event_filters.append(f"events.sender = ANY({users_param})")
+
+        if exclude_users:
+            exclude_users_param = params.add(exclude_users)
+            # Same logic for exclude
+            if role_enum in (ContributorRole.PR_APPROVERS, ContributorRole.PR_LGTM):
+                label_offset = 10 if role_enum == ContributorRole.PR_APPROVERS else 6
+                event_filters.append(f"SUBSTRING(events.label_name FROM {label_offset}) != ALL({exclude_users_param})")
+            else:
+                event_filters.append(f"events.sender != ALL({exclude_users_param})")
 
         if start_datetime:
             event_filters.append(f"events.created_at >= {params.add(start_datetime)}")
@@ -149,8 +168,9 @@ async def get_user_pull_requests(
         if end_datetime:
             event_filters.append(f"events.created_at <= {params.add(end_datetime)}")
 
-        if repository:
-            event_filters.append(f"events.repository = {params.add(repository)}")
+        if repositories:
+            repos_param = params.add(repositories)
+            event_filters.append(f"events.repository = ANY({repos_param})")
 
         event_where_clause = " AND ".join(event_filters)
 
@@ -247,16 +267,21 @@ async def get_user_pull_requests(
                 time_filter += f" AND created_at <= {params.add(end_datetime)}"
 
             repository_filter = ""
-            if repository:
-                repository_filter = f" AND repository = {params.add(repository)}"
+            if repositories:
+                repos_param = params.add(repositories)
+                repository_filter = f" AND repository = ANY({repos_param})"
 
-            # User filter for pr_creator in CTEs
+            # User filters for pr_creator in CTEs
             user_filter = ""
-            if user and user.strip():
-                user_filter = f" AND pr_creator = {params.add(user.strip())}"
+            if users:
+                user_filter = f" AND pr_creator = ANY({params.add(users)})"
+
+            exclude_user_filter = ""
+            if exclude_users:
+                exclude_user_filter = f" AND pr_creator != ALL({params.add(exclude_users)})"
 
             # Count query - use shared function
-            count_query = get_pr_creators_count_query(time_filter, repository_filter, user_filter)
+            count_query = get_pr_creators_count_query(time_filter, repository_filter, user_filter + exclude_user_filter)
 
             # Mark pagination start before adding pagination parameters
             params.mark_pagination_start()
@@ -308,7 +333,7 @@ async def get_user_pull_requests(
                 LEFT JOIN pr_merged_status pms
                     ON pms.repository = pr_data.repository
                     AND pms.pr_number = pr_data.pr_number
-                WHERE pc.pr_creator IS NOT NULL{user_filter}
+                WHERE pc.pr_creator IS NOT NULL{user_filter}{exclude_user_filter}
                 ORDER BY pr_data.repository, pr_data.pr_number DESC, pr_data.created_at DESC
                 LIMIT {limit_placeholder} OFFSET {offset_placeholder}
             """
@@ -316,9 +341,15 @@ async def get_user_pull_requests(
             # No role specified - use original behavior (match author or sender)
             filters = []
 
-            if user and user.strip():
-                user_placeholder = params.add(user.strip())
-                filters.append(f"(pr_author = {user_placeholder} OR sender = {user_placeholder})")
+            if users:
+                users_placeholder = params.add(users)
+                filters.append(f"(pr_author = ANY({users_placeholder}) OR sender = ANY({users_placeholder}))")
+
+            if exclude_users:
+                exclude_users_placeholder = params.add(exclude_users)
+                filters.append(
+                    f"(pr_author != ALL({exclude_users_placeholder}) AND sender != ALL({exclude_users_placeholder}))"
+                )
 
             if start_datetime:
                 filters.append(f"created_at >= {params.add(start_datetime)}")
@@ -326,8 +357,9 @@ async def get_user_pull_requests(
             if end_datetime:
                 filters.append(f"created_at <= {params.add(end_datetime)}")
 
-            if repository:
-                filters.append(f"repository = {params.add(repository)}")
+            if repositories:
+                repos_param = params.add(repositories)
+                filters.append(f"repository = ANY({repos_param})")
 
             where_clause = " AND ".join(filters) if filters else "1=1"
 

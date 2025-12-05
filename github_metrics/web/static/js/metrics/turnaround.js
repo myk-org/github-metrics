@@ -193,7 +193,7 @@ class TurnaroundMetrics {
                         this.loadMetrics();
                     }
                 }, 300);
-            } else if (e.target.id === 'userFilter') {
+            } else if (e.target.id === 'userFilter' || e.target.id === 'excludeUserFilter') {
                 clearTimeout(this.filterTimeouts.user);
                 this.filterTimeouts.user = setTimeout(() => {
                     const hash = window.location.hash.slice(1);
@@ -271,7 +271,8 @@ class TurnaroundMetrics {
         const startTimeInput = document.getElementById('startTime');
         const endTimeInput = document.getElementById('endTime');
         const repoInput = document.getElementById('repositoryFilter');
-        const userInput = document.getElementById('userFilter');
+        const userFilterGroup = document.getElementById('user-filter-group');
+        const excludeUserFilterGroup = document.getElementById('exclude-user-filter-group');
 
         const filters = {};
 
@@ -291,9 +292,31 @@ class TurnaroundMetrics {
             filters.repository = repoInput.value;
         }
 
-        // Add user filter
-        if (userInput && userInput.value) {
-            filters.user = userInput.value;
+        // Get users array from multi-select combo box
+        if (userFilterGroup && userFilterGroup._comboBox) {
+            const users = userFilterGroup._comboBox.getSelectedValues();
+            if (users && users.length > 0) {
+                filters.users = users;
+            }
+        } else {
+            // Fallback for plain input
+            const userInput = document.getElementById('userFilter');
+            if (userInput && userInput.value) {
+                filters.users = [userInput.value];
+            }
+        }
+
+        // Get exclude_users array
+        if (excludeUserFilterGroup && excludeUserFilterGroup._comboBox) {
+            const excludeUsers = excludeUserFilterGroup._comboBox.getSelectedValues();
+            if (excludeUsers && excludeUsers.length > 0) {
+                filters.exclude_users = excludeUsers;
+            }
+        } else {
+            const excludeUserInput = document.getElementById('excludeUserFilter');
+            if (excludeUserInput && excludeUserInput.value) {
+                filters.exclude_users = [excludeUserInput.value];
+            }
         }
 
         return filters;

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi import status as http_status
@@ -30,8 +30,9 @@ async def get_metrics_contributors(
         default=None, description="Start time in ISO 8601 format (e.g., 2024-01-01T00:00:00Z)"
     ),
     end_time: str | None = Query(default=None, description="End time in ISO 8601 format (e.g., 2024-01-31T23:59:59Z)"),
-    user: str | None = Query(default=None, description="Filter by username"),
-    repository: str | None = Query(default=None, description="Filter by repository (org/repo format)"),
+    users: Annotated[list[str] | None, Query(description="Filter by usernames (include)")] = None,
+    exclude_users: Annotated[list[str] | None, Query(description="Exclude users from results")] = None,
+    repositories: Annotated[list[str] | None, Query(description="Filter by repositories (org/repo format)")] = None,
     page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(default=10, ge=1, description="Items per page"),
 ) -> dict[str, Any]:
@@ -52,8 +53,9 @@ async def get_metrics_contributors(
     **Parameters:**
     - `start_time` (str, optional): Start of time range in ISO 8601 format
     - `end_time` (str, optional): End of time range in ISO 8601 format
-    - `user` (str, optional): Filter by username
-    - `repository` (str, optional): Filter by repository (org/repo format)
+    - `users` (list[str], optional): Filter by usernames to include
+    - `exclude_users` (list[str], optional): Exclude users from results
+    - `repositories` (list[str], optional): Filter by repositories (org/repo format)
     - `page` (int, default=1): Page number (1-indexed)
     - `page_size` (int, default=10): Items per page
 
@@ -165,7 +167,7 @@ async def get_metrics_contributors(
     # Build base filter parameters (time + repository filters)
     params = QueryParams()
     time_filter = build_time_filter(params, start_datetime, end_datetime)
-    repository_filter = build_repository_filter(params, repository)
+    repository_filter = build_repository_filter(params, repositories)
 
     # Build category-specific user filters to align with per-category "user" semantics
     # NOTE: These role definitions are the SOURCE OF TRUTH and are mirrored in:
@@ -180,17 +182,35 @@ async def get_metrics_contributors(
     user_filter_lgtm = ""
     user_filter_creators = ""
 
-    if user:
-        user_placeholder = params.add(user)
+    if users:
+        users_param = params.add(users)
 
         # PR Creators: filter on pr_creator
-        user_filter_creators = f" AND pr_creator = {user_placeholder}"
+        user_filter_creators = f" AND pr_creator = ANY({users_param})"
         # PR Reviewers: filter on sender
-        user_filter_reviewers = f" AND sender = {user_placeholder}"
-        # PR Approvers: filter using label_name with prefix (index-friendly)
-        user_filter_approvers = f" AND label_name = 'approved-' || {user_placeholder}"
-        # PR LGTM: filter using label_name with prefix (index-friendly)
-        user_filter_lgtm = f" AND label_name = 'lgtm-' || {user_placeholder}"
+        user_filter_reviewers = f" AND sender = ANY({users_param})"
+        # PR Approvers: filter using SUBSTRING result in array
+        user_filter_approvers = f" AND SUBSTRING(label_name FROM 10) = ANY({users_param})"
+        # PR LGTM: filter using SUBSTRING result in array
+        user_filter_lgtm = f" AND SUBSTRING(label_name FROM 6) = ANY({users_param})"
+
+    # Build exclude user filters
+    exclude_user_filter_reviewers = ""
+    exclude_user_filter_approvers = ""
+    exclude_user_filter_lgtm = ""
+    exclude_user_filter_creators = ""
+
+    if exclude_users:
+        exclude_users_param = params.add(exclude_users)
+
+        # PR Creators: exclude pr_creator
+        exclude_user_filter_creators = f" AND pr_creator != ALL({exclude_users_param})"
+        # PR Reviewers: exclude sender
+        exclude_user_filter_reviewers = f" AND sender != ALL({exclude_users_param})"
+        # PR Approvers: exclude using SUBSTRING result
+        exclude_user_filter_approvers = f" AND SUBSTRING(label_name FROM 10) != ALL({exclude_users_param})"
+        # PR LGTM: exclude using SUBSTRING result
+        exclude_user_filter_lgtm = f" AND SUBSTRING(label_name FROM 6) != ALL({exclude_users_param})"
 
     # Mark pagination start before adding pagination parameters
     params.mark_pagination_start()
@@ -199,11 +219,17 @@ async def get_metrics_contributors(
     offset_placeholder = params.add((page - 1) * page_size)
 
     # Count query for PR Creators - use shared function
-    pr_creators_count_query = get_pr_creators_count_query(time_filter, repository_filter, user_filter_creators)
+    pr_creators_count_query = get_pr_creators_count_query(
+        time_filter, repository_filter, user_filter_creators + exclude_user_filter_creators
+    )
 
     # Query PR Creators - use shared function
     pr_creators_query = get_pr_creators_data_query(
-        time_filter, repository_filter, user_filter_creators, page_size_placeholder, offset_placeholder
+        time_filter,
+        repository_filter,
+        user_filter_creators + exclude_user_filter_creators,
+        page_size_placeholder,
+        offset_placeholder,
     )
 
     # Count query for PR Reviewers
@@ -217,6 +243,7 @@ async def get_metrics_contributors(
           """
         + time_filter
         + user_filter_reviewers
+        + exclude_user_filter_reviewers
         + repository_filter
     )
 
@@ -234,6 +261,7 @@ async def get_metrics_contributors(
           """
         + time_filter
         + user_filter_reviewers
+        + exclude_user_filter_reviewers
         + repository_filter
         + f"""
         GROUP BY sender
@@ -253,6 +281,7 @@ async def get_metrics_contributors(
           """
         + time_filter
         + user_filter_approvers
+        + exclude_user_filter_approvers
         + repository_filter
     )
 
@@ -272,6 +301,7 @@ async def get_metrics_contributors(
           """
         + time_filter
         + user_filter_approvers
+        + exclude_user_filter_approvers
         + repository_filter
         + f"""
         GROUP BY SUBSTRING(label_name FROM 10)
@@ -291,6 +321,7 @@ async def get_metrics_contributors(
           """
         + time_filter
         + user_filter_lgtm
+        + exclude_user_filter_lgtm
         + repository_filter
     )
 
@@ -309,6 +340,7 @@ async def get_metrics_contributors(
           """
         + time_filter
         + user_filter_lgtm
+        + exclude_user_filter_lgtm
         + repository_filter
         + f"""
         GROUP BY SUBSTRING(label_name FROM 6)

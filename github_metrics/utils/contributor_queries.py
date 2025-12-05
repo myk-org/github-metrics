@@ -82,24 +82,6 @@ def get_role_base_conditions(role: ContributorRole) -> str:
     return " AND ".join(conditions)
 
 
-def get_role_user_filter(role: ContributorRole, user_param: str) -> str:
-    """Get the user filter for a role.
-
-    Args:
-        role: The contributor role
-        user_param: The SQL parameter placeholder (e.g., '$1')
-
-    Returns:
-        SQL condition string for filtering by user
-    """
-    config = ROLE_CONFIGS[role]
-
-    if config.user_field == "label":
-        # Label-based roles: match exact label name
-        return f"label_name = '{config.label_pattern}' || {user_param}"
-    return f"{config.user_field} = {user_param}"
-
-
 def get_pr_creators_cte(time_filter: str = "", repository_filter: str = "") -> str:
     """Generate the pr_creators CTE for identifying PR authors.
 

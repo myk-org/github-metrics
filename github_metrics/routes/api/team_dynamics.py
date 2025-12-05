@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from math import ceil
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi import status as http_status
@@ -61,8 +61,9 @@ async def get_team_dynamics(
         default=None, description="Start time in ISO 8601 format (e.g., 2024-01-01T00:00:00Z)"
     ),
     end_time: str | None = Query(default=None, description="End time in ISO 8601 format (e.g., 2024-01-31T23:59:59Z)"),
-    repository: str | None = Query(default=None, description="Filter by repository (org/repo format)"),
-    user: str | None = Query(default=None, description="Filter by user (username)"),
+    repositories: Annotated[list[str] | None, Query(description="Filter by repositories (org/repo format)")] = None,
+    users: Annotated[list[str] | None, Query(description="Filter by users (include)")] = None,
+    exclude_users: Annotated[list[str] | None, Query(description="Exclude users from results")] = None,
     page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(default=25, ge=1, description="Items per page"),
 ) -> dict[str, Any]:
@@ -84,8 +85,9 @@ async def get_team_dynamics(
       Default: No time filter (all-time stats)
     - `end_time` (str, optional): End of time range in ISO 8601 format
       Default: No time filter (up to current time)
-    - `repository` (str, optional): Filter by repository (org/repo format)
-    - `user` (str, optional): Filter by user (username)
+    - `repositories` (list[str], optional): Filter by repositories (org/repo format)
+    - `users` (list[str], optional): Filter by users to include (usernames)
+    - `exclude_users` (list[str], optional): Exclude users from results (usernames)
     - `page` (int, optional): Page number for pagination (1-indexed, default: 1)
     - `page_size` (int, optional): Number of items per page (default: 25)
 
@@ -191,17 +193,27 @@ async def get_team_dynamics(
     # Build base filter parameters
     params = QueryParams()
     time_filter = build_time_filter(params, start_datetime, end_datetime)
-    repository_filter = build_repository_filter(params, repository)
+    repository_filter = build_repository_filter(params, repositories)
 
-    # Build user filter
+    # Build user filters for include
     user_filter_pr_author = ""
     user_filter_sender = ""
     user_filter_label = ""
-    if user:
-        user_param = params.add(user)
-        user_filter_pr_author = f" AND pr_author = {user_param}"
-        user_filter_sender = f" AND sender = {user_param}"
-        user_filter_label = f" AND SUBSTRING(label_name FROM 10) = {user_param}"
+    if users:
+        users_param = params.add(users)
+        user_filter_pr_author = f" AND pr_author = ANY({users_param})"
+        user_filter_sender = f" AND sender = ANY({users_param})"
+        user_filter_label = f" AND SUBSTRING(label_name FROM 10) = ANY({users_param})"
+
+    # Build user filters for exclude
+    exclude_user_filter_pr_author = ""
+    exclude_user_filter_sender = ""
+    exclude_user_filter_label = ""
+    if exclude_users:
+        exclude_users_param = params.add(exclude_users)
+        exclude_user_filter_pr_author = f" AND pr_author != ALL({exclude_users_param})"
+        exclude_user_filter_sender = f" AND sender != ALL({exclude_users_param})"
+        exclude_user_filter_label = f" AND SUBSTRING(label_name FROM 10) != ALL({exclude_users_param})"
 
     # Query 1: Workload distribution by contributor
     workload_query = (
@@ -217,6 +229,7 @@ async def get_team_dynamics(
         + time_filter
         + repository_filter
         + user_filter_pr_author
+        + exclude_user_filter_pr_author
         + """
             GROUP BY pr_author
         ),
@@ -232,6 +245,7 @@ async def get_team_dynamics(
         + time_filter
         + repository_filter
         + user_filter_sender
+        + exclude_user_filter_sender
         + """
             GROUP BY sender
         ),
@@ -247,6 +261,7 @@ async def get_team_dynamics(
         + time_filter
         + repository_filter
         + user_filter_label
+        + exclude_user_filter_label
         + """
             GROUP BY SUBSTRING(label_name FROM 10)
         )
@@ -293,6 +308,7 @@ async def get_team_dynamics(
               AND w.created_at >= po.opened_at
               """
         + user_filter_sender.replace("sender", "w.sender")
+        + exclude_user_filter_sender.replace("sender", "w.sender")
         + """
         ),
         overall_median AS (
@@ -344,6 +360,7 @@ async def get_team_dynamics(
               AND w.created_at >= po.opened_at
               """
         + user_filter_label.replace("SUBSTRING(label_name FROM 10)", "SUBSTRING(w.label_name FROM 10)")
+        + exclude_user_filter_label.replace("SUBSTRING(label_name FROM 10)", "SUBSTRING(w.label_name FROM 10)")
         + """
         )
         SELECT
@@ -372,6 +389,7 @@ async def get_team_dynamics(
         + time_filter
         + repository_filter
         + user_filter_pr_author
+        + exclude_user_filter_pr_author
         + """
             ORDER BY repository, pr_number, created_at DESC
         ),
@@ -385,6 +403,7 @@ async def get_team_dynamics(
         + time_filter
         + repository_filter
         + user_filter_label
+        + exclude_user_filter_label
         + """
         )
         SELECT COUNT(*) as pending_count

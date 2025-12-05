@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 
 import pytest
 from playwright.async_api import Page, expect
@@ -380,15 +381,22 @@ class TestTeamDynamicsCollapsibleSections:
 
         # Collapse then expand workload section
         btn = page_with_js_coverage.locator('.collapse-btn[data-section="workload-distribution"]')
-
-        # Collapse
-        await btn.click()
-
-        # Expand
-        await btn.click()
-
-        # Section should still be visible
         section = page_with_js_coverage.locator('.chart-container[data-section="workload-distribution"]')
+
+        # Collapse - wait for animation to complete
+        await btn.click()
+        await page_with_js_coverage.wait_for_timeout(500)  # Wait for CSS transition
+
+        # Verify collapsed state
+        await expect(section).to_have_class(re.compile("collapsed"))
+
+        # Expand - wait for animation to complete
+        await btn.click()
+        await page_with_js_coverage.wait_for_timeout(500)  # Wait for CSS transition
+
+        # Verify expanded state - should NOT have collapsed class
+        await expect(section).not_to_have_class(re.compile("collapsed"))
+        # Section container should still be visible even when collapsed
         await expect(section).to_be_visible()
 
 

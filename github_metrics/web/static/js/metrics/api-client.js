@@ -177,7 +177,7 @@ class MetricsAPIClient {
      *
      * @param {string|null} startTime - ISO 8601 start time filter (optional)
      * @param {string|null} endTime - ISO 8601 end time filter (optional)
-     * @param {Object} extraParams - Additional parameters (page, page_size, repository, user)
+     * @param {Object} extraParams - Additional parameters (page, page_size, repositories, user)
      * @returns {Promise<Object>} Repository statistics or error object
      *
      * Response format (success):
@@ -216,9 +216,21 @@ class MetricsAPIClient {
      * }
      */
     async fetchRepositories(startTime = null, endTime = null, extraParams = {}) {
-        const params = { ...extraParams };
+        const params = {};
         if (startTime) params.start_time = startTime;
         if (endTime) params.end_time = endTime;
+
+        // Handle repositories array parameter if provided
+        if (extraParams.repositories && Array.isArray(extraParams.repositories) && extraParams.repositories.length > 0) {
+            params.repositories = extraParams.repositories;
+        }
+
+        // Add other extra parameters (excluding repositories which was handled above)
+        for (const [key, value] of Object.entries(extraParams)) {
+            if (key !== 'repositories' && value !== null && value !== undefined) {
+                params[key] = value;
+            }
+        }
 
         const response = await this._fetch('/repositories', params);
         if (response.error) return response;
@@ -261,13 +273,25 @@ class MetricsAPIClient {
      * @param {string|null} startTime - ISO 8601 start time filter (optional)
      * @param {string|null} endTime - ISO 8601 end time filter (optional)
      * @param {number} limit - Maximum contributors per category (default: 10)
-     * @param {Object} extraParams - Additional parameters (repository, user, page, page_size)
+     * @param {Object} extraParams - Additional parameters (repositories, user, page, page_size)
      * @returns {Promise<Object>} Contributors data or error object
      */
     async fetchContributors(startTime = null, endTime = null, limit = 10, extraParams = {}) {
-        const params = { limit, ...extraParams };
+        const params = { limit };
         if (startTime) params.start_time = startTime;
         if (endTime) params.end_time = endTime;
+
+        // Handle repositories array parameter if provided
+        if (extraParams.repositories && Array.isArray(extraParams.repositories) && extraParams.repositories.length > 0) {
+            params.repositories = extraParams.repositories;
+        }
+
+        // Add other extra parameters (excluding repositories which was handled above)
+        for (const [key, value] of Object.entries(extraParams)) {
+            if (key !== 'repositories' && value !== null && value !== undefined) {
+                params[key] = value;
+            }
+        }
 
         return await this._fetch('/contributors', params);
     }
@@ -279,13 +303,25 @@ class MetricsAPIClient {
      *
      * @param {string|null} startTime - ISO 8601 start time filter (optional)
      * @param {string|null} endTime - ISO 8601 end time filter (optional)
-     * @param {Object} params - Additional parameters (user, repository, page, page_size)
+     * @param {Object} params - Additional parameters (user, repositories, page, page_size)
      * @returns {Promise<Object>} User PRs data with pagination or error object
      */
     async fetchUserPRs(startTime = null, endTime = null, params = {}) {
-        const queryParams = { ...params };
+        const queryParams = {};
         if (startTime) queryParams.start_time = startTime;
         if (endTime) queryParams.end_time = endTime;
+
+        // Handle repositories array parameter if provided
+        if (params.repositories && Array.isArray(params.repositories) && params.repositories.length > 0) {
+            queryParams.repositories = params.repositories;
+        }
+
+        // Add other parameters (excluding repositories which was handled above)
+        for (const [key, value] of Object.entries(params)) {
+            if (key !== 'repositories' && value !== null && value !== undefined) {
+                queryParams[key] = value;
+            }
+        }
 
         return await this._fetch('/user-prs', queryParams);
     }
@@ -390,7 +426,7 @@ class MetricsAPIClient {
      * @param {Object} filters - Filter options
      * @param {string} filters.start_time - ISO 8601 start time filter (optional)
      * @param {string} filters.end_time - ISO 8601 end time filter (optional)
-     * @param {string} filters.repository - Filter by repository (optional)
+     * @param {Array} filters.repositories - Filter by repositories (optional)
      * @returns {Promise<Object>} Turnaround metrics or error object
      *
      * Response format (success):
@@ -424,8 +460,12 @@ class MetricsAPIClient {
         const params = {};
         if (filters.start_time) params.start_time = filters.start_time;
         if (filters.end_time) params.end_time = filters.end_time;
-        if (filters.repository) params.repository = filters.repository;
         if (filters.user) params.user = filters.user;
+
+        // Handle repositories array parameter if provided
+        if (filters.repositories && Array.isArray(filters.repositories) && filters.repositories.length > 0) {
+            params.repositories = filters.repositories;
+        }
 
         return await this._fetch('/turnaround', params);
     }
@@ -438,7 +478,8 @@ class MetricsAPIClient {
      * @param {string|null} startTime - ISO 8601 start time filter (optional)
      * @param {string|null} endTime - ISO 8601 end time filter (optional)
      * @param {string|null} repository - Filter by repository (optional)
-     * @param {string|null} user - Filter by user (optional)
+     * @param {Array|null} users - Filter by users (optional)
+     * @param {Array|null} excludeUsers - Exclude users (optional)
      * @param {number} page - Page number for pagination (optional)
      * @param {number} pageSize - Number of items per page (optional)
      * @returns {Promise<Object>} Team dynamics data or error object
@@ -520,12 +561,23 @@ class MetricsAPIClient {
      *     }
      * }
      */
-    async fetchTeamDynamics(startTime = null, endTime = null, repository = null, user = null, page = null, pageSize = null) {
+    async fetchTeamDynamics(startTime = null, endTime = null, repositories = null, users = null, excludeUsers = null, page = null, pageSize = null) {
         const params = {};
         if (startTime) params.start_time = startTime;
         if (endTime) params.end_time = endTime;
-        if (repository) params.repository = repository;
-        if (user) params.user = user;
+
+        // Handle array parameters - FastAPI expects repeated query params for lists
+        // e.g., repositories=org/repo1&repositories=org/repo2
+        if (repositories && Array.isArray(repositories) && repositories.length > 0) {
+            params.repositories = repositories;
+        }
+        if (users && Array.isArray(users) && users.length > 0) {
+            params.users = users;
+        }
+        if (excludeUsers && Array.isArray(excludeUsers) && excludeUsers.length > 0) {
+            params.exclude_users = excludeUsers;
+        }
+
         if (page !== null && page !== undefined) params.page = page;
         if (pageSize !== null && pageSize !== undefined) params.page_size = pageSize;
 
@@ -665,7 +717,12 @@ class MetricsAPIClient {
         // Add query parameters
         for (const [key, value] of Object.entries(params)) {
             if (value !== null && value !== undefined) {
-                url.searchParams.append(key, value);
+                if (Array.isArray(value)) {
+                    // Handle arrays - append each value with same key
+                    value.forEach(v => url.searchParams.append(key, v));
+                } else {
+                    url.searchParams.append(key, value);
+                }
             }
         }
 

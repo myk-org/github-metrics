@@ -155,15 +155,21 @@
                   <input type="datetime-local" id="endTime" />
                 </div>
                 <div class="filter-group">
-                  <label for="repositoryFilter">Repository:</label>
-                  <div class="combo-box-wrapper" id="repository-filter-group">
-                    <input type="text" id="repositoryFilter" placeholder="Type to search or select..." />
+                  <label for="repositoryFilter">Repositories:</label>
+                  <div class="combo-box-wrapper multi-select" id="repository-filter-group">
+                    <input type="text" id="repositoryFilter" placeholder="Type to add repositories..." />
                   </div>
                 </div>
                 <div class="filter-group">
-                  <label for="userFilter">User:</label>
-                  <div class="combo-box-wrapper" id="user-filter-group">
-                    <input type="text" id="userFilter" placeholder="Type to search or select..." />
+                  <label for="userFilter">Users:</label>
+                  <div class="combo-box-wrapper multi-select" id="user-filter-group">
+                    <input type="text" id="userFilter" placeholder="Type to add users..." />
+                  </div>
+                </div>
+                <div class="filter-group">
+                  <label for="excludeUserFilter">Exclude Users:</label>
+                  <div class="combo-box-wrapper multi-select" id="exclude-user-filter-group">
+                    <input type="text" id="excludeUserFilter" placeholder="Type to exclude users..." />
                   </div>
                 </div>
                 <div class="filter-group filter-group-button">

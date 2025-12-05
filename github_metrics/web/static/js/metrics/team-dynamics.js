@@ -83,6 +83,11 @@ class TeamDynamics {
         this.timeFiltersUpdatedHandler = null;
         this.inputHandler = null;
 
+        // ComboBox instances (will be set from dashboard.js)
+        this.repositoryComboBox = null;
+        this.userComboBox = null;
+        this.excludeUserComboBox = null;
+
         this.initialize();
     }
 
@@ -210,7 +215,7 @@ class TeamDynamics {
                         this.loadMetrics();
                     }
                 }, 300);
-            } else if (e.target.id === 'userFilter') {
+            } else if (e.target.id === 'userFilter' || e.target.id === 'excludeUserFilter') {
                 clearTimeout(this.filterTimeouts?.user);
                 this.filterTimeouts = this.filterTimeouts || {};
                 this.filterTimeouts.user = setTimeout(() => {
@@ -249,8 +254,9 @@ class TeamDynamics {
             const response = await apiClient.fetchTeamDynamics(
                 filters.start_time,
                 filters.end_time,
-                filters.repository,
-                filters.user,
+                filters.repositories,
+                filters.users,
+                filters.exclude_users,
                 workloadPage,
                 workloadPageSize
             );
@@ -286,13 +292,25 @@ class TeamDynamics {
     }
 
     /**
+     * Set ComboBox instances from dashboard
+     * @param {Object} comboBoxes - ComboBox instances from dashboard
+     */
+    setComboBoxInstances(comboBoxes) {
+        this.repositoryComboBox = comboBoxes.repository;
+        this.userComboBox = comboBoxes.user;
+        this.excludeUserComboBox = comboBoxes.excludeUser;
+        console.log('[TeamDynamics] ComboBox instances set');
+    }
+
+    /**
      * Get time filter values from the shared control panel
      */
     getTimeFilters() {
         const startTimeInput = document.getElementById('startTime');
         const endTimeInput = document.getElementById('endTime');
-        const repoInput = document.getElementById('repositoryFilter');
-        const userInput = document.getElementById('userFilter');
+        const repositoryFilterGroup = document.getElementById('repository-filter-group');
+        const userFilterGroup = document.getElementById('user-filter-group');
+        const excludeUserFilterGroup = document.getElementById('exclude-user-filter-group');
 
         const filters = {};
 
@@ -307,14 +325,28 @@ class TeamDynamics {
             filters.end_time = endDate.toISOString();
         }
 
-        // Add repository filter
-        if (repoInput && repoInput.value) {
-            filters.repository = repoInput.value;
+        // Get repositories array from multi-select combo box
+        if (this.repositoryComboBox) {
+            const repos = this.repositoryComboBox.getSelectedValues();
+            if (repos && repos.length > 0) {
+                filters.repositories = repos;
+            }
         }
 
-        // Add user filter
-        if (userInput && userInput.value) {
-            filters.user = userInput.value;
+        // Get users array from multi-select combo box
+        if (this.userComboBox) {
+            const users = this.userComboBox.getSelectedValues();
+            if (users && users.length > 0) {
+                filters.users = users;
+            }
+        }
+
+        // Get exclude_users array
+        if (this.excludeUserComboBox) {
+            const excludeUsers = this.excludeUserComboBox.getSelectedValues();
+            if (excludeUsers && excludeUsers.length > 0) {
+                filters.exclude_users = excludeUsers;
+            }
         }
 
         return filters;
@@ -650,8 +682,8 @@ class TeamDynamics {
                 page_size: this.DEFAULT_PAGE_SIZE
             };
 
-            if (filters.repository) {
-                params.repository = filters.repository;
+            if (filters.repositories) {
+                params.repositories = filters.repositories;
             }
 
             const data = await apiClient.fetchUserPRs(

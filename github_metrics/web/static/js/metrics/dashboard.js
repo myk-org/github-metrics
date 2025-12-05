@@ -45,7 +45,8 @@ class MetricsDashboard {
         this.repositoryFilterRaw = '';  // Repository filter original case for API calls
         this.userFilter = '';  // User filter (empty = show all)
         this.repositoryComboBox = null;  // ComboBox instance for repository filter
-        this.userComboBox = null;  // ComboBox instance for user filter
+        this.userComboBox = null;  // ComboBox instance for user filter (multi-select)
+        this.excludeUserComboBox = null;  // ComboBox instance for exclude user filter (multi-select)
 
         // Pagination components for each section
         this.paginationComponents = {
@@ -197,6 +198,15 @@ class MetricsDashboard {
             // Populate filter dropdowns
             this.populateRepositoryFilter();
             this.populateUserFilter();
+
+            // Pass ComboBox instances to team-dynamics module
+            if (window.teamDynamics) {
+                window.teamDynamics.setComboBoxInstances({
+                    repository: this.repositoryComboBox,
+                    user: this.userComboBox,
+                    excludeUser: this.excludeUserComboBox
+                });
+            }
 
             // Dispatch event to notify other modules that dashboard is ready
             document.dispatchEvent(new CustomEvent('dashboard:ready'));
@@ -791,27 +801,52 @@ class MetricsDashboard {
             this.repositoryComboBox = new window.ComboBox({
                 container: repoContainer,
                 inputId: 'repositoryFilter',
-                placeholder: 'Type to search or select...',
-                options: [{ value: '', label: 'All Repositories' }],
-                allowFreeText: true,
-                onSelect: (value) => this.filterByRepository(value),
-                onInput: (value) => this.filterByRepository(value)
+                multiSelect: true,
+                placeholder: 'Type to add repositories...',
+                options: [],  // Will be populated after data loads
+                onSelect: (values) => {
+                    console.log('[Dashboard] Repository filter changed:', values);
+                    // Trigger refresh
+                    document.dispatchEvent(new CustomEvent('timeFiltersUpdated'));
+                }
             });
-            console.log('[Dashboard] Repository ComboBox initialized');
+            console.log('[Dashboard] Repository ComboBox (multi-select) initialized');
         }
 
-        const userContainer = document.getElementById('user-filter-group');
-        if (userContainer && window.ComboBox) {
+        // Initialize multi-select user filter
+        const userFilterGroup = document.getElementById('user-filter-group');
+        if (userFilterGroup && window.ComboBox) {
             this.userComboBox = new window.ComboBox({
-                container: userContainer,
+                container: userFilterGroup,
                 inputId: 'userFilter',
-                placeholder: 'Type to search or select...',
-                options: [{ value: '', label: 'All Users' }],
-                allowFreeText: true,
-                onSelect: (value) => this.filterByUser(value),
-                onInput: (value) => this.filterByUser(value)
+                multiSelect: true,
+                placeholder: 'Type to add users...',
+                options: [],  // Will be populated after data loads
+                onSelect: (values) => {
+                    console.log('[Dashboard] Users filter changed:', values);
+                    // Trigger refresh
+                    document.dispatchEvent(new CustomEvent('timeFiltersUpdated'));
+                }
             });
-            console.log('[Dashboard] User ComboBox initialized');
+            console.log('[Dashboard] User ComboBox (multi-select) initialized');
+        }
+
+        // Initialize multi-select exclude users filter
+        const excludeUserFilterGroup = document.getElementById('exclude-user-filter-group');
+        if (excludeUserFilterGroup && window.ComboBox) {
+            this.excludeUserComboBox = new window.ComboBox({
+                container: excludeUserFilterGroup,
+                inputId: 'excludeUserFilter',
+                multiSelect: true,
+                placeholder: 'Type to exclude users...',
+                options: [],  // Will be populated after data loads
+                onSelect: (values) => {
+                    console.log('[Dashboard] Exclude users filter changed:', values);
+                    // Trigger refresh
+                    document.dispatchEvent(new CustomEvent('timeFiltersUpdated'));
+                }
+            });
+            console.log('[Dashboard] Exclude user ComboBox (multi-select) initialized');
         }
     }
 
@@ -1100,24 +1135,21 @@ class MetricsDashboard {
             });
         }
 
-        const options = [{ value: '', label: 'All Repositories' }];
-        Array.from(repositories).sort().forEach(repo => {
-            options.push({ value: repo, label: repo });
-        });
+        // No "All Repositories" option for multi-select - empty selection means all
+        const options = Array.from(repositories).sort().map(repo => ({
+            value: repo,
+            label: repo
+        }));
 
         this.repositoryComboBox.setOptions(options);
         console.log(`[Dashboard] Repository filter populated with ${repositories.size} repositories`);
     }
 
     /**
-     * Populate user filter combo-box from contributors data.
+     * Populate user filter combo-boxes from contributors data.
+     * Updates both Users and Exclude Users multi-select filters.
      */
     populateUserFilter() {
-        if (!this.userComboBox) {
-            console.warn('[Dashboard] User ComboBox not initialized');
-            return;
-        }
-
         // Collect all unique users from contributors data
         const users = new Set();
 
@@ -1138,13 +1170,38 @@ class MetricsDashboard {
                 });
         }
 
-        const options = [{ value: '', label: 'All Users' }];
-        Array.from(users).sort().forEach(user => {
-            options.push({ value: user, label: user });
-        });
+        // Also collect users from User PRs data (pr.owner field)
+        if (this.currentData.userPrs) {
+            const userPrsData = this.currentData.userPrs.data || this.currentData.userPrs || [];
+            if (Array.isArray(userPrsData)) {
+                userPrsData.forEach(pr => {
+                    if (pr.owner) {
+                        users.add(pr.owner);
+                    }
+                });
+            }
+        }
 
-        this.userComboBox.setOptions(options);
-        console.log(`[Dashboard] User filter populated with ${users.size} users`);
+        // Create options array (no "All Users" option for multi-select - empty selection means all)
+        const options = Array.from(users).sort().map(user => ({
+            value: user,
+            label: user
+        }));
+
+        // Populate both ComboBoxes with the same user list
+        if (this.userComboBox) {
+            this.userComboBox.setOptions(options);
+            console.log(`[Dashboard] User filter populated with ${users.size} users`);
+        } else {
+            console.warn('[Dashboard] User ComboBox not initialized');
+        }
+
+        if (this.excludeUserComboBox) {
+            this.excludeUserComboBox.setOptions(options);
+            console.log(`[Dashboard] Exclude user filter populated with ${users.size} users`);
+        } else {
+            console.warn('[Dashboard] Exclude user ComboBox not initialized');
+        }
     }
 
     /**
@@ -1390,6 +1447,10 @@ class MetricsDashboard {
         if (this.userComboBox) {
             this.userComboBox.destroy();
             this.userComboBox = null;
+        }
+        if (this.excludeUserComboBox) {
+            this.excludeUserComboBox.destroy();
+            this.excludeUserComboBox = null;
         }
 
         // Destroy collapsible sections

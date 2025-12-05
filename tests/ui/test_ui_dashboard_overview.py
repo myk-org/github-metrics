@@ -168,7 +168,7 @@ class TestDashboardControls:
         repo_filter = page_with_js_coverage.locator("#repositoryFilter")
         await expect(repo_filter).to_be_visible()
         await expect(repo_filter).to_be_editable()
-        await expect(repo_filter).to_have_attribute("placeholder", "Type to search or select...")
+        await expect(repo_filter).to_have_attribute("placeholder", "Type to add repositories...")
 
         # Type a repository name
         await repo_filter.fill("org/repo1")
@@ -181,7 +181,7 @@ class TestDashboardControls:
         user_filter = page_with_js_coverage.locator("#userFilter")
         await expect(user_filter).to_be_visible()
         await expect(user_filter).to_be_editable()
-        await expect(user_filter).to_have_attribute("placeholder", "Type to search or select...")
+        await expect(user_filter).to_have_attribute("placeholder", "Type to add users...")
 
         # Type a username
         await user_filter.fill("alice")

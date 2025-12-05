@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 # Allowed parameter types for SQL query parameters
-ParamValue = str | int | float | datetime | None
+ParamValue = str | int | float | datetime | list[str] | None
 
 # Allowed column names for time filtering (prevents SQL injection)
 ALLOWED_TIME_COLUMNS = frozenset({"created_at", "updated_at", "pushed_at"})
@@ -57,7 +57,7 @@ class QueryParams:
         """Add a parameter and return its placeholder.
 
         Args:
-            value: Parameter value (str, int, float, datetime, or None)
+            value: Parameter value (str, int, float, datetime, list[str], or None)
 
         Returns:
             PostgreSQL parameter placeholder (e.g., "$1", "$2")
@@ -154,18 +154,24 @@ def build_time_filter(
 
 def build_repository_filter(
     params: QueryParams,
-    repository: str | None,
+    repositories: str | list[str] | None,
     column: str = "repository",
 ) -> str:
     """Build repository filter SQL.
 
+    Supports both single repository (string) and multiple repositories (list).
+    For backward compatibility, accepts both formats.
+
     Args:
         params: QueryParams tracker
-        repository: Repository name to filter (org/repo format)
+        repositories: Repository name(s) to filter (org/repo format)
+                     Can be a single string or list of strings
         column: Column name (default: repository)
 
     Returns:
         SQL WHERE clause fragment or empty string
+        - Single repository: " AND repository = $1"
+        - Multiple repositories: " AND repository = ANY($1)"
 
     Raises:
         ValueError: If column name is not in the allowed list (SQL injection prevention)
@@ -176,11 +182,16 @@ def build_repository_filter(
             f"Invalid column name '{column}'. Allowed columns: {', '.join(sorted(ALLOWED_REPOSITORY_COLUMNS))}"
         )
 
-    if not repository:
+    if not repositories:
         return ""
 
-    placeholder = params.add(repository)
-    return f" AND {column} = {placeholder}"
+    # Convert single string to list for uniform handling
+    if isinstance(repositories, str):
+        repositories = [repositories]
+
+    # Use PostgreSQL's ANY operator for array matching
+    placeholder = params.add(repositories)
+    return f" AND {column} = ANY({placeholder})"
 
 
 def build_pagination_sql(
