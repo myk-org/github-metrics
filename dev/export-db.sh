@@ -1,9 +1,9 @@
 #!/bin/bash
 # Export data from production container and import to local dev database
-# Usage: ./dev/export-db.sh <ssh_host> [container_name] [prod_db] [prod_user]
+# Usage: ./dev/export-db.sh <ssh_host> [container_name] [prod_db] [prod_user] [local_container]
 #
 # Example:
-#   ./dev/export-db.sh prod-server.example.com github-metrics-db github_metrics metrics
+#   ./dev/export-db.sh prod-server.example.com github-metrics-db github_metrics metrics github-metrics-dev-db
 
 set -e
 
@@ -12,10 +12,11 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 cd "$PROJECT_DIR"
 
-SSH_HOST="${1:?Usage: $0 <ssh_host> [container_name] [prod_db] [prod_user]}"
+SSH_HOST="${1:?Usage: $0 <ssh_host> [container_name] [prod_db] [prod_user] [local_container]}"
 CONTAINER_NAME="${2:-github-metrics-db}"
 PROD_DB="${3:-github_metrics}"
 PROD_USER="${4:-metrics}"
+LOCAL_CONTAINER="${5:-github-metrics-dev-db}"
 
 # Load local .env or use defaults
 if [ -f .env ]; then
@@ -84,7 +85,6 @@ echo "Exported $(wc -l < /tmp/prod_data.sql) lines"
 
 # Import to local using the dev container's psql
 echo "Importing to local database..."
-LOCAL_CONTAINER="github-metrics-dev-db"
 
 # Check if local dev container is running
 if ! docker ps --format '{{.Names}}' | grep -q "^${LOCAL_CONTAINER}$"; then

@@ -1,10 +1,8 @@
 """Tests for response_formatters module."""
 
-from __future__ import annotations
-
 import pytest
 
-from github_metrics.utils.response_formatters import (
+from backend.utils.response_formatters import (
     format_paginated_response,
     format_pagination_metadata,
 )

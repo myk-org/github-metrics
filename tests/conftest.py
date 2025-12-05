@@ -9,8 +9,6 @@ Provides reusable test fixtures including:
 - Environment variable setup
 """
 
-from __future__ import annotations
-
 import hashlib
 import hmac
 import json
@@ -28,8 +26,8 @@ import pytest
 from fastapi.testclient import TestClient
 from playwright.async_api import Page
 
-from github_metrics.config import DatabaseConfig, MetricsConfig
-from github_metrics.database import DatabaseManager
+from backend.config import DatabaseConfig, MetricsConfig
+from backend.database import DatabaseManager
 from tests.test_js_coverage_utils import JSCoverageCollector
 
 
@@ -38,7 +36,7 @@ class DevServerStartupError(Exception):
 
 
 # IMPORTANT: app.py reads configuration at module import time (get_config() at module level).
-# Environment variables MUST be set BEFORE importing github_metrics.app.
+# Environment variables MUST be set BEFORE importing backend.app.
 os.environ.update({
     "METRICS_DB_NAME": "github_metrics_dev",
     "METRICS_DB_USER": "postgres",
@@ -57,7 +55,7 @@ os.environ.update({
 
 # E402: app import must be after os.environ.update() because
 # app.py calls get_config() at module level which requires these env vars
-from github_metrics.app import app  # noqa: E402
+from backend.app import app  # noqa: E402
 
 
 @pytest.fixture
@@ -257,19 +255,20 @@ def browser_type_launch_args() -> dict[str, Any]:
 def dev_server() -> Generator[str]:
     """Start dev server for UI tests, shut down after all tests complete.
 
-    Starts the development server using ./dev/run.sh and waits for it to be ready.
-    The server runs for the entire test session and is automatically shut down.
+    Starts the development server using ./dev/run-all.sh (React frontend on port 3003 + backend on port 8765)
+    and waits for the frontend to be ready. The servers run for the entire test session and are automatically
+    shut down.
 
     Returns:
-        Base URL of the development server.
+        Base URL of the React frontend development server (http://localhost:3003).
 
     Raises:
         DevServerStartupError: If the server fails to start within the timeout period.
     """
-    base_url = "http://localhost:8765"
+    base_url = "http://localhost:3003"  # React dev server
     server_already_running = False
     try:
-        response = httpx.get(f"{base_url}/dashboard", timeout=2.0)
+        response = httpx.get(base_url, timeout=2.0)
         if response.status_code == 200:
             print(f"Dev server {base_url} is already up, reusing it.")
             server_already_running = True
@@ -283,10 +282,10 @@ def dev_server() -> Generator[str]:
 
     # Start server subprocess
     # CRITICAL: Use DEVNULL for stdout/stderr to prevent buffering deadlock
-    # The script produces significant output (Docker startup, PostgreSQL logs, migrations)
+    # The script produces significant output (Docker startup, PostgreSQL logs, migrations, Vite dev server)
     # Using PIPE causes the process to block when buffers fill up
     project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    script_path = os.path.join(project_dir, "dev", "run.sh")
+    script_path = os.path.join(project_dir, "dev", "run-all.sh")
 
     process = subprocess.Popen(
         [script_path],
@@ -296,26 +295,26 @@ def dev_server() -> Generator[str]:
         start_new_session=True,  # Create new process group to kill entire process tree
     )
 
-    # Wait for server to be ready
-    # Startup sequence: Docker (3s) + PostgreSQL (variable) + migrations (variable) + server (variable)
+    # Wait for React frontend to be ready
+    # Startup: Docker (3s) + PostgreSQL + migrations + backend + Vite
     max_retries = 30  # 30 seconds total timeout
     for _ in range(max_retries):
         # Check if process died
         if process.poll() is not None:
             raise DevServerStartupError(
                 f"Dev server process died during startup (exit code: {process.returncode}). "
-                "Check ./dev/run.sh manually for errors."
+                "Check ./dev/run-all.sh manually for errors."
             )
 
         try:
-            response = httpx.get(f"{base_url}/dashboard", timeout=2.0)
+            response = httpx.get(base_url, timeout=2.0)
             if response.status_code == 200:
                 break
         except httpx.RequestError:
             pass
         time.sleep(1)
     else:
-        # Kill entire process group (shell script + child Python process)
+        # Kill entire process group (shell script + child processes)
         try:
             os.killpg(os.getpgid(process.pid), signal.SIGTERM)
         except (ProcessLookupError, OSError):

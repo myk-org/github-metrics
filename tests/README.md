@@ -25,7 +25,7 @@ uv run playwright install chromium
 uv run --group tests pytest tests/
 
 # Run with coverage
-uv run --group tests pytest tests/ --cov=github_metrics --cov-report=term-missing
+uv run --group tests pytest tests/ --cov=backend --cov-report=term-missing
 
 # Run specific test file
 uv run --group tests pytest tests/test_app.py -v
@@ -91,5 +91,5 @@ tox -e unused-code
 Minimum **90% coverage** is required. Check with:
 
 ```bash
-uv run --group tests pytest tests/ --cov=github_metrics --cov-report=term-missing
+uv run --group tests pytest tests/ --cov=backend --cov-report=term-missing
 ```

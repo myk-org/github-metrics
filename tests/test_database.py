@@ -7,14 +7,12 @@ Tests database connection management including:
 - Error handling
 """
 
-from __future__ import annotations
-
 from unittest.mock import AsyncMock, Mock, patch
 
 import asyncpg
 import pytest
 
-from github_metrics.database import DatabaseManager, get_database_manager
+from backend.database import DatabaseManager, get_database_manager
 
 
 class TestDatabaseManager:

@@ -6,8 +6,6 @@ Tests webhook event tracking including:
 - Error handling and logging
 """
 
-from __future__ import annotations
-
 import json
 import logging
 from datetime import datetime
@@ -17,7 +15,7 @@ from uuid import UUID
 
 import pytest
 
-from github_metrics.metrics_tracker import MetricsTracker
+from backend.metrics_tracker import MetricsTracker
 
 
 class TestMetricsTracker:

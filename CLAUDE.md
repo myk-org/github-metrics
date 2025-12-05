@@ -1,469 +1,192 @@
 # CLAUDE.md
 
-## Internal API Philosophy
+## Strict Rules (MANDATORY)
 
-**CRITICAL: This is a self-contained metrics service, NOT a public Python module.**
+### Linter Suppressions PROHIBITED
 
-### Backward Compatibility Policy
+- ❌ **NEVER** add `# noqa`, `# type: ignore`, `per-file-ignores`
+- ❌ **NEVER** disable linter rules to work around issues
+- ✅ **FIX THE CODE** - If linter complains, the code is wrong
+- If you think a rule is wrong: **ASK** the user for explicit approval
 
-**NO backward compatibility required for internal APIs:**
+### Code Reuse (Search-First Development)
 
-- Internal methods in `github_metrics/` can change freely
-- Return types can change (e.g., `Any` → `bool`)
-- Method signatures can be modified without deprecation
-- No version pinning or deprecation warnings needed
+Before writing ANY new code:
 
-**Backward compatibility ONLY for:**
-
-- Environment variable names (METRICS\_\*)
-- REST API endpoints (/api/metrics/\*)
-- Webhook payload handling (must follow GitHub webhook spec)
-
-**Rationale:**
-
-- This service is deployed as a single container
-- All code is updated together - no external dependencies
-- Internal refactoring is safe and encouraged
-- Optimize for performance and clarity, not compatibility
-
-### Anti-Defensive Programming
-
-**CRITICAL: Eliminate unnecessary defensive programming overhead.**
-
-**Philosophy:**
-
-- This service fails-fast on startup if critical dependencies are missing
-- Required parameters in `__init__()` are ALWAYS provided
-- Checking for None on required parameters is pure overhead
-- Defensive checks are ONLY acceptable for truly optional parameters
-- **Fail-fast is better than hiding bugs with fake data**
-
----
-
-## STRICT RULE: Linter Suppressions PROHIBITED
-
-**CRITICAL: ALL forms of linter warning suppression are STRICTLY PROHIBITED.**
-
-### Policy:
-- ❌ **NEVER** add `# noqa` comments to suppress linter warnings
-- ❌ **NEVER** use `# noqa: <code>` inline suppressions
-- ❌ **NEVER** add `per-file-ignores` in `pyproject.toml`
-- ❌ **NEVER** disable rules globally in `pyproject.toml` to work around issues
-- ❌ **NEVER** use ANY workaround to bypass linter rules
-
-### The ONLY Solution:
-**FIX THE CODE.** If the linter complains, the code is wrong. Fix it properly.
-
-### If you think a linter rule is wrong:
-1. **STOP** - Do NOT add any suppression
-2. **ASK** the user for explicit approval
-3. **WAIT** for user response before proceeding
-4. **DOCUMENT** the user's approval in the commit message
-
-### Enforcement:
-- Any PR containing `# noqa` comments → **REJECTED**
-- Any PR adding `per-file-ignores` → **REJECTED**
-- Any PR disabling linter rules → **REJECTED**
-- User must **explicitly approve** any exception
-
-**NO EXCEPTIONS. NO WORKAROUNDS. NO EXCUSES. FIX THE CODE.**
-
----
-
-## WHEN Defensive Checks Are ACCEPTABLE
-
-### 1. Destructors (`__del__`)
-
-**Reason:** Can be called during failed initialization
-
-```python
-# ✅ CORRECT - __del__ can be called before __init__ completes
-def __del__(self):
-    if hasattr(self, "logger"):  # Legitimate - may not exist yet
-        self.logger.debug("Cleanup")
-```
-
-### 2. Optional Parameters
-
-**Reason:** Parameter explicitly allows None
-
-```python
-# ✅ CORRECT - start_time/end_time are optional in API
-async def get_metrics(
-    start_time: datetime | None = None,
-    end_time: datetime | None = None
-):
-    if start_time:  # Legitimate check - parameter is optional
-        query += " AND created_at >= $1"
-```
-
-### 3. Lazy Initialization
-
-**Reason:** Attribute explicitly starts as None
-
-```python
-# ✅ CORRECT - pool starts as None by design
-def __init__(self):
-    self.pool: asyncpg.Pool | None = None  # Starts uninitialized
-
-async def connect(self):
-    if self.pool is None:  # Legitimate - lazy initialization
-        self.pool = await asyncpg.create_pool(...)
-```
-
----
-
-## WHEN Defensive Checks Are VIOLATIONS
-
-### 1. Required Parameters in `__init__()`
-
-**VIOLATION:** Checking for attributes that are ALWAYS provided
-
-```python
-# ❌ WRONG - config is required parameter, ALWAYS provided
-def __init__(self, config: MetricsConfig, logger: logging.Logger):
-    self.config = config
-
-def some_method(self):
-    if self.config:  # VIOLATION - config is always present
-        value = self.config.database.host
-
-# ✅ CORRECT
-def some_method(self):
-    value = self.config.database.host  # No check needed
-```
-
-### 2. Webhook Payload Fields
-
-**VIOLATION:** Checking for fields that are ALWAYS in GitHub webhooks
-
-GitHub webhook format is stable:
-
-- `sender` always exists in webhook payloads
-- `repository.full_name` always exists
-- `X-GitHub-Delivery` header always exists
-
-```python
-# ❌ WRONG - sender always exists in GitHub webhook
-sender = payload.get("sender", {}).get("login", "unknown")
-
-# ✅ CORRECT - Let it fail if data is malformed
-sender = payload["sender"]["login"]  # KeyError = legitimate bug
-```
-
----
-
-## Fail-Fast Principle
-
-**CRITICAL:** Fail-fast is better than hiding bugs with fake data.
-
-### ❌ WRONG: Returning Fake Defaults
-
-```python
-# ❌ WRONG - Returns fake data hiding bugs
-return ""           # Fake empty string
-return 0            # Fake zero
-return []           # Fake empty list (when data should exist)
-return {}           # Fake empty dict (when data should exist)
-```
-
-### ✅ CORRECT: Fail-Fast
-
-```python
-# ✅ CORRECT - Fail-fast with clear error
-raise ValueError("Data not available")  # Clear error
-raise KeyError("Required field missing")  # Clear error
-```
-
----
-
-## STRICT RULE: Code Reuse and Search-First Development
-
-**CRITICAL: Always search for existing code before implementing new functionality.**
-
-### Search-First Rule
-
-**Before writing ANY new code:**
-1. **SEARCH** the codebase for existing implementations
-2. **CHECK** utility modules (`utils/`) for shared functions
-3. **VERIFY** no similar logic exists in other files
-4. **ASK** if unsure whether something already exists
-
-❌ **NEVER** duplicate logic that exists elsewhere
-❌ **NEVER** add inline SQL/logic when a shared module exists
-❌ **NEVER** implement a pattern differently in two places
-
-### Code Unification Rules
-
-**All shared logic MUST live in dedicated modules:**
+1. **SEARCH** codebase for existing implementations
+2. **CHECK** `backend/utils/` for shared functions
+3. **VERIFY** no similar logic exists elsewhere
+4. **NEVER** duplicate logic - extract to shared module
 
 | Logic Type | Location |
 |------------|----------|
-| Role-based queries (PR creators, reviewers, etc.) | `utils/contributor_queries.py` |
+| Role-based queries (PR creators, reviewers) | `utils/contributor_queries.py` |
 | SQL query building (params, filters, pagination) | `utils/query_builders.py` |
 | Response formatting (pagination metadata) | `utils/response_formatters.py` |
 | Time/date utilities | `utils/datetime_utils.py` |
-| Security utilities | `utils/security.py` |
+| Security (IP validation, HMAC) | `utils/security.py` |
 
-**When multiple endpoints need the same logic:**
-1. Create a shared function in the appropriate `utils/` module
-2. Have ALL endpoints call that shared function
-3. NEVER copy-paste and modify - always extract to shared code
+### Python Backend Requirements
 
-### Single Source of Truth Principle
+- **Type hints MANDATORY** - mypy strict mode, no `Any`
+- **90% test coverage MANDATORY** - Tests fail below 90%
+- **Async everywhere** - All I/O operations must be async
+- **Parameterized queries** - Never f-strings in SQL
+- **Fail-fast principle** - No fake defaults (`""`, `0`, `[]`, `{}`)
 
-**Each piece of business logic has ONE canonical implementation:**
+### React Frontend Requirements
 
-- If `contributors.py` and `user_prs.py` both need PR creator logic → it lives in `contributor_queries.py`
-- If table counts and popup counts should match → they use the SAME query function
-- If you find duplicate logic → STOP and refactor to shared module first
-
-### Enforcement
-
-Before implementing:
-
-```bash
-1. grep/search for similar patterns
-2. Check utils/ modules
-3. If exists → USE IT
-4. If doesn't exist → CREATE shared function, then use it
-5. NEVER inline logic that could be shared
-```
-
-**Rationale:** Duplicate code leads to bugs when logic drifts between copies. We spent significant effort fixing count mismatches between table and popup because queries weren't unified. This is preventable.
+- **Strict TypeScript** - No `any`, no type assertions without justification
+- **shadcn/ui ONLY** - Never create custom UI components
+- **Use `bun`** - Never `npm` or `yarn`
+- **React Query** - All API calls via `@tanstack/react-query`
+- **All props typed** - Define interfaces in `src/types/`
 
 ---
 
-## Architecture Overview
+## Project Architecture
 
-This is a FastAPI-based metrics service that receives GitHub webhooks, stores event data in PostgreSQL, and provides a real-time dashboard for monitoring.
+**Stack:** FastAPI (Python) + React (TypeScript) + PostgreSQL + shadcn/ui
 
-### Project Structure
+**Deployment:** Single container serving both backend API and frontend static files
 
-```text
-github_metrics/
-├── app.py                    # Core app setup (350 lines)
-│                            # - FastAPI application initialization
-│                            # - Lifespan management (startup/shutdown)
-│                            # - MCP server integration
-│                            # - Database connection pooling
-│                            # - Route registration
-├── config.py                # Environment-based configuration
-├── database.py              # DatabaseManager with asyncpg pool
-├── metrics_tracker.py       # Webhook event storage and tracking
-├── models.py                # SQLAlchemy 2.0 declarative models
-├── pr_story.py              # Pull request timeline generation
-├── routes/                  # Modular route handlers
-│   ├── __init__.py
-│   ├── health.py            # GET /health, GET /favicon.ico
-│   ├── webhooks.py          # POST /metrics (webhook receiver)
-│   ├── dashboard.py         # GET /dashboard
-│   └── api/                 # REST API endpoints
-│       ├── __init__.py
-│       ├── webhooks.py      # GET /api/metrics/webhooks
-│       ├── repositories.py  # GET /api/metrics/repositories
-│       ├── summary.py       # GET /api/metrics/summary
-│       ├── contributors.py  # GET /api/metrics/contributors
-│       ├── user_prs.py      # GET /api/metrics/user-prs
-│       ├── trends.py        # GET /api/metrics/trends
-│       ├── pr_story.py      # GET /api/metrics/pr-story
-│       └── turnaround.py    # GET /api/metrics/turnaround
+### Directory Structure
+
+```
+backend/                    # Python FastAPI backend
+├── app.py                  # FastAPI app, lifespan, route registration
+├── config.py               # Environment-based config (METRICS_*)
+├── database.py             # DatabaseManager with asyncpg pool
+├── metrics_tracker.py      # Webhook event storage
+├── models.py               # SQLAlchemy 2.0 models
+├── pr_story.py             # PR timeline generation
+├── routes/
+│   ├── health.py           # GET /health
+│   ├── webhooks.py         # POST /metrics (webhook receiver)
+│   └── api/                # REST API endpoints
+│       ├── webhooks.py     # GET /api/metrics/webhooks
+│       ├── repositories.py # GET /api/metrics/repositories
+│       ├── summary.py      # GET /api/metrics/summary
+│       ├── contributors.py # GET /api/metrics/contributors
+│       ├── user_prs.py     # GET /api/metrics/user-prs
+│       ├── trends.py       # GET /api/metrics/trends
+│       ├── pr_story.py     # GET /api/metrics/pr-story
+│       └── turnaround.py   # GET /api/metrics/turnaround
 ├── utils/
-│   ├── __init__.py
-│   ├── security.py          # GitHub/Cloudflare IP validation, HMAC verification
-│   ├── datetime_utils.py    # Timezone-aware datetime utilities
-│   └── query_filters.py     # SQL query filter builders
-└── web/
-    ├── dashboard.py         # Jinja2 template rendering
-    ├── templates/
-    │   └── dashboard.html
-    └── static/
-        ├── css/
-        │   └── dashboard.css
-        └── js/
-            └── metrics/
-                ├── main.js          # Dashboard initialization
-                ├── dashboard.js     # Main dashboard logic
-                ├── navigation.js    # Sidebar navigation
-                ├── turnaround.js    # Turnaround metrics
-                └── ...
+│   ├── security.py         # GitHub/Cloudflare IP validation, HMAC
+│   ├── datetime_utils.py   # Timezone-aware datetime utilities
+│   ├── query_builders.py   # SQL query builders
+│   └── response_formatters.py # API response formatting
+└── migrations/             # Alembic database migrations
+
+frontend/                   # React + TypeScript + shadcn/ui
+├── src/
+│   ├── components/
+│   │   ├── ui/             # shadcn components (DO NOT modify)
+│   │   ├── dashboard/      # Dashboard-specific components
+│   │   ├── layout/         # App layout (sidebar, header)
+│   │   └── shared/         # Reusable components (tables, filters)
+│   ├── pages/              # Page components (overview, repos, etc.)
+│   ├── hooks/              # Custom hooks (useApi, useFilters)
+│   ├── types/              # TypeScript interfaces
+│   └── contexts/           # React contexts (theme, filters)
+├── package.json            # Frontend dependencies
+└── vite.config.ts          # Vite config with proxy to backend
+
+dev/                        # Development scripts
+├── run.sh                  # Backend only (with PostgreSQL)
+├── run-all.sh              # Backend + Frontend dev servers
+├── run-frontend.sh         # Frontend only
+├── run-backend.sh          # Backend only
+├── docker-compose.yml      # PostgreSQL for development
+└── dev-container.sh        # Run containerized app
+
+tests/                      # Test suite
+├── conftest.py             # Shared fixtures
+├── test_*.py               # Unit tests (mocked database)
+└── ui/                     # Playwright UI tests (live server)
 ```
-
-### Core Components
-
-**Application (`github_metrics/app.py`):**
-
-- FastAPI application initialization with CORS middleware
-- Lifespan context manager for database connection pooling
-- Route registration from modular route handlers
-- MCP server integration for external tool access
-- Database connection passed to route modules via module-level variables
-
-**Routes (`github_metrics/routes/`):**
-
-- Modular route handlers organized by functionality
-- Each API route module has a `db_manager` module-level variable
-- Set during app lifespan startup (before routes are called)
-- Enables clean separation of routing logic from app setup
-
-**Configuration (`github_metrics/config.py`):**
-
-- Environment variable-based configuration (METRICS\_\*)
-- No config files - all via environment variables
-- Fail-fast on missing required variables
-
-**Database (`github_metrics/database.py`):**
-
-- DatabaseManager with asyncpg connection pool
-- Async query execution (execute, fetch, fetchrow, fetchval)
-- Health check support
-
-**Models (`github_metrics/models.py`):**
-
-- SQLAlchemy 2.0 declarative models
-- Tables: webhooks, pull_requests, pr_events, pr_reviews, pr_labels, check_runs, api_usage
-- PostgreSQL-specific types (UUID, JSONB)
-
-**Security (`github_metrics/utils/security.py`):**
-
-- GitHub IP allowlist verification
-- Cloudflare IP allowlist verification
-- Webhook signature validation (HMAC SHA256)
-
-**Metrics Tracker (`github_metrics/metrics_tracker.py`):**
-
-- Stores webhook events with full payload
-- Tracks processing time and API usage
 
 ---
 
-## Development Commands
+## Development Workflow
 
 ### Environment Setup
 
 ```bash
-# Install dependencies
-uv sync
-
-# Install with test dependencies
+# Install Python dependencies
 uv sync --extra tests
+
+# Install frontend dependencies
+cd frontend && bun install
 ```
 
-### Running the Server
+### Running Development Servers
 
 ```bash
-# Set required environment variables
-export METRICS_DB_NAME=github_metrics
-export METRICS_DB_USER=metrics
-export METRICS_DB_PASSWORD=your-password
+# Backend only (http://localhost:8765)
+./dev/run.sh
 
-# Run the server
-uv run entrypoint.py
+# Frontend only (http://localhost:3003)
+./dev/run-frontend.sh
+
+# Both servers together
+./dev/run-all.sh
+
+# Containerized app (production-like)
+./dev/dev-container.sh
 ```
+
+**Note:** Backend has hot reload enabled - no restart needed for code changes.
 
 ### Testing
 
-**Two Test Suites:**
-
-This project has separate test suites for API tests and UI tests. **Both must pass to declare all tests passed.**
+**Two test suites - BOTH must pass:**
 
 ```bash
-# Run API tests (unit tests, integration tests)
+# API tests (unit + integration with mocks)
 tox
 
-# Run UI tests (Playwright browser automation)
+# UI tests (Playwright browser automation)
 tox -e ui
 
-# Run all tests (API + UI)
+# Run both
 tox && tox -e ui
 ```
 
-**API Tests (via `tox`):**
-- Unit tests for API endpoints, database operations, utilities
-- Integration tests with mocked database
-- Fast execution (parallel with pytest-xdist)
-- 90% code coverage required
-- No external dependencies (uses mocks)
+**Run tests in parallel with Claude Code:**
 
-**UI Tests (via `tox -e ui`):**
-- Playwright browser automation tests
-- Tests against live development server
-- Real user interactions: clicks, forms, navigation
-- WebSocket real-time updates
-- Full-stack integration testing
-- Slower execution (requires browser + server)
-
-**Individual Test Commands:**
-
-```bash
-# Run specific API test file
-uv run --group tests pytest tests/test_app.py -v
-
-# Run with coverage report
-uv run --group tests pytest tests/ -n auto --cov=github_metrics --cov-report=term-missing
-
-# Run specific UI test
-uv run --group tests pytest tests/ui/test_dashboard.py -v
-
-# Run UI tests with headed browser (see what's happening)
-uv run --group tests pytest tests/ui/ --headed
-```
-
-### Running Tests in Parallel with Claude Code
-
-When using Claude Code, run both test suites in parallel using two agents to reduce total test time:
-
-**Parallel Execution Strategy:**
-- Agent 1: `tox` (API tests - fast execution)
-- Agent 2: `tox -e ui` (UI tests - slower execution with browser automation)
-
-**Rationale:**
-- UI tests take significantly longer due to browser automation and server startup
-- Running both suites concurrently reduces overall test time by approximately 50%
-- Both suites are independent and can run simultaneously without conflicts
-
-**Example:**
-
-```bash
-# In parallel using two agents:
-# Agent 1 (API tests):
-tox
-
-# Agent 2 (UI tests):
-tox -e ui
-```
-
-Both test suites must pass to declare all tests successful.
-
-### Development Server
-
-For debugging and code verification, use the dev server at <http://localhost:8765/>
-
-**Before making changes:**
-1. Check if the dev server is already running (visit <http://localhost:8765/dashboard>)
-2. If running, use it directly - the server has **hot reload** enabled, so no restart is needed when code changes
-3. If not running, start it with: `./dev/run.sh`
-
-**Use cases:**
-- Verify frontend changes in the browser
-- Check API responses in browser DevTools (Network tab)
-- Debug JavaScript issues in browser Console
-- Test UI interactions manually
-
-**Note:** Always verify code changes in the browser before committing, especially for frontend/UI work.
+- Agent 1: `tox` (API tests - fast)
+- Agent 2: `tox -e ui` (UI tests - slower, requires browser)
 
 ### Code Quality
 
 ```bash
-# Run all quality checks (pre-commit hooks)
+# Pre-commit hooks (linting, formatting, type checking)
 prek run --all-files
+
+# Frontend linting
+cd frontend && bun run lint
 ```
 
 ---
 
-## Critical Implementation Patterns
+## Backend Development
 
-### Database Query Pattern
+### Configuration
+
+Environment variables only (no config files):
+
+```bash
+export METRICS_DB_NAME=github_metrics
+export METRICS_DB_USER=metrics
+export METRICS_DB_PASSWORD=your-password
+export METRICS_DB_HOST=localhost
+export METRICS_DB_PORT=5432
+export METRICS_WEBHOOK_SECRET=your-webhook-secret
+```
+
+### Database Patterns
 
 All database operations use asyncpg with parameterized queries:
 
@@ -481,203 +204,285 @@ await db_manager.execute(
 )
 ```
 
-### Async Pattern
-
-All I/O operations must be async:
+### Type Hints
 
 ```python
-# ✅ CORRECT - Async database operations
-async def get_webhook_events():
-    rows = await db_manager.fetch("SELECT * FROM webhooks")
-    return rows
+# ✅ CORRECT - Complete type hints
+async def get_metrics(
+    start_time: datetime | None = None,
+    end_time: datetime | None = None
+) -> list[dict[str, Any]]:
+    ...
 
-# ❌ WRONG - Blocking call in async context
-def get_webhook_events():
-    return sync_db.execute("SELECT * FROM webhooks")
+# ❌ WRONG - No types
+async def get_metrics(start_time, end_time):
+    ...
 ```
 
-### Logging Pattern
+### Anti-Defensive Programming
+
+**Fail-fast is better than hiding bugs with fake data.**
+
+**When defensive checks are ACCEPTABLE:**
+
+- Destructors (`__del__`) - can be called during failed init
+- Optional parameters - explicitly allow `None`
+- Lazy initialization - attribute starts as `None` by design
+
+**When defensive checks are VIOLATIONS:**
+
+- Required parameters in `__init__()` - ALWAYS provided
+- GitHub webhook fields - stable format, let it fail if malformed
+
+```python
+# ❌ WRONG - Checking required parameter
+def __init__(self, config: MetricsConfig):
+    self.config = config
+
+def method(self):
+    if self.config:  # VIOLATION - config always exists
+        value = self.config.database.host
+
+# ✅ CORRECT - No check
+def method(self):
+    value = self.config.database.host
+```
+
+### Logging
 
 ```python
 from simple_logger.logger import get_logger
 
-LOGGER = get_logger(name="github_metrics.app")
+LOGGER = get_logger(name="backend.app")
 
-# Use appropriate log levels
-LOGGER.debug("Detailed technical information")
+LOGGER.debug("Detailed information")
 LOGGER.info("General information")
-LOGGER.warning("Warning that needs attention")
-LOGGER.exception("Error with full traceback")  # For exceptions
+LOGGER.warning("Warning")
+LOGGER.exception("Error with traceback")  # For exceptions
 ```
 
 ---
 
-## Import Organization
+## Frontend Development
 
-**MANDATORY:** All imports must be at the top of files
+### Package Manager
 
-- No imports in the middle of functions or try/except blocks
-- Exceptions: TYPE_CHECKING imports can be conditional
-- Pre-commit hooks enforce this
+**Use `bun` for ALL frontend operations (never `npm` or `yarn`):**
 
----
+```bash
+cd frontend
+bun install
+bun run dev
+bun run lint
+bunx shadcn@latest add <component>
+```
 
-## Type Hints
+### TypeScript Rules
 
-**MANDATORY:** All functions must have complete type hints (mypy strict mode)
+```typescript
+// ✅ CORRECT - Fully typed component
+interface SummaryCardsProps {
+  readonly metrics: MetricsSummary;
+  readonly isLoading: boolean;
+  readonly onRefresh: () => void;
+}
 
-```python
-# ✅ CORRECT
-async def track_webhook_event(
-    delivery_id: str,
-    repository: str,
-    event_type: str,
-    payload: dict[str, Any],
-) -> None:
-    ...
+export function SummaryCards({
+  metrics,
+  isLoading,
+  onRefresh
+}: SummaryCardsProps): JSX.Element {
+  // implementation
+}
 
-# ❌ WRONG
-async def track_webhook_event(delivery_id, repository, event_type, payload):
-    ...
+// ❌ WRONG - No types
+export function SummaryCards(props) {
+  // ...
+}
+```
+
+### shadcn/ui Components
+
+**MANDATORY: All UI components MUST use shadcn/ui. NO custom implementations.**
+
+**Installing components:**
+
+```bash
+cd frontend
+bunx shadcn@latest add button
+bunx shadcn@latest add card
+bunx shadcn@latest add table
+bunx shadcn@latest add dialog
+bunx shadcn@latest add dropdown-menu
+bunx shadcn@latest add select
+bunx shadcn@latest add command    # Multi-select, autocomplete
+bunx shadcn@latest add calendar
+bunx shadcn@latest add sidebar
+bunx shadcn@latest add skeleton   # Loading states
+```
+
+**Composing custom components:**
+
+```typescript
+// ✅ CORRECT - Compose from shadcn
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { Table, TableBody, TableHead, TableRow, TableCell } from "@/components/ui/table";
+
+export function RepositoriesTable({ data }: Props) {
+  return (
+    <Card>
+      <CardHeader>Repositories</CardHeader>
+      <CardContent>
+        <Table>
+          {/* Use shadcn table components */}
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ❌ WRONG - Custom HTML structure
+export function RepositoriesTable({ data }: Props) {
+  return (
+    <div className="custom-card">
+      <table className="custom-table">
+        {/* FORBIDDEN */}
+      </table>
+    </div>
+  );
+}
+```
+
+### Data Fetching
+
+Use React Query for all API calls:
+
+```typescript
+// Define hook in src/hooks/
+export function useRepositories(filters: FilterState) {
+  return useQuery({
+    queryKey: ["repositories", filters],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/metrics/repositories?${new URLSearchParams(filters)}`
+      );
+      return response.json() as Promise<RepositoryData>;
+    }
+  });
+}
+
+// Use in component
+const { data, isLoading, error } = useRepositories(filters);
 ```
 
 ---
 
-## Test Coverage
-
-**MANDATORY:** 90% code coverage required
-
-- Use `uv run --extra tests pytest --cov=github_metrics` to check
-- New code without tests will fail CI
-- Tests must be in `tests/`
-
----
-
-## Testing Patterns
+## Testing
 
 ### Test File Organization
 
-```bash
+```
 tests/
 ├── conftest.py              # Shared fixtures
 ├── test_app.py              # FastAPI endpoint tests
-├── test_config.py           # Configuration tests
 ├── test_database.py         # Database manager tests
 ├── test_metrics_tracker.py  # Metrics tracker tests
-└── test_security.py         # Security utilities tests
+└── ui/
+    ├── conftest.py          # Playwright fixtures
+    └── test_dashboard.py    # Browser automation tests
 ```
 
-### Mock Testing Pattern
+### Unit Tests (API)
+
+Use mocking for database and external services:
 
 ```python
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
-# Mock database manager
-mock_db = AsyncMock()
-mock_db.fetch.return_value = [{"delivery_id": "test-123"}]
-
-# Mock with patch
-with patch("github_metrics.app.db_manager", mock_db):
-    response = client.get("/api/metrics/webhooks")
-```
-
-### Test Token Pattern
-
-Use centralized test tokens to avoid security warnings:
-
-```python
-# At module level
-TEST_WEBHOOK_SECRET = "test_secret_for_unit_tests"  # pragma: allowlist secret
-
-# In fixtures
-@pytest.fixture
-def mock_config():
-    """Create mock configuration."""
-    return Mock(
-        webhook=Mock(secret=TEST_WEBHOOK_SECRET),
-        database=Mock(host="localhost", port=5432),
-    )
-```
-
-### Test File Naming
-
-**MANDATORY:** Test file and test function names must be meaningful and related to the tested functionality.
-
-**Rules:**
-- Test file names must reflect the module being tested (e.g., `test_app.py` for `app.py`)
-- Do NOT create generic files like `test_*_additional.py`, `test_*_coverage.py`, `test_*_extra.py`
-- All tests for a module go in ONE test file (e.g., all app.py tests in `test_app.py`)
-- Test function names must describe what is being tested (e.g., `test_webhook_endpoint_validates_signature`)
-
-```python
-# ❌ WRONG - Generic/meaningless file names
-test_app_additional.py
-test_app_coverage.py
-test_database_extra.py
-
-# ✅ CORRECT - One file per module
-test_app.py          # All app.py tests
-test_database.py     # All database.py tests
-test_config.py       # All config.py tests
-```
-
-### UI Tests vs Unit Tests
-
-**CRITICAL:** UI tests and unit tests have fundamentally different approaches.
-
-**UI Tests (`tests/ui/`):**
-
-- Run against the **live dev server** (no mocking)
-- Use Playwright for browser automation
-- Test real user interactions and full-stack behavior
-- Require dev server to be running before test execution
-- Automatically start/stop server process in test fixtures
-- Test realistic scenarios: clicking buttons, filling forms, WebSocket connections
-- Verify actual DOM elements, CSS rendering, JavaScript execution
-
-```python
-# ✅ CORRECT - UI test runs against real server
-@pytest.mark.ui
-async def test_dashboard_loads(page: Page):
-    """Test dashboard page loads correctly."""
-    await page.goto("http://localhost:8000/dashboard")
-    await expect(page.locator("h1")).to_have_text("GitHub Metrics Dashboard")
-```
-
-**Unit Tests (`tests/test_*.py`):**
-
-- Use mocking for database and external services
-- Test individual components in isolation
-- Fast execution without external dependencies
-- Mock database connections, HTTP clients, file I/O
-- Verify component behavior with controlled inputs
-
-```python
-# ✅ CORRECT - Unit test with mocking
 @pytest.mark.asyncio
-async def test_track_webhook_event(mock_db):
-    """Test webhook event tracking with mocked database."""
-    with patch("github_metrics.metrics_tracker.db_manager", mock_db):
+async def test_track_webhook_event():
+    """Test webhook event tracking."""
+    mock_db = AsyncMock()
+    with patch("backend.metrics_tracker.db_manager", mock_db):
         await track_webhook_event("delivery-123", "repo", "push", {})
         mock_db.execute.assert_called_once()
 ```
 
-**When to Use Each:**
+### UI Tests (Playwright)
 
-- **UI Tests:** User workflows, page navigation, form submissions, real-time updates, visual regression
-- **Unit Tests:** API endpoints, database queries, utility functions, error handling, configuration parsing
+Run against live dev server (no mocking):
+
+```python
+@pytest.mark.ui
+async def test_dashboard_loads(page: Page):
+    """Test dashboard page loads."""
+    await page.goto("http://localhost:8000/dashboard")
+    await expect(page.locator("h1")).to_have_text("GitHub Metrics")
+```
+
+### Test File Naming
+
+- **ONE test file per module** (e.g., `test_app.py` for `app.py`)
+- **NO generic files** like `test_app_additional.py`, `test_app_coverage.py`
+- **Descriptive function names** (e.g., `test_webhook_endpoint_validates_signature`)
 
 ---
 
-## Security Considerations
+## API Design Principles
+
+### No Artificial Result Limits
+
+**MANDATORY: Neither API nor frontend may impose artificial limits on data access.**
+
+```python
+# ❌ WRONG - Artificial limits
+page_size: int = Query(default=10, ge=1, le=100)  # le=100 forbidden
+MAX_OFFSET = 10000
+if offset > MAX_OFFSET:
+    raise HTTPException(...)
+
+# ✅ CORRECT - No upper limit
+page_size: int = Query(default=10, ge=1)
+# Let users access ALL their data via pagination
+```
+
+```typescript
+// ❌ WRONG - Hardcoded limit
+const response = await fetch(`/api/data?page_size=100`);
+// User can't see item #101
+
+// ✅ CORRECT - Server-side pagination
+const response = await fetch(
+  `/api/data?page=${page}&page_size=${pageSize}`
+);
+```
+
+### Pagination Metadata
+
+All paginated endpoints return:
+
+```json
+{
+  "data": [...],
+  "pagination": {
+    "total": 1234,
+    "page": 1,
+    "page_size": 25,
+    "total_pages": 50
+  }
+}
+```
+
+---
+
+## Security
 
 ### Dashboard Security
 
-⚠️ **CRITICAL:** Dashboard endpoint (`/dashboard`) is unauthenticated by design
+⚠️ **CRITICAL:** Dashboard is unauthenticated by design.
 
 - Deploy only on trusted networks (VPN, internal network)
-- Never expose to public internet without authentication
-- Use reverse proxy with authentication for external access
+- Never expose to public internet without reverse proxy authentication
 
 ### Token Handling
 
@@ -687,287 +492,33 @@ async def test_track_webhook_event(mock_db):
 
 ---
 
-## Dashboard UI Guidelines
+## Internal API Philosophy
 
-**MANDATORY:** All dashboard components must follow these UI/UX principles.
+**CRITICAL: This is a self-contained service, NOT a public Python module.**
 
-### Collapsible Sections
+### Backward Compatibility Policy
 
-All data sections must be collapsible with expand/collapse controls:
+**NO backward compatibility for internal APIs:**
 
-```html
-<!-- ✅ CORRECT - Section with collapse button -->
-<div class="metrics-section">
-    <div class="section-header">
-        <h2>Pull Requests</h2>
-        <button class="collapse-btn" onclick="toggleSection('pr-section')">▼</button>
-    </div>
-    <div id="pr-section" class="section-content">
-        <!-- Section content -->
-    </div>
-</div>
-```
+- Internal methods can change freely
+- Return types can change
+- Method signatures can be modified
+- No deprecation warnings needed
 
-### Shared Time Filters
+**Backward compatibility ONLY for:**
 
-Time range controls must be visible and functional on all pages:
+- Environment variable names (`METRICS_*`)
+- REST API endpoints (`/api/metrics/*`)
+- Webhook payload handling (GitHub webhook spec)
 
-- Time filters apply globally across all sections
-- Persist selected time range across page navigation
-- Supported ranges: Last 24h, Last 7 days, Last 30 days, Custom range
-- Display current filter selection prominently
-
-```javascript
-// ✅ CORRECT - Shared time filter state
-const timeFilter = {
-    start: '2024-01-01T00:00:00Z',
-    end: '2024-01-31T23:59:59Z'
-};
-// Apply to all API calls
-```
-
-### Table Features
-
-All data tables must support:
-
-**Sorting:**
-- Click column headers to sort ascending/descending
-- Visual indicator for current sort column and direction
-- Default sort by most recent/relevant data
-
-**Download:**
-- CSV download button for raw data export
-- JSON download button for programmatic access
-- File naming: `{table_name}_{timestamp}.{format}`
-
-**Pagination:**
-- Paginate tables with > 50 rows
-- Show row count and current page
-- Configurable page size (25, 50, 100 rows)
-
-```html
-<!-- ✅ CORRECT - Table with all features -->
-<div class="table-controls">
-    <button onclick="downloadCSV('pull_requests')">📥 CSV</button>
-    <button onclick="downloadJSON('pull_requests')">📥 JSON</button>
-</div>
-<table class="sortable-table">
-    <thead>
-        <tr>
-            <th onclick="sortTable('pr', 'number')">PR # ▼</th>
-            <th onclick="sortTable('pr', 'created')">Created ▲</th>
-        </tr>
-    </thead>
-    <!-- Table body -->
-</table>
-```
-
-### Theme Support
-
-Implement light/dark mode using CSS variables:
-
-**CSS Variables Pattern:**
-
-```css
-/* ✅ CORRECT - Theme-aware CSS variables */
-:root {
-    --bg-primary: #ffffff;
-    --bg-secondary: #f5f5f5;
-    --text-primary: #000000;
-    --text-secondary: #666666;
-    --border-color: #dddddd;
-}
-
-[data-theme="dark"] {
-    --bg-primary: #1a1a1a;
-    --bg-secondary: #2d2d2d;
-    --text-primary: #ffffff;
-    --text-secondary: #aaaaaa;
-    --border-color: #444444;
-}
-```
-
-**Theme Toggle:**
-
-```html
-<!-- ✅ CORRECT - Theme toggle button -->
-<button onclick="toggleTheme()">🌙/☀️</button>
-
-<script>
-function toggleTheme() {
-    const current = document.documentElement.getAttribute('data-theme');
-    const next = current === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('theme', next);
-}
-</script>
-```
-
-### Responsive Design
-
-Dashboard must be usable on mobile, tablet, and desktop:
-
-**Breakpoints:**
-- Mobile: < 768px (single column, stacked sections)
-- Tablet: 768px - 1024px (two column where appropriate)
-- Desktop: > 1024px (full layout)
-
-**Mobile Optimizations:**
-- Tables scroll horizontally on small screens
-- Navigation collapses to hamburger menu
-- Touch-friendly button sizes (min 44x44px)
-- Readable font sizes (min 16px for body text)
-
-```css
-/* ✅ CORRECT - Responsive table */
-@media (max-width: 768px) {
-    .metrics-table {
-        display: block;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-    }
-
-    .section-header h2 {
-        font-size: 1.25rem;  /* Smaller on mobile */
-    }
-}
-```
-
-### Accessibility
-
-**MANDATORY:** Follow WCAG 2.1 AA standards:
-
-- All interactive elements keyboard accessible
-- ARIA labels for icon-only buttons
-- Sufficient color contrast (4.5:1 for normal text)
-- Focus indicators visible
-- No content conveyed by color alone
-
-```html
-<!-- ✅ CORRECT - Accessible button -->
-<button aria-label="Download as CSV" class="download-btn">
-    📥 CSV
-</button>
-
-<!-- ❌ WRONG - No accessible label -->
-<button class="download-btn">📥</button>
-```
-
-### Component Reusability
-
-**MANDATORY:** Always reuse existing UI components instead of duplicating code.
-
-**Rules:**
-
-- Create reusable JavaScript components for repeated UI elements
-- Never copy-paste HTML/JS for UI elements - create a component class instead
-- Same UI elements across pages MUST have unified look and behavior
-- Components should be in `/github_metrics/web/static/js/components/`
-
-**Mandatory Reusable Components:**
-
-- **Pagination** - Table pagination with page size selector
-- **Modal** - Popup dialogs with close/cancel/submit actions
-- **DataTable** - Sortable tables with column headers (see [Table Features](#table-features))
-- **TimeFilter** - Date range picker with preset ranges
-- **ComboBox** - Searchable dropdown with keyboard navigation
-- **TableToolbar** - Download buttons (CSV/JSON) for data export
-
-**Accessibility Requirements:**
-
-All shared components MUST meet WCAG 2.1 AA standards (see [Accessibility](#accessibility)):
-
-- **Keyboard navigation** - All interactive elements accessible via keyboard (Tab, Enter, Escape)
-- **ARIA roles and labels** - Proper semantic markup (`role`, `aria-label`, `aria-describedby`)
-- **Focus management** - Visible focus indicators, logical tab order, focus trapping in modals
-- **Screen reader support** - Announce state changes, provide text alternatives for visual elements
-
-**Component Contract:**
-
-Each reusable component should define:
-
-```javascript
-/**
- * Component responsibilities:
- * - Render: Display the component UI in the specified container
- * - State: Manage internal state (current page, selected items, etc.)
- * - Events: Emit events for parent components (onPageChange, onSelect, etc.)
- * - API: Public methods for external control (setPage, reset, destroy)
- * - Tests: Unit tests for rendering, state changes, and user interactions
- */
-```
-
-**Example:**
-
-```javascript
-// ❌ WRONG - Duplicated pagination HTML in template
-<div class="pagination-controls">...</div> // Copied 4 times
-
-// ✅ CORRECT - Reusable Pagination component
-import { Pagination } from './components/pagination.js';
-const pagination = new Pagination({
-    container: element,
-    totalItems: 100,
-    pageSize: 25,
-    onPageChange: (page) => fetchData(page)
-});
-```
+**Rationale:** Deployed as single container, all code updates together.
 
 ---
 
-## API Design Principles
+## Import Organization
 
-### No Artificial Result Limits
+**MANDATORY:** All imports at top of files.
 
-**MANDATORY:** Neither API endpoints nor frontend code may impose artificial limits on data access.
-
-#### Backend Rules
-
-- ❌ **NEVER** use `le=100` or similar upper bounds on `page_size` parameters
-- ❌ **NEVER** use `MAX_OFFSET` or similar constants to cap pagination depth
-- ❌ **NEVER** hardcode `LIMIT` values for user-facing data (aggregation queries are OK)
-- ✅ **DO** use pagination for large datasets (page/page_size parameters)
-- ✅ **DO** let clients request any page_size they need
-- ✅ **DO** return total count in pagination metadata
-
-#### Frontend Rules
-
-- ❌ **NEVER** hardcode `page_size: 100` or similar limits in API calls
-- ❌ **NEVER** fetch a fixed number of items and do client-side pagination only
-- ✅ **DO** use server-side pagination with proper page navigation
-- ✅ **DO** let users navigate through ALL their data via pagination controls
-- ✅ **DO** use the reusable Pagination component for consistency
-
-**Rationale:**
-
-- Users must be able to access ALL their data, not just the first N items
-- Artificial limits cause UX issues when users have more data than the limit
-- Pagination handles large datasets efficiently without arbitrary caps
-- Deep pagination may be slow, but that's the user's choice
-
-**Example - Backend:**
-
-```python
-# ❌ WRONG - Artificial limits
-page_size: int = Query(default=10, ge=1, le=100)
-MAX_OFFSET = 10000
-if offset > MAX_OFFSET:
-    raise HTTPException(...)
-
-# ✅ CORRECT - No upper limit
-page_size: int = Query(default=10, ge=1)
-# Let pagination work naturally
-```
-
-**Example - Frontend:**
-
-```javascript
-// ❌ WRONG - Hardcoded limit, client-side pagination
-const response = await fetch(`/api/data?page_size=100`);
-const allData = response.data;  // Only 100 items!
-// Then paginate client-side... user can't see item #101
-
-// ✅ CORRECT - Server-side pagination
-const response = await fetch(`/api/data?page=${currentPage}&page_size=${pageSize}`);
-// Show pagination controls, let user navigate to any page
-```
+- No imports in function bodies or try/except blocks
+- Exception: `TYPE_CHECKING` imports can be conditional
+- Pre-commit hooks enforce this
