@@ -5,15 +5,13 @@ Tests MCP server mounting and configuration including:
 - MCP server enabled/disabled behavior
 """
 
-from __future__ import annotations
-
 import os
 from collections.abc import Generator
 
 import pytest
 
-from github_metrics.app import app
-from github_metrics.config import _reset_config_for_testing, get_config
+from backend.app import app
+from backend.config import _reset_config_for_testing, get_config
 
 
 @pytest.fixture

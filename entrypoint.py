@@ -13,10 +13,10 @@ from pathlib import Path
 import uvicorn
 from simple_logger.logger import get_logger
 
-from github_metrics.config import get_config
-from github_metrics.webhook_setup import setup_webhooks
+from backend.config import get_config
+from backend.webhook_setup import setup_webhooks
 
-LOGGER = get_logger(name="github_metrics.entrypoint")
+LOGGER = get_logger(name="backend.entrypoint")
 
 
 def run_database_migrations() -> None:
@@ -93,11 +93,11 @@ if __name__ == "__main__":
     reload_includes = None
     if config.server.reload:
         # Watch Python files plus web UI files (templates, JS, CSS)
-        reload_dirs = [str(Path(__file__).parent / "github_metrics")]
+        reload_dirs = [str(Path(__file__).parent / "backend")]
         reload_includes = ["*.py", "*.html", "*.js", "*.css"]
 
     uvicorn.run(
-        "github_metrics.app:app",
+        "backend.app:app",
         host=config.server.host,
         port=config.server.port,
         workers=1 if config.server.reload else config.server.workers,

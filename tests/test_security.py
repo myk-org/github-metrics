@@ -6,8 +6,6 @@ Tests security functions including:
 - GitHub and Cloudflare IP list fetching
 """
 
-from __future__ import annotations
-
 import hashlib
 import hmac
 import ipaddress
@@ -18,7 +16,7 @@ import httpx
 import pytest
 from fastapi import HTTPException, Request
 
-from github_metrics.utils.security import (
+from backend.utils.security import (
     get_cloudflare_allowlist,
     get_github_allowlist,
     verify_ip_allowlist,

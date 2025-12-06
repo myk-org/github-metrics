@@ -8,8 +8,6 @@ Tests all functions in generate_changelog.py including:
 - main: End-to-end changelog generation
 """
 
-from __future__ import annotations
-
 import subprocess
 from unittest.mock import MagicMock, patch
 

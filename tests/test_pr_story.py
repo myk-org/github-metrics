@@ -9,8 +9,6 @@ Tests comprehensive PR timeline aggregation including:
 - Check run matching via head_sha
 """
 
-from __future__ import annotations
-
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
@@ -18,8 +16,8 @@ import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 
-from github_metrics.app import app
-from github_metrics.pr_story import (
+from backend.app import app
+from backend.pr_story import (
     GROUPING_WINDOW_SECONDS,
     _create_timeline_group,
     _extract_event_from_payload,
@@ -58,7 +56,7 @@ class TestPRStoryEndpoint:
             },
         }
 
-        with patch("github_metrics.routes.api.pr_story.db_manager") as mock_db:
+        with patch("backend.routes.api.pr_story.db_manager") as mock_db:
             # First call returns PR events, second/third calls return empty check_run/status events
             mock_db.fetch = AsyncMock(side_effect=[[mock_pr_event], [], []])
 
@@ -77,7 +75,7 @@ class TestPRStoryEndpoint:
 
     def test_get_pr_story_not_found(self) -> None:
         """Test PR story returns 404 when no webhooks exist for PR."""
-        with patch("github_metrics.routes.api.pr_story.db_manager") as mock_db:
+        with patch("backend.routes.api.pr_story.db_manager") as mock_db:
             mock_db.fetch = AsyncMock(return_value=[])
 
             client = TestClient(app)
@@ -88,7 +86,7 @@ class TestPRStoryEndpoint:
 
     def test_get_pr_story_database_unavailable(self) -> None:
         """Test PR story returns 500 when database unavailable."""
-        with patch("github_metrics.routes.api.pr_story.db_manager", None):
+        with patch("backend.routes.api.pr_story.db_manager", None):
             client = TestClient(app)
             response = client.get("/api/metrics/pr-story/testorg/testrepo/123")
 
@@ -96,7 +94,7 @@ class TestPRStoryEndpoint:
 
     def test_get_pr_story_database_error(self) -> None:
         """Test PR story handles database errors."""
-        with patch("github_metrics.routes.api.pr_story.db_manager") as mock_db:
+        with patch("backend.routes.api.pr_story.db_manager") as mock_db:
             mock_db.fetch = AsyncMock(side_effect=Exception("Database error"))
 
             client = TestClient(app)
@@ -106,7 +104,7 @@ class TestPRStoryEndpoint:
 
     def test_get_pr_story_invalid_pr_number(self) -> None:
         """Test PR story returns 400 for invalid PR numbers."""
-        with patch("github_metrics.routes.api.pr_story.db_manager"):
+        with patch("backend.routes.api.pr_story.db_manager"):
             client = TestClient(app)
 
             # Test negative PR number
@@ -143,7 +141,7 @@ class TestPRStoryEndpoint:
             },
         }
 
-        with patch("github_metrics.routes.api.pr_story.db_manager") as mock_db:
+        with patch("backend.routes.api.pr_story.db_manager") as mock_db:
             # First call returns PR events, second/third calls return empty check_run/status events
             mock_db.fetch = AsyncMock(side_effect=[[mock_pr_event], [], []])
 
@@ -816,7 +814,7 @@ class TestPRStoryEndpointIntegration:
             },
         ]
 
-        with patch("github_metrics.routes.api.pr_story.db_manager") as mock_db:
+        with patch("backend.routes.api.pr_story.db_manager") as mock_db:
             mock_db.fetch = AsyncMock(side_effect=[mock_events, [], []])
 
             client = TestClient(app)
@@ -885,7 +883,7 @@ class TestPRStoryEndpointIntegration:
             },
         ]
 
-        with patch("github_metrics.routes.api.pr_story.db_manager") as mock_db:
+        with patch("backend.routes.api.pr_story.db_manager") as mock_db:
             mock_db.fetch = AsyncMock(side_effect=[mock_events, [], []])
 
             client = TestClient(app)

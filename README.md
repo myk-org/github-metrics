@@ -11,6 +11,9 @@
   <a href="https://github.com/myk-org/github-metrics">
     <img src="https://img.shields.io/badge/python-3.13+-blue" alt="Python 3.13+">
   </a>
+  <a href="https://github.com/myk-org/github-metrics">
+    <img src="https://img.shields.io/badge/react-19-blue" alt="React 19">
+  </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License">
   </a>
@@ -42,11 +45,38 @@ Perfect for teams who want to:
 
 ---
 
+## Tech Stack
+
+### Frontend
+- **React 19** - Modern UI framework with hooks and TypeScript
+- **shadcn/ui** - High-quality accessible components built with Radix UI
+- **Tailwind CSS v4** - Utility-first CSS framework
+- **React Query** - Powerful async state management for API calls
+- **React Router** - Client-side routing for SPA navigation
+- **TypeScript** - Strict type safety for frontend code
+- **Bun** - Fast package manager and bundler
+
+### Backend
+- **Python 3.13** - Modern Python with latest type hints
+- **FastAPI** - High-performance async web framework
+- **PostgreSQL 16+** - Robust relational database with JSONB support
+- **asyncpg** - Fast async PostgreSQL driver
+- **SQLAlchemy 2.0** - Modern ORM with async support
+- **uv** - Fast Python package manager
+
+### Infrastructure
+- **Docker** - Multi-stage builds (Bun for frontend, Python for backend)
+- **Uvicorn** - ASGI server with workers
+- **Alembic** - Database migration management
+- **Playwright** - End-to-end UI testing
+
+---
+
 ## Features
 
 🔔 **Webhook Processing** - Secure webhook receiver with IP allowlist verification and HMAC SHA256 signature validation
 
-📊 **Real-time Dashboard** - Interactive web interface with sidebar navigation, Overview and Contributors views, live updates via WebSocket streaming, and dark/light theme support
+📊 **Real-time Dashboard** - Modern React SPA with sidebar navigation, multiple specialized views, dark/light theme support, and responsive design
 
 ⏱️ **Review Turnaround Metrics** - Track time to first review, approval time, and PR lifecycle duration by repository and reviewer with human-readable time formats
 
@@ -70,30 +100,85 @@ Perfect for teams who want to:
 
 ## Dashboard Views
 
-The interactive dashboard provides two specialized views accessible via sidebar navigation:
+The interactive dashboard is a full-featured single-page application (SPA) with multiple specialized views accessible via modern sidebar navigation:
 
 ### Overview
+Main dashboard with high-level metrics:
+- **Summary KPI Cards** - Total PRs, contributors, repositories, and average turnaround time
+- **Recent Activity** - Latest webhook events and PR updates
+- **Quick Stats** - At-a-glance metrics for the selected time range
 
-The main dashboard view includes:
-- **Real-time Event Stream** - Live webhook events with filters for repository, event type, and status
+### Webhooks
+Real-time webhook event monitoring:
+- **Event Stream** - Live webhook events with filters for repository, event type, and status
+- **Event Details** - Full payload inspection for debugging
+- **Processing Metrics** - Response times and success rates
+
+### Repositories
+Repository-level analytics:
 - **Repository Statistics** - Event counts, success rates, and processing times per repository
-- **Activity Trends** - Time-series charts showing webhook volume over time
-- **PR Story Modal** - Complete PR lifecycle timeline with reviews, comments, and check runs
+- **Activity Breakdown** - PR counts, review metrics, and contributor stats by repository
+- **Health Indicators** - Webhook delivery success and API usage tracking
 
 ### Contributors
+Contributor performance and engagement:
+- **Contributor List** - All contributors with PR counts and review activity
+- **Activity Heatmap** - Contribution patterns over time
+- **Top Contributors** - Most active contributors by PR count and reviews
 
-Review turnaround analytics and contributor performance:
-- **Summary KPI Cards** - Quick metrics for average first review time, approval time, PR lifecycle duration, and total PRs analyzed
+### Pull Requests
+Comprehensive PR tracking:
+- **PR List** - All pull requests with status, labels, and metrics
+- **PR Story Modal** - Two-panel view with PR list and interactive timeline
+  - Left panel: Searchable PR list with filters
+  - Right panel: Complete PR lifecycle timeline with reviews, comments, check runs, and events
+- **Size Metrics** - Lines added/removed, file counts, commit counts
+
+### Turnaround
+Review turnaround analytics:
+- **Summary KPI Cards** - Average first review time, approval time, PR lifecycle duration, total PRs analyzed
 - **Turnaround by Repository** - Review metrics broken down by repository with sortable columns
 - **Turnaround by Reviewer** - Individual reviewer response times and PR review counts
 - **Human-Readable Time Format** - Times displayed as "6m", "1.1h", "2d 5h" for easy interpretation
 
-Both views share common filtering capabilities:
-- **Repository Filter** - ComboBox dropdown with fuzzy search across all repositories
-- **User Filter** - ComboBox dropdown to filter by specific users
-- **Time Range** - Defaults to last 7 days, configurable for custom date ranges
-- **Clear Filters** - One-click reset button (X) to clear all active filters
-- **Data Export** - Download filtered data as CSV or JSON for external analysis and reporting
+### Trends
+Time-series analytics:
+- **Activity Trends** - Charts showing webhook volume and PR activity over time
+- **Review Time Trends** - Historical review turnaround metrics
+- **Contributor Trends** - New contributors and engagement patterns
+
+### Team Dynamics
+Team collaboration insights:
+- **Review Network** - Who reviews whose PRs
+- **Collaboration Patterns** - Cross-team interactions
+- **Workload Distribution** - Review load balancing across team members
+
+### Common Features Across All Views
+
+- **Multi-Select Filters**:
+  - **Repository Filter** - Select multiple repositories with search/fuzzy matching
+  - **User Filter** - Select multiple users with search
+  - **Clear Filters** - One-click reset button (X) to clear all active filters
+
+- **Time Range Selector**:
+  - Defaults to last 7 days
+  - Preset ranges: Last 24h, Last 7 days, Last 30 days
+  - Custom date range picker
+  - Applies globally across all views
+
+- **Data Export**:
+  - Download filtered data as CSV or JSON
+  - Export current view or full dataset
+
+- **Responsive Design**:
+  - Mobile-friendly with collapsible sidebar
+  - Touch-optimized controls
+  - Adaptive layouts for tablet and desktop
+
+- **Accessibility**:
+  - WCAG 2.1 AA compliant
+  - Keyboard navigation support
+  - Screen reader friendly
 
 ---
 
@@ -119,7 +204,7 @@ echo "POSTGRES_PASSWORD=your-secure-password-here" > .env
 docker-compose up -d
 ```
 
-That's it! Access the dashboard at **http://localhost:8080/dashboard**
+That's it! Access the dashboard at **http://localhost:8765**
 
 The service automatically handles database migrations and configuration.
 
@@ -154,7 +239,7 @@ All configuration is managed via environment variables—no configuration files 
 | Variable                         | Description                                              | Default   |
 | -------------------------------- | -------------------------------------------------------- | --------- |
 | `METRICS_SERVER_HOST`            | Server bind host                                         | `0.0.0.0` |
-| `METRICS_SERVER_PORT`            | Server bind port                                         | `8080`    |
+| `METRICS_SERVER_PORT`            | Server bind port                                         | `8765`    |
 | `METRICS_SERVER_WORKERS`         | Uvicorn workers                                          | `4`       |
 | `METRICS_SERVER_ALLOW_ALL_HOSTS` | Allow binding to 0.0.0.0 (required for wildcard binding) | `false`   |
 
@@ -247,10 +332,10 @@ Receives GitHub webhook events with IP and signature verification.
 ### Dashboard
 
 ```http
-GET /dashboard
+GET /
 ```
 
-Interactive web dashboard with real-time metrics visualization and theme switcher.
+Modern React SPA with multiple views, real-time updates, and theme switcher.
 
 ### WebSocket Streaming
 
@@ -283,7 +368,7 @@ Retrieve webhook events with filtering and pagination.
 - `start_time`: Start time in ISO 8601 format (e.g., 2024-01-15T00:00:00Z)
 - `end_time`: End time in ISO 8601 format
 - `page`: Page number (1-indexed, default: 1)
-- `page_size`: Items per page (1-1000, default: 100)
+- `page_size`: Items per page (default: 100)
 
 **Response:**
 ```json
@@ -337,7 +422,7 @@ Get aggregated statistics per repository.
 - `start_time`: Start time in ISO 8601 format
 - `end_time`: End time in ISO 8601 format
 - `page`: Page number (1-indexed, default: 1)
-- `page_size`: Items per page (1-100, default: 10)
+- `page_size`: Items per page (default: 10)
 
 **Response:**
 ```json
@@ -431,7 +516,7 @@ Add to your MCP client configuration (e.g., Claude Desktop):
 {
   "mcpServers": {
     "github-metrics": {
-      "url": "http://localhost:8080/mcp"
+      "url": "http://localhost:8765/mcp"
     }
   }
 }
@@ -568,6 +653,7 @@ METRICS_SERVER_ALLOW_ALL_HOSTS=true  # Explicit security acknowledgment
 - **Python** 3.13+
 - **PostgreSQL** 16+
 - **uv** (Python package manager)
+- **Bun** (Frontend package manager)
 
 ### Local Setup
 
@@ -578,13 +664,21 @@ git clone https://github.com/myk-org/github-metrics.git
 cd github-metrics
 ```
 
-2. **Install dependencies:**
+2. **Install backend dependencies:**
 
 ```bash
 uv sync
 ```
 
-3. **Configure environment:**
+3. **Install frontend dependencies:**
+
+```bash
+cd frontend
+bun install
+cd ..
+```
+
+4. **Configure environment:**
 
 ```bash
 export METRICS_DB_NAME=github_metrics
@@ -594,23 +688,45 @@ export METRICS_DB_HOST=localhost
 export METRICS_DB_PORT=5432
 ```
 
-4. **Run database migrations:**
+5. **Run database migrations:**
 
 ```bash
 uv run alembic upgrade head
 ```
 
-5. **Start the development server:**
+6. **Start the development servers:**
 
+**Option 1: Backend only (with PostgreSQL):**
 ```bash
-uv run entrypoint.py
+./dev/run.sh
 ```
+Backend at `http://localhost:8765`
 
-The service will start on `http://localhost:8080`.
+**Option 2: Frontend only (development mode):**
+```bash
+./dev/run-frontend.sh
+```
+Frontend at `http://localhost:3003` (proxies API requests to backend)
+
+**Option 3: Both together (recommended for full-stack development):**
+```bash
+./dev/run-all.sh
+```
+Frontend at `http://localhost:3003`, Backend at `http://localhost:8765`
+
+**Option 4: Containerized (production-like environment):**
+```bash
+./dev/dev-container.sh
+```
+Application at `http://localhost:8765`
 
 ### Code Quality
 
+**Backend:**
 ```bash
+# Run all checks (pre-commit hooks)
+prek run --all-files
+
 # Format code
 uv run ruff format
 
@@ -621,24 +737,62 @@ uv run ruff check
 uv run ruff check --fix
 
 # Type checking
-uv run mypy github_metrics/
+uv run mypy backend/
+```
 
-# Run all checks (pre-commit hooks)
-prek run --all-files
+**Frontend:**
+```bash
+cd frontend
+
+# Lint TypeScript and React code
+bun run lint
+
+# Format code with Prettier
+bun run format
+
+# Type checking
+bun run type-check
+
+# Build for production
+bun run build
 ```
 
 ### Testing
 
+**Two test suites - both must pass:**
+
 ```bash
-# Run tests (parallel execution)
-uv run --group tests pytest -n auto
+# Run API tests (unit tests, integration tests)
+tox
 
-# Run with coverage (90% required)
-uv run --group tests pytest -n auto --cov=github_metrics --cov-report=term-missing
+# Run UI tests (Playwright browser automation)
+tox -e ui
 
-# Run specific test file
-uv run --group tests pytest tests/test_app.py -v
+# Run all tests together (recommended)
+tox && tox -e ui
 ```
+
+**Individual test commands:**
+
+```bash
+# API tests with coverage (90% required)
+uv run --group tests pytest -n auto --cov=backend --cov-report=term-missing
+
+# Specific API test file
+uv run --group tests pytest tests/test_app.py -v
+
+# UI tests with headed browser (see what's happening)
+uv run --group tests pytest tests/ui/ --headed
+
+# Specific UI test
+uv run --group tests pytest tests/ui/test_dashboard.py -v
+```
+
+**Test execution strategy with Claude Code:**
+
+For faster test execution, run both suites in parallel using two agents:
+- Agent 1: `tox` (API tests - fast)
+- Agent 2: `tox -e ui` (UI tests - slower with browser automation)
 
 ### Database Migrations
 
@@ -694,25 +848,45 @@ All tables use PostgreSQL-specific types (UUID, JSONB) for optimal performance a
 Contributions are welcome! Please follow these guidelines:
 
 1. **Fork the repository** and create a feature branch
-2. **Follow code style**: Run `prek run --all-files` before committing
-3. **Write tests**: Maintain 90% code coverage
+2. **Follow code style**:
+   - Backend: Run `prek run --all-files` before committing
+   - Frontend: Run `cd frontend && bun run lint` before committing
+3. **Write tests**: Maintain 90% code coverage for backend, test all UI interactions
 4. **Update documentation**: Keep README.md and docstrings current
 5. **Submit a pull request** with a clear description of changes
 
 ### Development Workflow
 
+**Backend:**
 ```bash
 # Create feature branch
 git checkout -b feature/your-feature-name
 
 # Make changes and test
-uv run --group tests pytest -n auto --cov=github_metrics
+uv run --group tests pytest -n auto --cov=backend
 
 # Run code quality checks
 prek run --all-files
 
 # Commit and push
 git commit -m "feat: add new feature"
+git push origin feature/your-feature-name
+```
+
+**Frontend:**
+```bash
+# Install dependencies
+cd frontend
+bun install
+
+# Make changes and test
+bun run lint
+bun run type-check
+bun run build
+
+# Commit and push
+cd ..
+git commit -m "feat: add new UI feature"
 git push origin feature/your-feature-name
 ```
 
@@ -731,5 +905,5 @@ Apache-2.0
 ---
 
 <p align="center">
-  <sub>Built with FastAPI, PostgreSQL, and ❤️</sub>
+  <sub>Built with FastAPI, React, PostgreSQL, and ❤️</sub>
 </p>

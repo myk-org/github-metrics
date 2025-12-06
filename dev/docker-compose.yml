@@ -1,0 +1,51 @@
+services:
+  github-metrics-db:
+    image: postgres:16-alpine
+    container_name: github-metrics-db
+    environment:
+      POSTGRES_DB: github_metrics_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: devpassword123  # pragma: allowlist secret
+    volumes:
+      - github-metrics-dev-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  github-metrics-app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: github-metrics-app
+    develop:
+      watch:
+        - action: rebuild
+          path: ../backend
+        - action: rebuild
+          path: ../frontend/src
+        - action: rebuild
+          path: ../pyproject.toml
+        - action: rebuild
+          path: ../Dockerfile
+    depends_on:
+      github-metrics-db:
+        condition: service_healthy
+    environment:
+      METRICS_DB_NAME: github_metrics_dev
+      METRICS_DB_USER: postgres
+      METRICS_DB_PASSWORD: devpassword123  # pragma: allowlist secret
+      METRICS_DB_HOST: github-metrics-db
+      METRICS_DB_PORT: 5432
+      METRICS_SERVER_HOST: 0.0.0.0
+      METRICS_SERVER_PORT: 8765
+      METRICS_SERVER_RELOAD: "false"
+      METRICS_VERIFY_GITHUB_IPS: "false"
+      METRICS_VERIFY_CLOUDFLARE_IPS: "false"
+      METRICS_SERVER_ALLOW_ALL_HOSTS: "true"
+    ports:
+      - "8765:8765"
+
+volumes:
+  github-metrics-dev-data:

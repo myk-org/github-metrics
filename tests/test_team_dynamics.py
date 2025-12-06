@@ -1,15 +1,13 @@
 """Tests for team dynamics API endpoint."""
 
-from __future__ import annotations
-
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from github_metrics.app import app
-from github_metrics.routes.api.team_dynamics import calculate_gini_coefficient
+from backend.app import app
+from backend.routes.api.team_dynamics import calculate_gini_coefficient
 
 
 class TestGiniCoefficient:
@@ -103,7 +101,7 @@ class TestTeamDynamicsEndpoint:
         mock_pending_row: dict[str, Any],
     ) -> None:
         """Test successful team dynamics retrieval."""
-        with patch("github_metrics.routes.api.team_dynamics.db_manager") as mock_db:
+        with patch("backend.routes.api.team_dynamics.db_manager") as mock_db:
             mock_db.fetch = AsyncMock(
                 side_effect=[
                     mock_workload_rows,
@@ -166,7 +164,7 @@ class TestTeamDynamicsEndpoint:
         mock_pending_row: dict[str, Any],
     ) -> None:
         """Test team dynamics with time range filter."""
-        with patch("github_metrics.routes.api.team_dynamics.db_manager") as mock_db:
+        with patch("backend.routes.api.team_dynamics.db_manager") as mock_db:
             mock_db.fetch = AsyncMock(
                 side_effect=[
                     mock_workload_rows,
@@ -199,7 +197,7 @@ class TestTeamDynamicsEndpoint:
         mock_pending_row: dict[str, Any],
     ) -> None:
         """Test team dynamics with repository filter."""
-        with patch("github_metrics.routes.api.team_dynamics.db_manager") as mock_db:
+        with patch("backend.routes.api.team_dynamics.db_manager") as mock_db:
             mock_db.fetch = AsyncMock(
                 side_effect=[
                     mock_workload_rows,
@@ -221,7 +219,7 @@ class TestTeamDynamicsEndpoint:
 
     def test_team_dynamics_empty_data(self) -> None:
         """Test team dynamics with no data."""
-        with patch("github_metrics.routes.api.team_dynamics.db_manager") as mock_db:
+        with patch("backend.routes.api.team_dynamics.db_manager") as mock_db:
             mock_db.fetch = AsyncMock(side_effect=[[], [], []])
             mock_db.fetchrow = AsyncMock(return_value={"pending_count": 0})
 
@@ -256,7 +254,7 @@ class TestTeamDynamicsEndpoint:
         approval_rows = [{"approver": "alice", "avg_approval_hours": 30.0, "total_approvals": 15}]
         pending_row = {"pending_count": 4}
 
-        with patch("github_metrics.routes.api.team_dynamics.db_manager") as mock_db:
+        with patch("backend.routes.api.team_dynamics.db_manager") as mock_db:
             mock_db.fetch = AsyncMock(side_effect=[workload_rows, review_rows, approval_rows])
             mock_db.fetchrow = AsyncMock(return_value=pending_row)
 
@@ -285,7 +283,7 @@ class TestTeamDynamicsEndpoint:
         approval_rows = [{"approver": "alice", "avg_approval_hours": 4.0, "total_approvals": 15}]
         pending_row = {"pending_count": 2}
 
-        with patch("github_metrics.routes.api.team_dynamics.db_manager") as mock_db:
+        with patch("backend.routes.api.team_dynamics.db_manager") as mock_db:
             mock_db.fetch = AsyncMock(side_effect=[workload_rows, review_rows, approval_rows])
             mock_db.fetchrow = AsyncMock(return_value=pending_row)
 
@@ -300,7 +298,7 @@ class TestTeamDynamicsEndpoint:
 
     def test_team_dynamics_invalid_time_format(self) -> None:
         """Test team dynamics with invalid time format."""
-        with patch("github_metrics.routes.api.team_dynamics.db_manager") as mock_db:
+        with patch("backend.routes.api.team_dynamics.db_manager") as mock_db:
             # Mock db_manager to ensure datetime parsing happens before database access
             mock_db.fetch = AsyncMock(return_value=[])
             mock_db.fetchrow = AsyncMock(return_value={"pending_count": 0})
@@ -316,7 +314,7 @@ class TestTeamDynamicsEndpoint:
 
     def test_team_dynamics_database_error(self) -> None:
         """Test team dynamics with database error."""
-        with patch("github_metrics.routes.api.team_dynamics.db_manager") as mock_db:
+        with patch("backend.routes.api.team_dynamics.db_manager") as mock_db:
             mock_db.fetch = AsyncMock(side_effect=Exception("Database connection failed"))
 
             client = TestClient(app)
@@ -327,7 +325,7 @@ class TestTeamDynamicsEndpoint:
 
     def test_team_dynamics_without_db_manager(self) -> None:
         """Test team dynamics when db_manager is None."""
-        with patch("github_metrics.routes.api.team_dynamics.db_manager", None):
+        with patch("backend.routes.api.team_dynamics.db_manager", None):
             client = TestClient(app)
             response = client.get("/api/metrics/team-dynamics")
 
@@ -342,7 +340,7 @@ class TestTeamDynamicsEndpoint:
         mock_pending_row: dict[str, Any],
     ) -> None:
         """Test team dynamics response has correct structure."""
-        with patch("github_metrics.routes.api.team_dynamics.db_manager") as mock_db:
+        with patch("backend.routes.api.team_dynamics.db_manager") as mock_db:
             mock_db.fetch = AsyncMock(
                 side_effect=[
                     mock_workload_rows,
@@ -439,7 +437,7 @@ class TestTeamDynamicsEndpoint:
         ]
         pending_row = {"pending_count": 5}
 
-        with patch("github_metrics.routes.api.team_dynamics.db_manager") as mock_db:
+        with patch("backend.routes.api.team_dynamics.db_manager") as mock_db:
             mock_db.fetch = AsyncMock(side_effect=[workload_rows, review_rows, approval_rows])
             mock_db.fetchrow = AsyncMock(return_value=pending_row)
 
@@ -499,7 +497,7 @@ class TestTeamDynamicsEndpoint:
         ]
         pending_row = {"pending_count": 5}
 
-        with patch("github_metrics.routes.api.team_dynamics.db_manager") as mock_db:
+        with patch("backend.routes.api.team_dynamics.db_manager") as mock_db:
             mock_db.fetch = AsyncMock(side_effect=[workload_rows, review_rows, approval_rows])
             mock_db.fetchrow = AsyncMock(return_value=pending_row)
 
@@ -540,7 +538,7 @@ class TestTeamDynamicsEndpoint:
         approval_rows = [{"approver": "user1", "avg_approval_hours": 5.0, "total_approvals": 10}]
         pending_row = {"pending_count": 0}
 
-        with patch("github_metrics.routes.api.team_dynamics.db_manager") as mock_db:
+        with patch("backend.routes.api.team_dynamics.db_manager") as mock_db:
             mock_db.fetch = AsyncMock(side_effect=[workload_rows, review_rows, approval_rows])
             mock_db.fetchrow = AsyncMock(return_value=pending_row)
 
@@ -566,7 +564,7 @@ class TestTeamDynamicsEndpoint:
         mock_pending_row: dict[str, Any],
     ) -> None:
         """Test team dynamics with user filter."""
-        with patch("github_metrics.routes.api.team_dynamics.db_manager") as mock_db:
+        with patch("backend.routes.api.team_dynamics.db_manager") as mock_db:
             mock_db.fetch = AsyncMock(
                 side_effect=[
                     mock_workload_rows,

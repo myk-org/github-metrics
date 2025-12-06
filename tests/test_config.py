@@ -7,13 +7,11 @@ Tests configuration loading from environment variables including:
 - Configuration dataclasses
 """
 
-from __future__ import annotations
-
 import os
 
 import pytest
 
-from github_metrics.config import (
+from backend.config import (
     DatabaseConfig,
     GitHubConfig,
     MetricsConfig,

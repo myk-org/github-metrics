@@ -7,8 +7,6 @@ Tests webhook creation and management including:
 - Error handling
 """
 
-from __future__ import annotations
-
 import logging
 import os
 from typing import Any
@@ -17,8 +15,8 @@ from unittest.mock import AsyncMock, Mock, patch
 import github
 import pytest
 
-from github_metrics.config import GitHubConfig, MetricsConfig, WebhookConfig
-from github_metrics.webhook_setup import (
+from backend.config import GitHubConfig, MetricsConfig, WebhookConfig
+from backend.webhook_setup import (
     _create_webhook_for_repository,
     setup_webhooks,
 )
@@ -77,7 +75,7 @@ class TestSetupWebhooks:
                 mock_github_class.return_value = mock_github_instance
 
                 with patch(
-                    "github_metrics.webhook_setup._create_webhook_for_repository",
+                    "backend.webhook_setup._create_webhook_for_repository",
                     new=AsyncMock(return_value=(True, "Webhook created")),
                 ):
                     result = await setup_webhooks(config=mock_config, logger=mock_logger)
@@ -208,7 +206,7 @@ class TestSetupWebhooks:
                     return False, f"Failed to create webhook for {repository_name}: Repository not found"
 
                 with patch(
-                    "github_metrics.webhook_setup._create_webhook_for_repository",
+                    "backend.webhook_setup._create_webhook_for_repository",
                     side_effect=mock_create_webhook,
                 ):
                     result = await setup_webhooks(config=mock_config, logger=mock_logger)

@@ -1,7 +1,5 @@
 """JavaScript coverage collection and reporting for Playwright UI tests."""
 
-from __future__ import annotations
-
 import html
 import json
 from dataclasses import dataclass, field

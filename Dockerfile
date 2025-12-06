@@ -1,15 +1,37 @@
 # GitHub Metrics Service Dockerfile
-# Lightweight Python image for metrics collection and dashboard
+# Multi-stage build: Frontend (Bun) + Backend (Python)
 
 # Build arguments for version pinning (must be in global scope before any FROM)
 ARG UV_VERSION=0.5.14
 
-# Create a named stage for uv
+# ============================================
+# Stage 1: Frontend Build (Bun)
+# ============================================
+FROM docker.io/oven/bun:1.1.38 AS frontend-builder
+
+WORKDIR /app/frontend
+
+# Copy package files first for layer caching
+COPY frontend/package.json frontend/bun.lock ./
+
+# Install dependencies with frozen lockfile
+RUN bun install --frozen-lockfile
+
+# Copy frontend source files
+COPY frontend/ ./
+
+# Build frontend (outputs to dist/)
+RUN bun run build
+
+# ============================================
+# Stage 2: UV Binary
+# ============================================
 FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
 
-FROM python:3.13-slim
-
-EXPOSE 8080
+# ============================================
+# Stage 3: Final Runtime (Python)
+# ============================================
+FROM docker.io/python:3.13.1-slim
 
 ENV HOME_DIR="/app" \
     HOME="/app"
@@ -41,9 +63,20 @@ RUN groupadd --gid 1000 appuser && \
     useradd --uid 1000 --gid 1000 --no-create-home --shell /bin/bash appuser && \
     chown appuser:appuser $HOME_DIR
 
-# Copy project files WITH ownership already set (avoids chown -R overhead)
+# Copy Python application configuration and source code
+# entrypoint.py: Application startup script
+# pyproject.toml, uv.lock: Python dependency declarations
+# alembic.ini: Database migration configuration
+# README.md: Project documentation
 COPY --chown=appuser:appuser entrypoint.py pyproject.toml uv.lock alembic.ini README.md $HOME_DIR/
-COPY --chown=appuser:appuser github_metrics $HOME_DIR/github_metrics/
+
+# Copy backend application package
+COPY --chown=appuser:appuser backend $HOME_DIR/backend/
+
+# Copy compiled frontend static files from frontend-builder stage
+# Source: /app/frontend/dist (Bun build output)
+# Destination: $HOME_DIR/static (served by FastAPI)
+COPY --from=frontend-builder --chown=appuser:appuser /app/frontend/dist $HOME_DIR/static
 
 # Switch to non-root user BEFORE uv sync
 # This ensures .venv is created with correct ownership from the start
@@ -55,6 +88,6 @@ RUN mkdir -p $UV_CACHE_DIR && uv sync --frozen
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl --fail http://127.0.0.1:8080/health || exit 1
+    CMD curl --fail http://127.0.0.1:${METRICS_SERVER_PORT:-8765}/health || exit 1
 
 ENTRYPOINT ["tini", "--", "uv", "run", "entrypoint.py"]
