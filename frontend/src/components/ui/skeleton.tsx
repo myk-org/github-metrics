@@ -1,7 +1,17 @@
 import { cn } from "@/lib/utils";
 
-function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("animate-pulse rounded-md bg-muted", className)} {...props} />;
+interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
+  readonly delay?: number;
+}
+
+function Skeleton({ className, delay = 0, ...props }: SkeletonProps) {
+  return (
+    <div
+      className={cn("animate-pulse rounded-md bg-muted", className)}
+      style={{ animationDelay: `${delay.toString()}ms` }}
+      {...props}
+    />
+  );
 }
 
 export { Skeleton };

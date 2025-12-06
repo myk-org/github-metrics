@@ -65,6 +65,9 @@ function PRListItem({ pr, isSelected, onClick }: PRListItemProps): React.ReactEl
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-selected={isSelected}
       className={cn(
         "cursor-pointer border-b last:border-b-0 transition-colors",
         isSelected
@@ -72,6 +75,12 @@ function PRListItem({ pr, isSelected, onClick }: PRListItemProps): React.ReactEl
           : "hover:bg-muted/50 border-l-4 border-l-transparent"
       )}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
     >
       <div className="flex items-start justify-between gap-4 p-4">
         <div className="flex-1 min-w-0">
@@ -147,6 +156,8 @@ export function UserPRsModal({
   }, [prStoryData]);
 
   // Initialize selected event types when PR changes
+  // Note: We intentionally omit 'eventTypes' from deps to avoid re-triggering when event types are computed.
+  // The effect should only run when the selected PR changes (by repository or number).
   useEffect(() => {
     if (eventTypes.length > 0) {
       setSelectedEventTypes(new Set(eventTypes));
@@ -187,6 +198,8 @@ export function UserPRsModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="w-[90vw] max-w-[1500px] h-[85vh] flex flex-col p-0"
+        // Note: resize: both is supported in all modern browsers (Chrome 4+, Firefox 5+, Safari 4+, Edge 79+)
+        // overflow: hidden is required for resize to work properly
         style={{ resize: "both", overflow: "hidden", minWidth: "900px", minHeight: "500px" }}
       >
         <DialogHeader className="px-6 pt-6 pb-4 border-b">

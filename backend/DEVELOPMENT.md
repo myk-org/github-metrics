@@ -200,7 +200,7 @@ All configuration is done via environment variables with the `METRICS_` prefix.
 
 All database operations use asyncpg with parameterized queries to prevent SQL injection.
 
-**Correct Pattern - Parameterized Queries:**
+#### Correct Pattern - Parameterized Queries
 
 ```python
 # ✅ CORRECT - Use $1, $2, $3 placeholders
@@ -234,7 +234,7 @@ count = await db_manager.fetchval(
 )
 ```
 
-**Anti-Pattern - SQL Injection Risk:**
+#### Anti-Pattern - SQL Injection Risk
 
 ```python
 # ❌ WRONG - SQL injection vulnerability
@@ -257,7 +257,7 @@ await db_manager.fetch(
 
 All functions must have complete type hints. This is enforced by mypy in strict mode.
 
-**Correct Pattern - Complete Type Hints:**
+#### Correct Pattern - Complete Type Hints
 
 ```python
 from typing import Any
@@ -310,7 +310,7 @@ async def get_metrics(
     return await db_manager.fetch(query, *params)
 ```
 
-**Anti-Pattern - Missing Type Hints:**
+#### Anti-Pattern - Missing Type Hints
 
 ```python
 # ❌ WRONG - No type hints (mypy will fail)
@@ -330,7 +330,7 @@ async def get_metrics(start_time: Any, end_time: Any) -> Any:
 
 All I/O operations must be async to avoid blocking the event loop.
 
-**Correct Pattern - Async/Await:**
+#### Correct Pattern - Async/Await
 
 ```python
 # ✅ CORRECT - Async database operations
@@ -354,7 +354,7 @@ async def process_webhook(delivery_id: str, payload: dict[str, Any]) -> None:
     await update_metrics(delivery_id)
 ```
 
-**Anti-Pattern - Blocking Operations:**
+#### Anti-Pattern - Blocking Operations
 
 ```python
 # ❌ WRONG - Synchronous database call blocks event loop
@@ -372,7 +372,7 @@ async def process_webhook(delivery_id: str, payload: dict[str, Any]) -> None:
 
 Use the `simple_logger` package for consistent logging across the application.
 
-**Correct Pattern:**
+#### Correct Pattern
 
 ```python
 from simple_logger.logger import get_logger
@@ -398,7 +398,7 @@ LOGGER.warning("Warning that needs attention")     # Potential issues
 LOGGER.exception("Error with full traceback")      # For exceptions in except blocks
 ```
 
-**Log Level Guidelines:**
+#### Log Level Guidelines
 
 - `DEBUG` - Detailed technical information for development debugging
 - `INFO` - General informational messages about normal operations
@@ -505,7 +505,7 @@ Add endpoint documentation to API docs and update CLAUDE.md if it introduces new
 
 The `backend/utils/` directory contains shared utility modules. Always check these before implementing new logic.
 
-**When to Use Each Utility Module:**
+#### When to Use Each Utility Module
 
 **`utils/query_builders.py` - SQL Query Construction**
 
@@ -608,7 +608,7 @@ if not verify_webhook_signature(payload_body, signature, secret):
     raise HTTPException(status_code=403, detail="Invalid signature")
 ```
 
-**Search Before Implementing:**
+#### Search Before Implementing
 
 Before writing new query logic, response formatting, or datetime handling:
 
@@ -646,7 +646,7 @@ tox && tox -e ui
 
 ### Test Organization
 
-**One Test File Per Module:**
+#### One Test File Per Module
 
 ```text
 tests/
@@ -660,13 +660,13 @@ tests/
     └── test_dashboard.py        # UI tests (Playwright)
 ```
 
-**Rules:**
+#### Rules
 
 - ❌ NO generic test files like `test_app_additional.py`, `test_app_coverage.py`
 - ✅ All tests for a module go in ONE test file
 - ✅ Test function names must describe what is being tested
 
-**Example:**
+#### Example
 
 ```python
 # ✅ CORRECT - Descriptive test names
@@ -688,7 +688,7 @@ def test_webhook_additional():
 
 ### Mocking Pattern
 
-**Mock Database Operations:**
+#### Mock Database Operations
 
 ```python
 from unittest.mock import AsyncMock, patch
@@ -709,7 +709,7 @@ async def test_track_webhook():
         mock_db.execute.assert_called_once()
 ```
 
-**Mock Configuration:**
+#### Mock Configuration
 
 ```python
 from unittest.mock import Mock
@@ -733,7 +733,7 @@ def mock_config():
 
 ### UI Tests vs Unit Tests
 
-**UI Tests (`tests/ui/`) - Live Server Testing:**
+#### UI Tests (`tests/ui/`) - Live Server Testing
 
 - Run against the live development server (no mocking)
 - Use Playwright for browser automation
@@ -752,7 +752,7 @@ async def test_dashboard_loads(page: Page):
     await expect(page.locator("h1")).to_have_text("GitHub Metrics Dashboard")
 ```
 
-**Unit Tests (`tests/test_*.py`) - Isolated Component Testing:**
+#### Unit Tests (`tests/test_*.py`) - Isolated Component Testing
 
 - Use mocking for database and external services
 - Test individual components in isolation
@@ -768,7 +768,7 @@ async def test_track_webhook_event(mock_db):
         mock_db.execute.assert_called_once()
 ```
 
-**When to Use Each:**
+#### When to Use Each
 
 - **UI Tests:** User workflows, page navigation, form submissions, real-time updates
 - **Unit Tests:** API endpoints, database queries, utility functions, error handling
@@ -787,7 +787,7 @@ prek run --all-files
 prek run
 ```
 
-**Hooks Include:**
+#### Hooks Include
 
 - ruff format (code formatting)
 - ruff check (linting)
@@ -879,7 +879,7 @@ uv run alembic heads
 
 ### No Defensive Programming for Required Parameters
 
-**VIOLATION - Checking Required Parameters:**
+#### VIOLATION - Checking Required Parameters
 
 ```python
 # ❌ WRONG - config is required, always present
@@ -891,7 +891,7 @@ def some_method(self):
         value = self.config.database.host
 ```
 
-**CORRECT - Use Required Parameters Directly:**
+#### CORRECT - Use Required Parameters Directly
 
 ```python
 # ✅ CORRECT - No defensive check needed
@@ -904,7 +904,7 @@ def some_method(self):
 
 ### No Fake Defaults
 
-**VIOLATION - Returning Fake Data:**
+#### VIOLATION - Returning Fake Data
 
 ```python
 # ❌ WRONG - Hides bugs with fake data
@@ -915,7 +915,7 @@ def get_webhook_count(self) -> int:
     return self.count or 0  # Fake zero when should fail
 ```
 
-**CORRECT - Fail-Fast:**
+#### CORRECT - Fail-Fast
 
 ```python
 # ✅ CORRECT - Fail-fast with clear error
@@ -932,7 +932,7 @@ def get_webhook_count(self) -> int:
 
 ### No Linter Suppressions
 
-**VIOLATION - Suppressing Linters:**
+#### VIOLATION - Suppressing Linters
 
 ```python
 # ❌ WRONG - Never suppress linters
@@ -945,7 +945,7 @@ result = dangerous_operation()  # type: ignore
 "app.py" = ["F401", "E501"]
 ```
 
-**CORRECT - Fix the Code:**
+#### CORRECT - Fix the Code
 
 ```python
 # ✅ CORRECT - Remove unused import
@@ -955,7 +955,7 @@ result = dangerous_operation()  # type: ignore
 result: int = dangerous_operation()  # Proper type annotation
 ```
 
-**If you think a linter rule is wrong:**
+#### If you think a linter rule is wrong
 
 1. STOP - Do NOT add suppression
 2. ASK the user for explicit approval
@@ -964,7 +964,7 @@ result: int = dangerous_operation()  # Proper type annotation
 
 ### No Duplicate Logic
 
-**VIOLATION - Duplicate Query Logic:**
+#### VIOLATION - Duplicate Query Logic
 
 ```python
 # ❌ WRONG - Same logic in two files
@@ -983,7 +983,7 @@ async def get_users():
     )
 ```
 
-**CORRECT - Shared Utility Function:**
+#### CORRECT - Shared Utility Function
 
 ```python
 # ✅ CORRECT - In utils/contributor_queries.py
@@ -1010,7 +1010,7 @@ contributors = await get_pr_creators(db_manager, repository)
 
 ### No SQL f-strings
 
-**VIOLATION - SQL Injection Risk:**
+#### VIOLATION - SQL Injection Risk
 
 ```python
 # ❌ WRONG - SQL injection vulnerability
@@ -1018,7 +1018,7 @@ query = f"SELECT * FROM webhooks WHERE repository = '{repository}'"
 rows = await db_manager.fetch(query)
 ```
 
-**CORRECT - Parameterized Queries:**
+#### CORRECT - Parameterized Queries
 
 ```python
 # ✅ CORRECT - Safe parameterized query
@@ -1159,7 +1159,7 @@ filtered = [r for r in rows if r["payload"].get("action") == "opened"]
 
 ### Common Issues
 
-**Database Connection Errors:**
+#### Database Connection Errors
 
 ```text
 Error: FATAL:  password authentication failed for user "postgres"
@@ -1172,7 +1172,7 @@ echo $METRICS_DB_USER
 echo $METRICS_DB_PASSWORD
 ```
 
-**Port Already in Use:**
+#### Port Already in Use
 
 ```text
 Error: [Errno 48] Address already in use
@@ -1186,7 +1186,7 @@ lsof -ti:8765 | xargs kill -9
 export METRICS_SERVER_PORT=8766
 ```
 
-**Migration Errors:**
+#### Migration Errors
 
 ```text
 Error: Can't locate revision identified by '<revision_id>'

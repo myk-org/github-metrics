@@ -27,8 +27,10 @@
   }
 }
 
+/* Note: Add the 'animated-logo' class to the specific logo element in JSX
+   that should animate, rather than relying on DOM order */
 @media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
+  .logo.animated-logo {
     animation: logo-spin infinite 20s linear;
   }
 }

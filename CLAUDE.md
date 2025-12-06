@@ -52,7 +52,7 @@ Before writing ANY new code:
 
 ### Directory Structure
 
-```
+```text
 backend/                    # Python FastAPI backend
 ├── app.py                  # FastAPI app, lifespan, route registration
 ├── config.py               # Environment-based config (METRICS_*)
@@ -362,12 +362,17 @@ Use React Query for all API calls:
 export function useRepositories(filters: FilterState) {
   return useQuery({
     queryKey: ["repositories", filters],
-    queryFn: async () => {
+    queryFn: async (): Promise<RepositoryData> => {
       const response = await fetch(
         `/api/metrics/repositories?${new URLSearchParams(filters)}`
       );
+      if (!response.ok) {
+        throw new Error(`Failed to fetch repositories: ${response.statusText}`);
+      }
       return response.json() as Promise<RepositoryData>;
-    }
+    },
+    retry: 1,
+    staleTime: 1000 * 60 * 5
   });
 }
 
@@ -381,7 +386,7 @@ const { data, isLoading, error } = useRepositories(filters);
 
 ### Test File Organization
 
-```
+```text
 tests/
 ├── conftest.py              # Shared fixtures
 ├── test_app.py              # FastAPI endpoint tests

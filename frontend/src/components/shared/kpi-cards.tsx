@@ -47,8 +47,8 @@ export function KPICards({
 
   return (
     <div className={`grid gap-4 ${gridCols}`}>
-      {items.map((item, index) => (
-        <Card key={index}>
+      {items.map((item) => (
+        <Card key={item.label}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               {item.label}

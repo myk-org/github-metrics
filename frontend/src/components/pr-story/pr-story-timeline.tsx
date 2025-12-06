@@ -229,7 +229,7 @@ function TimelineEvent({ event, isLast }: TimelineEventProps): React.ReactElemen
               <div className="mt-3 space-y-2 pl-6 border-l-2 border-border">
                 {event.children.map((checkRun, checkIndex) => (
                   <div
-                    key={checkIndex}
+                    key={`${checkRun.name}-${checkIndex.toString()}`}
                     className="flex items-center justify-between gap-2 p-2 bg-muted rounded-md"
                   >
                     <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -323,7 +323,11 @@ export function PRStoryTimeline({ events }: PRStoryTimelineProps): React.ReactEl
   return (
     <div className="space-y-4">
       {events.map((event, index) => (
-        <TimelineEvent key={index} event={event} isLast={index === events.length - 1} />
+        <TimelineEvent
+          key={`${event.event_type}-${event.timestamp}-${index.toString()}`}
+          event={event}
+          isLast={index === events.length - 1}
+        />
       ))}
     </div>
   );

@@ -21,6 +21,90 @@ interface PRStoryModalProps {
   readonly error: Error | null;
 }
 
+interface PRStoryContentProps {
+  readonly prStory: PRStory;
+}
+
+// Separate component to handle event filtering - keyed by PR to reset state
+function PRStoryContent({ prStory }: PRStoryContentProps): React.ReactElement {
+  // Get unique event types from events
+  const eventTypes = useMemo(() => {
+    return Array.from(new Set(prStory.events.map((event) => event.event_type)));
+  }, [prStory]);
+
+  // Track selected event types - initialized with all types
+  const [selectedEventTypes, setSelectedEventTypes] = useState<Set<string>>(
+    () => new Set(eventTypes)
+  );
+
+  // Filter events based on selected types
+  const filteredEvents = useMemo(() => {
+    if (selectedEventTypes.size === 0) {
+      return [];
+    }
+    return prStory.events.filter((event) => selectedEventTypes.has(event.event_type));
+  }, [prStory, selectedEventTypes]);
+
+  return (
+    <div className="py-4">
+      {/* Summary Toolbar - horizontal layout matching legacy */}
+      <div className="flex flex-wrap items-center gap-4 mb-4 pb-3 border-b">
+        {/* Summary stats */}
+        <div className="flex items-center gap-3 text-sm">
+          <div className="flex items-center gap-1">
+            <span>📝</span>
+            <strong>{prStory.summary.total_commits}</strong>
+            <span className="text-muted-foreground">
+              commit{prStory.summary.total_commits !== 1 ? "s" : ""}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span>💬</span>
+            <strong>{prStory.summary.total_reviews}</strong>
+            <span className="text-muted-foreground">
+              review{prStory.summary.total_reviews !== 1 ? "s" : ""}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span>▶️</span>
+            <strong>{prStory.summary.total_check_runs}</strong>
+            <span className="text-muted-foreground">
+              check run{prStory.summary.total_check_runs !== 1 ? "s" : ""}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span>💭</span>
+            <strong>{prStory.summary.total_comments}</strong>
+            <span className="text-muted-foreground">
+              comment{prStory.summary.total_comments !== 1 ? "s" : ""}
+            </span>
+          </div>
+        </div>
+
+        {/* Event type filter */}
+        <div className="ml-auto">
+          <EventTypeFilter
+            eventTypes={eventTypes}
+            selectedTypes={selectedEventTypes}
+            onSelectionChange={setSelectedEventTypes}
+          />
+        </div>
+      </div>
+
+      {/* Timeline */}
+      {filteredEvents.length > 0 ? (
+        <PRStoryTimeline events={filteredEvents} />
+      ) : selectedEventTypes.size === 0 ? (
+        <div className="text-center text-muted-foreground py-8">
+          No events match the current filter
+        </div>
+      ) : (
+        <div className="text-center text-muted-foreground py-8">No events found for this PR</div>
+      )}
+    </div>
+  );
+}
+
 export function PRStoryModal({
   isOpen,
   onClose,
@@ -28,42 +112,6 @@ export function PRStoryModal({
   isLoading,
   error,
 }: PRStoryModalProps): React.ReactElement {
-  // Get unique event types from events
-  const eventTypes = useMemo(() => {
-    if (!prStory) {
-      return [];
-    }
-    return Array.from(new Set(prStory.events.map((event) => event.event_type)));
-  }, [prStory]);
-
-  // Derive initial selection from event types - will reset when eventTypes changes
-  const initialSelection = useMemo(() => {
-    return new Set(eventTypes);
-  }, [eventTypes]);
-
-  // Track selected event types - initialized with all types
-  const [selectedEventTypes, setSelectedEventTypes] = useState<Set<string>>(initialSelection);
-
-  // Sync selection when initial selection changes (new PR loaded)
-  if (selectedEventTypes !== initialSelection && eventTypes.length > 0) {
-    const currentSelection = Array.from(selectedEventTypes).sort().join(",");
-    const newSelection = Array.from(initialSelection).sort().join(",");
-    if (currentSelection !== newSelection) {
-      setSelectedEventTypes(initialSelection);
-    }
-  }
-
-  // Filter events based on selected types
-  const filteredEvents = useMemo(() => {
-    if (!prStory) {
-      return [];
-    }
-    if (selectedEventTypes.size === 0) {
-      return [];
-    }
-    return prStory.events.filter((event) => selectedEventTypes.has(event.event_type));
-  }, [prStory, selectedEventTypes]);
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
@@ -134,64 +182,10 @@ export function PRStoryModal({
               <p className="text-sm text-muted-foreground">{error.message}</p>
             </div>
           ) : prStory ? (
-            <div className="py-4">
-              {/* Summary Toolbar - horizontal layout matching legacy */}
-              <div className="flex flex-wrap items-center gap-4 mb-4 pb-3 border-b">
-                {/* Summary stats */}
-                <div className="flex items-center gap-3 text-sm">
-                  <div className="flex items-center gap-1">
-                    <span>📝</span>
-                    <strong>{prStory.summary.total_commits}</strong>
-                    <span className="text-muted-foreground">
-                      commit{prStory.summary.total_commits !== 1 ? "s" : ""}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span>💬</span>
-                    <strong>{prStory.summary.total_reviews}</strong>
-                    <span className="text-muted-foreground">
-                      review{prStory.summary.total_reviews !== 1 ? "s" : ""}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span>▶️</span>
-                    <strong>{prStory.summary.total_check_runs}</strong>
-                    <span className="text-muted-foreground">
-                      check run{prStory.summary.total_check_runs !== 1 ? "s" : ""}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span>💭</span>
-                    <strong>{prStory.summary.total_comments}</strong>
-                    <span className="text-muted-foreground">
-                      comment{prStory.summary.total_comments !== 1 ? "s" : ""}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Event type filter */}
-                <div className="ml-auto">
-                  <EventTypeFilter
-                    eventTypes={eventTypes}
-                    selectedTypes={selectedEventTypes}
-                    onSelectionChange={setSelectedEventTypes}
-                  />
-                </div>
-              </div>
-
-              {/* Timeline */}
-              {filteredEvents.length > 0 ? (
-                <PRStoryTimeline events={filteredEvents} />
-              ) : selectedEventTypes.size === 0 ? (
-                <div className="text-center text-muted-foreground py-8">
-                  No events match the current filter
-                </div>
-              ) : (
-                <div className="text-center text-muted-foreground py-8">
-                  No events found for this PR
-                </div>
-              )}
-            </div>
+            <PRStoryContent
+              key={`${prStory.pr.repository}/${prStory.pr.number.toString()}`}
+              prStory={prStory}
+            />
           ) : null}
         </div>
       </DialogContent>

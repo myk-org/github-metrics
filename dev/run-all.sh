@@ -25,7 +25,7 @@ cleanup() {
     kill -INT -$FRONTEND_PID 2>/dev/null || true
 
     # Wait for graceful shutdown (up to 10 seconds)
-    for i in {1..10}; do
+    for _ in {1..10}; do
         if ! kill -0 $BACKEND_PID 2>/dev/null && ! kill -0 $FRONTEND_PID 2>/dev/null; then
             echo "All servers stopped."
             exit 0

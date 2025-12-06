@@ -91,9 +91,20 @@ export function FilterPanel({
 
   const handleCustomTimeBlur = (): void => {
     if (customStartTime && customEndTime) {
+      const start = new Date(customStartTime);
+      const end = new Date(customEndTime);
+
+      // Validate that start time is before end time
+      if (start.getTime() >= end.getTime()) {
+        // Swap values if start is after or equal to end
+        setCustomStartTime(end.toISOString().slice(0, 16));
+        setCustomEndTime(start.toISOString().slice(0, 16));
+        return;
+      }
+
       const timeRange: TimeRange = {
-        start_time: new Date(customStartTime).toISOString(),
-        end_time: new Date(customEndTime).toISOString(),
+        start_time: start.toISOString(),
+        end_time: end.toISOString(),
       };
       setTimeRange(timeRange, "custom");
     }

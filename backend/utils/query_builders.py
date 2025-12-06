@@ -183,11 +183,17 @@ def build_repository_filter(
     if not repositories:
         return ""
 
-    # Convert single string to list for uniform handling
+    # Optimize for single repository: use = instead of ANY for better performance
     if isinstance(repositories, str):
-        repositories = [repositories]
+        placeholder = params.add(repositories)
+        return f" AND {column} = {placeholder}"
 
-    # Use PostgreSQL's ANY operator for array matching
+    # If list has exactly one element, use = instead of ANY
+    if len(repositories) == 1:
+        placeholder = params.add(repositories[0])
+        return f" AND {column} = {placeholder}"
+
+    # Use PostgreSQL's ANY operator for multiple repositories
     placeholder = params.add(repositories)
     return f" AND {column} = ANY({placeholder})"
 

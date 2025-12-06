@@ -361,7 +361,7 @@ async def get_user_pull_requests(
 
             # Count query
             count_query = f"""
-                SELECT COUNT(DISTINCT pr_number) as total
+                SELECT COUNT(DISTINCT (repository, pr_number)) as total
                 FROM webhooks
                 WHERE event_type = 'pull_request'
                   AND pr_number IS NOT NULL

@@ -154,9 +154,8 @@ export function EventTypeFilter({
                   >
                     <Checkbox
                       checked={isSelected}
-                      onCheckedChange={() => {
-                        handleToggle(eventType);
-                      }}
+                      className="pointer-events-none"
+                      aria-hidden="true"
                     />
                     <span className="text-sm">{icon}</span>
                     <Label className="flex-1 cursor-pointer text-sm">{label}</Label>

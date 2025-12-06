@@ -35,7 +35,9 @@ export function TurnaroundCards({
 
   if (error) {
     return (
-      <div className="text-destructive">Failed to load turnaround metrics: {error.message}</div>
+      <div className="text-destructive" role="alert">
+        Failed to load turnaround metrics: {error.message}
+      </div>
     );
   }
 

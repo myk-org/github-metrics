@@ -82,7 +82,7 @@ const SidebarProvider = React.forwardRef<
         }
 
         // This sets the cookie to keep the sidebar state.
-        document.cookie = `${SIDEBAR_COOKIE_NAME}=${String(openState)}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE.toString()}`;
+        document.cookie = `${SIDEBAR_COOKIE_NAME}=${String(openState)}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE.toString()}; SameSite=Lax`;
       },
       [setOpenProp, open]
     );
@@ -625,10 +625,12 @@ const SidebarMenuSkeleton = React.forwardRef<
   }
 >(({ className, showIcon = false, ...props }, ref) => {
   // Random width between 50 to 90%.
-  const [width] = React.useState(() => {
+  const [width, setWidth] = React.useState("");
+
+  React.useEffect(() => {
     const randomValue = Math.floor(Math.random() * 40) + 50;
-    return `${randomValue.toString()}%`;
-  });
+    setWidth(`${randomValue.toString()}%`);
+  }, []);
 
   return (
     <div

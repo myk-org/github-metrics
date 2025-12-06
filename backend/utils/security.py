@@ -16,7 +16,7 @@ HTTP_TIMEOUT_SECONDS: float = 10.0
 GITHUB_META_URL: str = "https://api.github.com/meta"
 CLOUDFLARE_IPS_URL: str = "https://api.cloudflare.com/client/v4/ips"
 
-LOGGER = get_logger(name="backend.security")
+LOGGER = get_logger(name="backend.utils.security")
 
 
 async def get_github_allowlist(http_client: httpx.AsyncClient) -> list[str]:

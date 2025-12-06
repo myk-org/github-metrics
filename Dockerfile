@@ -80,6 +80,6 @@ RUN mkdir -p $UV_CACHE_DIR && uv sync --frozen
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl --fail http://127.0.0.1:${METRICS_SERVER_PORT}/health || exit 1
+    CMD curl --fail http://127.0.0.1:${METRICS_SERVER_PORT:-8765}/health || exit 1
 
 ENTRYPOINT ["tini", "--", "uv", "run", "entrypoint.py"]

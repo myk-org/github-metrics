@@ -1301,7 +1301,14 @@ bunx eslint . --fix
 
 ### Pre-commit Hooks
 
-Husky and lint-staged run on commit:
+**Note:** This project uses Python-side pre-commit tooling at the repository root. Frontend-specific Husky and lint-staged can be configured optionally for frontend-only development.
+
+If you want to set up frontend-only pre-commit hooks:
+
+1. Install Husky: `bun add -d husky`
+2. Install lint-staged: `bun add -d lint-staged`
+3. Initialize Husky: `bunx husky init`
+4. Add lint-staged configuration to `package.json`:
 
 ```json
 {
@@ -1311,7 +1318,7 @@ Husky and lint-staged run on commit:
 }
 ```
 
-**Files are automatically:**
+**With pre-commit hooks, files are automatically:**
 
 1. Linted with ESLint
 2. Formatted with Prettier
@@ -1399,7 +1406,9 @@ Check: Class names are correct (no typos)
 
 ## Testing
 
-### Unit Tests (Vitest)
+### Unit Tests (Bun Test Runner)
+
+The project uses Bun's built-in test runner, which is Vitest-compatible:
 
 ```bash
 # Run tests
@@ -1469,7 +1478,6 @@ Recommended extensions for development:
 - **ESLint** - Linting
 - **Prettier** - Code formatting
 - **Tailwind CSS IntelliSense** - Tailwind class autocomplete
-- **TypeScript Vue Plugin (Volar)** - Enhanced TypeScript support
 - **React DevTools** - Component debugging
 
 ### Path Aliases

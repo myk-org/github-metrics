@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { ReactNode, ReactElement } from "react";
 import {
   Table,
   TableBody,
@@ -16,7 +17,7 @@ export interface ColumnDef<T> {
   readonly label: string;
   readonly sortable?: boolean;
   readonly align?: "left" | "center" | "right";
-  readonly render?: (item: T) => React.ReactNode;
+  readonly render?: (item: T) => ReactNode;
   readonly getValue?: (item: T) => string | number;
 }
 
@@ -32,6 +33,12 @@ interface DataTableProps<T> {
 
 type SortDirection = "asc" | "desc" | null;
 
+const getAlignClass = (align: ColumnDef<unknown>["align"]): string => {
+  if (align === "right") return "text-right";
+  if (align === "center") return "text-center";
+  return "";
+};
+
 export function DataTable<T extends Record<string, unknown>>({
   columns,
   data,
@@ -40,7 +47,7 @@ export function DataTable<T extends Record<string, unknown>>({
   onRowClick,
   emptyMessage = "No data available",
   skeletonRows = 5,
-}: DataTableProps<T>): React.ReactElement {
+}: DataTableProps<T>): ReactElement {
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
 
@@ -72,7 +79,7 @@ export function DataTable<T extends Record<string, unknown>>({
       return safeData;
     }
 
-    const getValue = column.getValue ?? ((item: T) => String(item[column.key]));
+    const getValue = column.getValue ?? ((item: T) => item[column.key]);
 
     return [...safeData].sort((a: T, b: T) => {
       const aVal = getValue(a);
@@ -97,16 +104,7 @@ export function DataTable<T extends Record<string, unknown>>({
         <TableHeader>
           <TableRow>
             {columns.map((column) => (
-              <TableHead
-                key={column.key}
-                className={
-                  column.align === "right"
-                    ? "text-right"
-                    : column.align === "center"
-                      ? "text-center"
-                      : ""
-                }
-              >
+              <TableHead key={column.key} className={getAlignClass(column.align)}>
                 {column.label}
               </TableHead>
             ))}
@@ -138,12 +136,17 @@ export function DataTable<T extends Record<string, unknown>>({
           {columns.map((column) => (
             <TableHead
               key={column.key}
-              className={
-                column.align === "right"
-                  ? "text-right"
-                  : column.align === "center"
-                    ? "text-center"
-                    : ""
+              className={getAlignClass(column.align)}
+              aria-sort={
+                column.sortable !== false
+                  ? sortColumn === column.key
+                    ? sortDirection === "asc"
+                      ? "ascending"
+                      : sortDirection === "desc"
+                        ? "descending"
+                        : "none"
+                    : "none"
+                  : undefined
               }
             >
               {column.sortable !== false ? (
@@ -193,20 +196,11 @@ export function DataTable<T extends Record<string, unknown>>({
             className={onRowClick ? "cursor-pointer hover:bg-muted/50" : ""}
           >
             {columns.map((column) => (
-              <TableCell
-                key={column.key}
-                className={
-                  column.align === "right"
-                    ? "text-right"
-                    : column.align === "center"
-                      ? "text-center"
-                      : ""
-                }
-              >
+              <TableCell key={column.key} className={getAlignClass(column.align)}>
                 {column.render
                   ? column.render(item)
                   : (() => {
-                      const value = item[column.key];
+                      const value = column.getValue ? column.getValue(item) : item[column.key];
                       if (value === null || value === undefined) {
                         return "";
                       }

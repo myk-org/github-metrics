@@ -134,7 +134,6 @@ interface WebhookParams {
   readonly page_size?: number;
   readonly repository?: string;
   readonly event_type?: string;
-  readonly [key: string]: string | number | undefined;
 }
 
 interface UserPRParams {
@@ -154,6 +153,15 @@ interface FilterParams {
   readonly exclude_users?: readonly string[];
 }
 
+// Helper to append array values to URLSearchParams
+function appendArrayParam(params: URLSearchParams, key: string, values?: readonly string[]): void {
+  if (values && values.length > 0) {
+    values.forEach((value) => {
+      params.append(key, value);
+    });
+  }
+}
+
 // Helper to build filter params with proper array serialization
 function buildFilterParams(timeRange?: TimeRange, filters?: FilterParams): URLSearchParams {
   const params = new URLSearchParams();
@@ -162,21 +170,9 @@ function buildFilterParams(timeRange?: TimeRange, filters?: FilterParams): URLSe
   if (timeRange?.end_time) params.set("end_time", timeRange.end_time);
 
   // Only add array filters if they have actual values (length > 0)
-  if (filters?.repositories && filters.repositories.length > 0) {
-    filters.repositories.forEach((repo) => {
-      params.append("repositories", repo);
-    });
-  }
-  if (filters?.users && filters.users.length > 0) {
-    filters.users.forEach((user) => {
-      params.append("users", user);
-    });
-  }
-  if (filters?.exclude_users && filters.exclude_users.length > 0) {
-    filters.exclude_users.forEach((user) => {
-      params.append("exclude_users", user);
-    });
-  }
+  appendArrayParam(params, "repositories", filters?.repositories);
+  appendArrayParam(params, "users", filters?.users);
+  appendArrayParam(params, "exclude_users", filters?.exclude_users);
 
   return params;
 }
@@ -195,9 +191,19 @@ export function useSummary(timeRange?: TimeRange, filters?: FilterParams) {
 }
 
 export function useWebhooks(params?: WebhookParams) {
+  // Build URLSearchParams with proper type safety
+  const urlParams = new URLSearchParams();
+
+  if (params?.start_time) urlParams.set("start_time", params.start_time);
+  if (params?.end_time) urlParams.set("end_time", params.end_time);
+  if (params?.page) urlParams.set("page", String(params.page));
+  if (params?.page_size) urlParams.set("page_size", String(params.page_size));
+  if (params?.repository) urlParams.set("repository", params.repository);
+  if (params?.event_type) urlParams.set("event_type", params.event_type);
+
   return useQuery<PaginatedResponse<WebhookEvent>>({
     queryKey: queryKeys.webhooks(params),
-    queryFn: () => fetchApi<PaginatedResponse<WebhookEvent>>("/webhooks", params),
+    queryFn: () => fetchApi<PaginatedResponse<WebhookEvent>>("/webhooks", urlParams),
   });
 }
 
@@ -277,22 +283,10 @@ export function useUserPRs(params?: UserPRParams) {
   if (params?.page_size) urlParams.set("page_size", String(params.page_size));
   if (params?.role) urlParams.set("role", params.role);
 
-  // Handle array params - only append if they have values (length > 0)
-  if (params?.repositories && params.repositories.length > 0) {
-    params.repositories.forEach((repo) => {
-      urlParams.append("repositories", repo);
-    });
-  }
-  if (params?.users && params.users.length > 0) {
-    params.users.forEach((user) => {
-      urlParams.append("users", user);
-    });
-  }
-  if (params?.exclude_users && params.exclude_users.length > 0) {
-    params.exclude_users.forEach((user) => {
-      urlParams.append("exclude_users", user);
-    });
-  }
+  // Handle array params - use helper function
+  appendArrayParam(urlParams, "repositories", params?.repositories);
+  appendArrayParam(urlParams, "users", params?.users);
+  appendArrayParam(urlParams, "exclude_users", params?.exclude_users);
 
   return useQuery<UserPRsResponse>({
     queryKey: queryKeys.userPrs(params),

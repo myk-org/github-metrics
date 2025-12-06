@@ -56,8 +56,16 @@ if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     echo "Waiting for PostgreSQL to be ready..."
     sleep 3
 
-    # Wait for PostgreSQL to accept connections
+    # Wait for PostgreSQL to accept connections with timeout
+    MAX_RETRIES=30
+    RETRY_COUNT=0
     until docker exec "$CONTAINER_NAME" pg_isready -U "$METRICS_DB_USER" -d "$METRICS_DB_NAME" >/dev/null 2>&1; do
+        RETRY_COUNT=$((RETRY_COUNT + 1))
+        if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
+            echo "Error: PostgreSQL failed to become ready after ${MAX_RETRIES} seconds"
+            docker stop "$CONTAINER_NAME" 2>/dev/null || true
+            exit 1
+        fi
         sleep 1
     done
     echo "PostgreSQL ready."

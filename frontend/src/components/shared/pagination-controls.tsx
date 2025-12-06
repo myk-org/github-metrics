@@ -32,7 +32,7 @@ export function PaginationControls({
             onPageSizeChange(Number(value));
           }}
         >
-          <SelectTrigger className="h-9 w-[140px]">
+          <SelectTrigger className="h-9 w-[140px]" aria-label="Rows per page">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -52,6 +52,7 @@ export function PaginationControls({
             onPageChange(currentPage - 1);
           }}
           disabled={currentPage <= 1}
+          aria-label="Previous page"
         >
           <ChevronLeft className="h-4 w-4" />
           Previous
@@ -66,6 +67,7 @@ export function PaginationControls({
             onPageChange(currentPage + 1);
           }}
           disabled={currentPage >= totalPages}
+          aria-label="Next page"
         >
           Next
           <ChevronRight className="h-4 w-4" />

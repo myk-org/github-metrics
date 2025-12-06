@@ -13,23 +13,42 @@ export function ThemeProvider({
   storageKey = "ui-theme",
 }: ThemeProviderProps): React.ReactElement {
   const [theme, setTheme] = useState<Theme>(() => {
-    const storedTheme = localStorage.getItem(storageKey);
-    return (storedTheme as Theme | null) ?? defaultTheme;
+    try {
+      const storedTheme = localStorage.getItem(storageKey);
+      if (storedTheme === "light" || storedTheme === "dark" || storedTheme === "system") {
+        return storedTheme;
+      }
+    } catch {
+      // localStorage access failed or corrupted data
+    }
+    return defaultTheme;
   });
 
   useEffect(() => {
     const root = window.document.documentElement;
-    root.classList.remove("light", "dark");
+
+    const applyTheme = (resolvedTheme: "light" | "dark"): void => {
+      root.classList.remove("light", "dark");
+      root.classList.add(resolvedTheme);
+    };
 
     if (theme === "system") {
-      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? "dark"
-        : "light";
-      root.classList.add(systemTheme);
-      return;
+      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+      const resolvedTheme = mediaQuery.matches ? "dark" : "light";
+      applyTheme(resolvedTheme);
+
+      const handleChange = (event: MediaQueryListEvent): void => {
+        applyTheme(event.matches ? "dark" : "light");
+      };
+
+      mediaQuery.addEventListener("change", handleChange);
+      return () => {
+        mediaQuery.removeEventListener("change", handleChange);
+      };
     }
 
-    root.classList.add(theme);
+    applyTheme(theme);
+    return undefined;
   }, [theme]);
 
   const value = {

@@ -19,7 +19,11 @@ export function SummaryCards({ timeRange }: SummaryCardsProps): React.ReactEleme
   const { data: summary, isLoading, error } = useSummary(timeRange);
 
   if (error) {
-    return <div className="text-destructive">Failed to load summary: {error.message}</div>;
+    // Log detailed error for debugging
+    console.error("Failed to load summary:", error);
+
+    // Show sanitized message in production
+    return <div className="text-destructive">Failed to load summary. Please try again.</div>;
   }
 
   const summaryData = summary?.summary;

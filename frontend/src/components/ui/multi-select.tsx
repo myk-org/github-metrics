@@ -140,6 +140,13 @@ export function MultiSelect({
     }
   };
 
+  const handleTriggerKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      handleToggleDropdown();
+    }
+  };
+
   return (
     <TooltipProvider>
       <div ref={containerRef} className="relative w-full" id={id}>
@@ -147,8 +154,13 @@ export function MultiSelect({
         <Tooltip>
           <TooltipTrigger asChild>
             <div
+              role="button"
+              tabIndex={0}
+              aria-haspopup="listbox"
+              aria-expanded={showDropdown}
               className={`flex h-9 items-center justify-between px-3 border border-input rounded-md bg-background cursor-pointer text-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 ${className ?? ""}`}
               onClick={handleToggleDropdown}
+              onKeyDown={handleTriggerKeyDown}
             >
               {value.length === 0 ? (
                 <span className="text-muted-foreground">{placeholder}</span>
@@ -203,10 +215,20 @@ export function MultiSelect({
                 <>
                   {/* Select All option */}
                   <div
+                    role="option"
+                    tabIndex={0}
+                    aria-selected={allSelected}
                     className="flex items-center gap-2 px-3 py-2 hover:bg-accent cursor-pointer sticky top-[52px] bg-popover border-b border-border z-10"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleSelectAll();
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleSelectAll();
+                      }
                     }}
                   >
                     <Checkbox
@@ -231,10 +253,20 @@ export function MultiSelect({
                       return (
                         <div
                           key={suggestion}
+                          role="option"
+                          tabIndex={0}
+                          aria-selected={isSelected}
                           className="flex items-center gap-2 px-2 py-2 hover:bg-accent rounded-sm cursor-pointer"
                           onClick={(e) => {
                             e.stopPropagation();
                             toggleValue(suggestion);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              toggleValue(suggestion);
+                            }
                           }}
                         >
                           <Checkbox

@@ -89,7 +89,7 @@ echo "Importing to local database..."
 # Check if local dev container is running
 if ! docker ps --format '{{.Names}}' | grep -q "^${LOCAL_CONTAINER}$"; then
     echo "Error: Local dev container '$LOCAL_CONTAINER' is not running."
-    echo "Start it first with: ./dev/run.sh"
+    echo "Start it first with: ./dev/run-backend.sh or ./dev/run-all.sh"
     rm -f /tmp/prod_data.sql
     exit 1
 fi
@@ -97,7 +97,7 @@ fi
 # Check if tables exist (migrations must have run)
 if ! docker exec "$LOCAL_CONTAINER" psql -U "$LOCAL_USER" -d "$LOCAL_DB" -c "SELECT 1 FROM webhooks LIMIT 1" >/dev/null 2>&1; then
     echo "Error: Database tables don't exist. Migrations haven't run."
-    echo "Make sure ./dev/run.sh completed successfully (wait for 'Starting development server' message)"
+    echo "Make sure ./dev/run-backend.sh or ./dev/run-all.sh completed successfully"
     rm -f /tmp/prod_data.sql
     exit 1
 fi

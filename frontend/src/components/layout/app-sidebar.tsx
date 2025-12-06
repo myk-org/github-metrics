@@ -35,6 +35,7 @@ export function AppSidebar(): React.ReactElement {
         <div className="flex items-center gap-2">
           {/* Collapse button on left, aligned with menu icons below */}
           <button
+            type="button"
             onClick={toggleSidebar}
             className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-sidebar-accent"
             aria-label="Toggle Sidebar"
@@ -52,20 +53,20 @@ export function AppSidebar(): React.ReactElement {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {menuItems.map((item) => (
-                <SidebarMenuItem key={item.path}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={location.pathname === item.path}
-                    tooltip={item.title}
-                  >
-                    <Link to={item.path}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {menuItems.map((item) => {
+                const isActive =
+                  location.pathname === item.path || location.pathname.startsWith(item.path + "/");
+                return (
+                  <SidebarMenuItem key={item.path}>
+                    <SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
+                      <Link to={item.path}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

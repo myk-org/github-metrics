@@ -10,15 +10,37 @@ export function DownloadButtons({ data, filename }: DownloadButtonsProps): React
   const downloadCSV = (): void => {
     if (data.length === 0) return;
 
-    // Extract headers from first object
-    const headers = Object.keys(data[0] as Record<string, unknown>);
-    const csvHeaders = headers.join(",");
+    // Validate that first item is a plain object, fallback to safe headers if not
+    const firstItem = data[0];
+    let headers: string[];
+    if (firstItem !== null && typeof firstItem === "object" && !Array.isArray(firstItem)) {
+      headers = Object.keys(firstItem as Record<string, unknown>);
+    } else {
+      // Fallback for primitives: use single "value" header
+      headers = ["value"];
+    }
+
+    // Escape headers the same way as values
+    const csvHeaders = headers
+      .map((header) => {
+        return header.includes(",") || header.includes('"')
+          ? `"${header.replace(/"/g, '""')}"`
+          : header;
+      })
+      .join(",");
 
     // Convert data to CSV rows
     const csvRows = data.map((row) => {
       return headers
         .map((header) => {
-          const value = (row as Record<string, unknown>)[header];
+          let value: unknown;
+          if (row !== null && typeof row === "object" && !Array.isArray(row)) {
+            value = (row as Record<string, unknown>)[header];
+          } else {
+            // For primitives, use the row value directly
+            value = row;
+          }
+
           let stringValue: string;
           if (value === null || value === undefined) {
             stringValue = "";

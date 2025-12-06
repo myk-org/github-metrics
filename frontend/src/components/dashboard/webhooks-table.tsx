@@ -37,7 +37,11 @@ export function WebhooksTable({
   });
 
   if (error) {
-    return <div className="text-destructive">Failed to load webhooks: {error.message}</div>;
+    return (
+      <div className="text-destructive" role="alert">
+        Failed to load webhooks: {error.message}
+      </div>
+    );
   }
 
   const formatDate = (dateString: string): string => {
