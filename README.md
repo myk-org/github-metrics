@@ -88,6 +88,8 @@ Perfect for teams who want to:
 
 📈 **API Usage Tracking** - Track GitHub API rate limit consumption, token spend, and optimization opportunities
 
+🤝 **Cross-Team Review Tracking** - Track when reviewers from one SIG team review PRs from different SIG teams within the same repository, with configurable team definitions via YAML
+
 🔌 **REST API** - Query metrics programmatically with filtering, pagination, and time-range support
 
 🤖 **MCP Server** - Expose metrics as tools for LLM integration (Claude, ChatGPT, etc.) with natural language queries
@@ -152,6 +154,7 @@ Team collaboration insights:
 - **Review Network** - Who reviews whose PRs
 - **Collaboration Patterns** - Cross-team interactions
 - **Workload Distribution** - Review load balancing across team members
+- **Cross-Team Collaboration** - Track reviews across SIG teams with summary stats and detailed review list
 
 ### Common Features Across All Views
 
@@ -284,6 +287,41 @@ All configuration is managed via environment variables—no configuration files 
 | Variable              | Description                           | Default |
 | --------------------- | ------------------------------------- | ------- |
 | `METRICS_MCP_ENABLED` | Enable MCP server for LLM integration | `true`  |
+
+</details>
+
+<details>
+<summary><strong>Cross-Team Review Configuration</strong></summary>
+
+| Variable                   | Description                              | Default |
+| -------------------------- | ---------------------------------------- | ------- |
+| `METRICS_SIG_TEAMS_CONFIG` | Path to SIG teams YAML configuration file | Empty   |
+
+**YAML Configuration Format:**
+
+Create a YAML file defining SIG team membership per repository:
+
+```yaml
+# /config/sig-teams.yaml
+org/repo-name:
+  sig-network:
+    - user1
+    - user2
+  sig-storage:
+    - user3
+    - user4
+another-org/repo:
+  sig-compute:
+    - user5
+```
+
+**How it works:**
+- When a `pull_request_review` webhook arrives, the system checks if the PR has a `sig-*` label
+- It looks up which team the reviewer belongs to (within the same repository)
+- If the reviewer's team differs from the PR's sig label, it's marked as a cross-team review
+- Cross-team reviews are displayed in the Team Dynamics dashboard and Contributors page
+
+**Note:** Cross-team tracking is per-repository. A user can belong to different teams in different repositories.
 
 </details>
 
@@ -483,6 +521,52 @@ Get overall metrics summary across all repositories.
 }
 ```
 
+### Get Cross-Team Reviews
+
+```http
+GET /api/metrics/cross-team-reviews
+```
+
+Retrieve cross-team review metrics with filtering and pagination.
+
+**Query Parameters:**
+- `start_time`: Start time in ISO 8601 format
+- `end_time`: End time in ISO 8601 format
+- `repositories`: Filter by repositories (can be repeated)
+- `reviewer_team`: Filter by reviewer's team
+- `pr_team`: Filter by PR's sig label
+- `page`: Page number (1-indexed, default: 1)
+- `page_size`: Items per page (default: 25)
+
+**Response:**
+
+```json
+{
+  "data": [
+    {
+      "pr_number": 123,
+      "repository": "org/repo",
+      "reviewer": "user1",
+      "reviewer_team": "sig-storage",
+      "pr_sig_label": "sig-network",
+      "review_type": "approved",
+      "created_at": "2024-01-15T10:30:00Z"
+    }
+  ],
+  "summary": {
+    "total_cross_team_reviews": 45,
+    "by_reviewer_team": {"sig-storage": 20, "sig-network": 15},
+    "by_pr_team": {"sig-network": 25, "sig-storage": 20}
+  },
+  "pagination": {
+    "total": 45,
+    "page": 1,
+    "page_size": 25,
+    "total_pages": 2
+  }
+}
+```
+
 </details>
 
 ---
@@ -507,6 +591,7 @@ The MCP server exposes metrics endpoints as tools that AI assistants like Claude
 | `get_metrics_contributors`  | Get PR contributor analytics                            |
 | `get_user_pull_requests`    | Get user's PR details with commit info                  |
 | `get_metrics_trends`        | Get time-series event trends                            |
+| `get_cross_team_reviews`    | Get cross-team review metrics and statistics            |
 
 ### Configuration for MCP Clients
 

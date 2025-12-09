@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useFilters } from "@/hooks/use-filters";
-import { useTeamDynamics } from "@/hooks/use-api";
+import { useTeamDynamics, useCrossTeamReviews } from "@/hooks/use-api";
 import { CollapsibleSection } from "@/components/shared/collapsible-section";
 import { DataTable, type ColumnDef } from "@/components/shared/data-table";
 import { KPICards, type KPIItem } from "@/components/shared/kpi-cards";
@@ -15,6 +15,7 @@ import type {
   ApprovalBottleneck,
   BottleneckAlert,
 } from "@/types/team-dynamics";
+import type { CrossTeamReviewRow } from "@/types/cross-team";
 
 export function TeamDynamicsPage(): React.ReactElement {
   const { filters } = useFilters();
@@ -46,10 +47,26 @@ export function TeamDynamicsPage(): React.ReactElement {
     pageSize
   );
 
+  // Fetch cross-team reviews data with separate pagination
+  const [crossTeamPage, setCrossTeamPage] = useState(1);
+  const [crossTeamPageSize, setCrossTeamPageSize] = useState(25);
+
+  const { data: crossTeamData, isLoading: isCrossTeamLoading } = useCrossTeamReviews(
+    filters.timeRange,
+    {
+      repositories: filters.repositories,
+      users: filters.users,
+      exclude_users: filters.excludeUsers,
+    },
+    crossTeamPage,
+    crossTeamPageSize
+  );
+
   // Server-side paginated data for each section
   const workloadData = teamData?.workload.by_contributor ?? [];
   const reviewData = teamData?.review_efficiency.by_reviewer ?? [];
   const bottleneckData = teamData?.bottlenecks.by_approver ?? [];
+  const crossTeamReviewsData = crossTeamData?.data ?? [];
 
   // Workload Distribution KPIs
   const workloadKPIs: readonly KPIItem[] = teamData?.workload.summary
@@ -103,6 +120,30 @@ export function TeamDynamicsPage(): React.ReactElement {
 
   // Bottleneck Alerts (for display at top of section)
   const bottleneckAlerts: readonly BottleneckAlert[] = teamData?.bottlenecks.alerts ?? [];
+
+  // Cross-Team Collaboration KPIs
+  const crossTeamKPIs: readonly KPIItem[] = crossTeamData?.summary
+    ? [
+        {
+          label: "Total Cross-Team Reviews",
+          value: crossTeamData.summary.total_cross_team_reviews,
+        },
+        {
+          label: "Top Reviewer Team",
+          value:
+            Object.entries(crossTeamData.summary.by_reviewer_team).sort(
+              ([, a], [, b]) => b - a
+            )[0]?.[0] ?? "N/A",
+        },
+        {
+          label: "Top PR Team",
+          value:
+            Object.entries(crossTeamData.summary.by_pr_team).sort(
+              ([, a], [, b]) => b - a
+            )[0]?.[0] ?? "N/A",
+        },
+      ]
+    : [];
 
   // Column definitions for Workload Distribution
   const workloadColumns: readonly ColumnDef<WorkloadContributor>[] = [
@@ -223,6 +264,65 @@ export function TeamDynamicsPage(): React.ReactElement {
       align: "right",
       sortable: true,
       getValue: (item) => item.total_approvals,
+    },
+  ];
+
+  // Column definitions for Cross-Team Reviews
+  const crossTeamColumns: readonly ColumnDef<CrossTeamReviewRow>[] = [
+    {
+      key: "pr_number",
+      label: "PR#",
+      sortable: true,
+      getValue: (item) => item.pr_number,
+    },
+    {
+      key: "repository",
+      label: "Repository",
+      sortable: true,
+      getValue: (item) => item.repository,
+    },
+    {
+      key: "reviewer",
+      label: "Reviewer",
+      sortable: true,
+      render: (item) => (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleUserClick(item.reviewer, "pr_reviewers");
+          }}
+          className="text-primary hover:underline cursor-pointer font-medium"
+        >
+          {item.reviewer}
+        </button>
+      ),
+      getValue: (item) => item.reviewer,
+    },
+    {
+      key: "reviewer_team",
+      label: "Reviewer Team",
+      sortable: true,
+      getValue: (item) => item.reviewer_team,
+    },
+    {
+      key: "pr_sig_label",
+      label: "PR Team",
+      sortable: true,
+      getValue: (item) => item.pr_sig_label,
+    },
+    {
+      key: "review_type",
+      label: "Review Type",
+      sortable: true,
+      getValue: (item) => item.review_type,
+    },
+    {
+      key: "created_at",
+      label: "Date",
+      sortable: true,
+      render: (item) => new Date(item.created_at).toLocaleDateString(),
+      getValue: (item) => item.created_at,
     },
   ];
 
@@ -358,6 +458,44 @@ export function TeamDynamicsPage(): React.ReactElement {
                 onPageSizeChange={(size: number) => {
                   setPageSize(size);
                   setPage(1); // Reset to first page
+                }}
+              />
+            </div>
+          )}
+        </div>
+      </CollapsibleSection>
+
+      {/* Cross-Team Collaboration */}
+      <CollapsibleSection
+        title="Cross-Team Collaboration"
+        actions={
+          <DownloadButtons data={crossTeamReviewsData} filename="cross-team-collaboration" />
+        }
+      >
+        <div className="space-y-4">
+          <KPICards items={crossTeamKPIs} isLoading={isCrossTeamLoading} columns={3} />
+          <DataTable
+            columns={crossTeamColumns}
+            data={crossTeamReviewsData}
+            isLoading={isCrossTeamLoading}
+            keyExtractor={(item) => `${item.repository}-${String(item.pr_number)}-${item.reviewer}`}
+            emptyMessage="No cross-team review data available"
+          />
+          {crossTeamData?.pagination && (
+            <div className="flex justify-between items-center">
+              <div className="text-sm text-muted-foreground">
+                Showing {(crossTeamPage - 1) * crossTeamPageSize + 1} to{" "}
+                {Math.min(crossTeamPage * crossTeamPageSize, crossTeamData.pagination.total)} of{" "}
+                {crossTeamData.pagination.total} cross-team reviews
+              </div>
+              <PaginationControls
+                currentPage={crossTeamPage}
+                totalPages={Math.max(1, crossTeamData.pagination.total_pages)}
+                pageSize={crossTeamPageSize}
+                onPageChange={setCrossTeamPage}
+                onPageSizeChange={(size: number) => {
+                  setCrossTeamPageSize(size);
+                  setCrossTeamPage(1); // Reset to first page
                 }}
               />
             </div>

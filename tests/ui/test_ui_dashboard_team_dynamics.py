@@ -198,9 +198,9 @@ class TestTeamDynamicsTables:
         review_section = page_with_js_coverage.get_by_text("Review Efficiency")
         await review_section.scroll_into_view_if_needed()
         await page_with_js_coverage.wait_for_timeout(500)
-        # Look for unique column headers - use table-specific selectors
-        await expect(page_with_js_coverage.locator("th").filter(has_text="Reviewer")).to_be_visible()
-        await expect(page_with_js_coverage.locator("th").filter(has_text="Total Reviews")).to_be_visible()
+        # Look for unique column headers - use first() to handle multiple matches
+        await expect(page_with_js_coverage.locator("th").filter(has_text="Reviewer").first).to_be_visible()
+        await expect(page_with_js_coverage.locator("th").filter(has_text="Total Reviews").first).to_be_visible()
 
     async def test_approval_bottlenecks_table_columns(self, page_with_js_coverage: Page) -> None:
         """Verify Approval Bottlenecks table has expected columns."""

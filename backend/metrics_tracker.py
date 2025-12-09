@@ -87,6 +87,9 @@ class MetricsTracker:
         token_spend: int = 0,
         token_remaining: int = 0,
         metrics_available: bool = True,
+        is_cross_team: bool | None = None,
+        reviewer_team: str | None = None,
+        pr_sig_label: str | None = None,
     ) -> None:
         """
         Track webhook event with comprehensive metrics.
@@ -117,6 +120,9 @@ class MetricsTracker:
             token_spend: GitHub API calls consumed (default: 0)
             token_remaining: Rate limit remaining after processing (default: 0)
             metrics_available: Whether API metrics are available (default: True)
+            is_cross_team: Whether the review is cross-team (optional)
+            reviewer_team: Team name of the reviewer (optional)
+            pr_sig_label: PR SIG label name (optional)
 
         Raises:
             asyncpg.PostgresError: If database insert fails
@@ -170,11 +176,13 @@ class MetricsTracker:
                     pr_number, sender, payload, duration_ms,
                     status, error_message, api_calls_count, token_spend, token_remaining,
                     metrics_available,
-                    pr_author, pr_title, pr_state, pr_merged, pr_commits_count, pr_html_url, label_name
+                    pr_author, pr_title, pr_state, pr_merged, pr_commits_count, pr_html_url, label_name,
+                    is_cross_team, reviewer_team, pr_sig_label
                 )
                 VALUES (
                     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-                    $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
+                    $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22,
+                    $23, $24, $25
                 )
                 """,
                 uuid4(),
@@ -199,6 +207,9 @@ class MetricsTracker:
                 extracted_pr_commits_count,
                 extracted_pr_html_url,
                 extracted_label_name,
+                is_cross_team,
+                reviewer_team,
+                pr_sig_label,
             )
 
             self.logger.info(

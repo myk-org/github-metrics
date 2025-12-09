@@ -96,7 +96,8 @@ async def get_metrics_contributors(
             "user": "jane-smith",
             "total_reviews": 78,
             "prs_reviewed": 65,
-            "avg_reviews_per_pr": 1.2
+            "avg_reviews_per_pr": 1.2,
+            "cross_team_reviews": 15
           }
         ],
         "pagination": {
@@ -251,7 +252,8 @@ async def get_metrics_contributors(
         SELECT
             sender as user,
             COUNT(*) as total_reviews,
-            COUNT(DISTINCT pr_number) as prs_reviewed
+            COUNT(DISTINCT pr_number) as prs_reviewed,
+            COUNT(*) FILTER (WHERE is_cross_team = TRUE) as cross_team_reviews
         FROM webhooks
         WHERE event_type = 'pull_request_review'
           AND action = 'submitted'
@@ -399,6 +401,7 @@ async def get_metrics_contributors(
                 "total_reviews": row["total_reviews"],
                 "prs_reviewed": row["prs_reviewed"],
                 "avg_reviews_per_pr": round(row["total_reviews"] / max(row["prs_reviewed"], 1), 2),
+                "cross_team_reviews": row["cross_team_reviews"],
             }
             for row in pr_reviewers_rows
         ]

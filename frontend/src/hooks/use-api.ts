@@ -7,6 +7,7 @@ import type { PaginatedResponse, TimeRange } from "@/types/api";
 import type { UserPRsResponse } from "@/types/user-prs";
 import type { TeamDynamicsResponse } from "@/types/team-dynamics";
 import type { PRStory } from "@/types/pr-story";
+import type { CrossTeamData } from "@/types/cross-team";
 
 const API_BASE = "/api/metrics";
 
@@ -147,6 +148,24 @@ export const queryKeys = {
     ] as const,
   prStory: (repository: string, prNumber: number) =>
     ["metrics", "pr-story", repository, prNumber] as const,
+  crossTeamReviews: (
+    timeRange?: TimeRange,
+    repositories?: readonly string[],
+    users?: readonly string[],
+    excludeUsers?: readonly string[],
+    page?: number,
+    pageSize?: number
+  ) =>
+    [
+      "metrics",
+      "cross-team-reviews",
+      timeRange,
+      repositories,
+      users,
+      excludeUsers,
+      page,
+      pageSize,
+    ] as const,
 };
 
 interface WebhookParams {
@@ -348,5 +367,28 @@ export function usePRStory(repository: string, prNumber: number, enabled: boolea
     queryFn: () =>
       fetchApi<PRStory>(`/pr-story/${encodeURIComponent(repository)}/${String(prNumber)}`),
     enabled,
+  });
+}
+
+export function useCrossTeamReviews(
+  timeRange?: TimeRange,
+  filters?: FilterParams,
+  page: number = 1,
+  pageSize: number = 25
+) {
+  const params = buildFilterParams(timeRange, filters);
+  params.set("page", String(page));
+  params.set("page_size", String(pageSize));
+
+  return useQuery<CrossTeamData>({
+    queryKey: queryKeys.crossTeamReviews(
+      timeRange,
+      filters?.repositories,
+      filters?.users,
+      filters?.exclude_users,
+      page,
+      pageSize
+    ),
+    queryFn: () => fetchApi<CrossTeamData>("/cross-team-reviews", params),
   });
 }

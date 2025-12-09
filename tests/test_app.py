@@ -554,6 +554,7 @@ class TestLifespanContext:
             config_mock = Mock()
             config_mock.webhook.verify_github_ips = True
             config_mock.webhook.verify_cloudflare_ips = False
+            config_mock.sig_teams_config_path = None  # No SIG teams config for this test
             mock_config.return_value = config_mock
 
             mock_db = AsyncMock()
@@ -590,6 +591,7 @@ class TestLifespanContext:
             config_mock = Mock()
             config_mock.webhook.verify_github_ips = False
             config_mock.webhook.verify_cloudflare_ips = True
+            config_mock.sig_teams_config_path = None  # No SIG teams config for this test
             mock_config.return_value = config_mock
 
             mock_db = AsyncMock()
@@ -621,6 +623,7 @@ class TestLifespanContext:
             config_mock = Mock()
             config_mock.webhook.verify_github_ips = True
             config_mock.webhook.verify_cloudflare_ips = False
+            config_mock.sig_teams_config_path = None  # No SIG teams config for this test
             mock_config.return_value = config_mock
 
             mock_http_client = AsyncMock()
@@ -643,6 +646,7 @@ class TestLifespanContext:
             config_mock = Mock()
             config_mock.webhook.verify_github_ips = False
             config_mock.webhook.verify_cloudflare_ips = True
+            config_mock.sig_teams_config_path = None  # No SIG teams config for this test
             mock_config.return_value = config_mock
 
             mock_http_client = AsyncMock()
@@ -1020,6 +1024,7 @@ class TestContributorsEndpoint:
                 "user": "bob",
                 "total_reviews": 15,
                 "prs_reviewed": 12,
+                "cross_team_reviews": 2,
             },
         ]
         mock_approvers_rows = [
@@ -1907,6 +1912,217 @@ class TestCalculateTrendFunction:
 
             # When previous is 0 and current > 0, trend should be 100.0
             assert data["summary"]["total_events_trend"] == 100.0
+
+
+class TestCrossTeamReviewsEndpoint:
+    """Tests for /api/metrics/cross-team-reviews endpoint."""
+
+    def test_get_cross_team_reviews_empty(self) -> None:
+        """Test cross-team reviews returns empty data when no reviews exist."""
+        with patch("backend.routes.api.cross_team.db_manager") as mock_db:
+            # Mock count query
+            mock_db.fetchval = AsyncMock(return_value=0)
+            # Mock all fetch queries (data, by_reviewer_team, by_pr_team)
+            mock_db.fetch = AsyncMock(side_effect=[[], [], []])
+
+            client = TestClient(app)
+            response = client.get("/api/metrics/cross-team-reviews")
+
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+
+            # Verify response structure
+            assert "data" in data
+            assert "summary" in data
+            assert "pagination" in data
+
+            # Verify empty data
+            assert data["data"] == []
+            assert data["summary"]["total_cross_team_reviews"] == 0
+            assert data["summary"]["by_reviewer_team"] == {}
+            assert data["summary"]["by_pr_team"] == {}
+
+            # Verify pagination
+            assert data["pagination"]["total"] == 0
+            assert data["pagination"]["page"] == 1
+            assert data["pagination"]["page_size"] == 25
+
+    def test_get_cross_team_reviews_with_filters(self) -> None:
+        """Test cross-team reviews with time range, repositories, and team filters."""
+        # Mock data for cross-team reviews
+        mock_data_rows = [
+            {
+                "pr_number": 123,
+                "repository": "org/repo1",
+                "reviewer": "alice",
+                "reviewer_team": "sig-storage",
+                "pr_sig_label": "sig-network",
+                "review_type": "approved",
+                "created_at": datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC),
+            },
+            {
+                "pr_number": 456,
+                "repository": "org/repo1",
+                "reviewer": "bob",
+                "reviewer_team": "sig-storage",
+                "pr_sig_label": "sig-compute",
+                "review_type": "changes_requested",
+                "created_at": datetime(2024, 1, 15, 12, 0, 0, tzinfo=UTC),
+            },
+        ]
+
+        # Mock summary data
+        mock_reviewer_team_rows = [
+            {"reviewer_team": "sig-storage", "count": 2},
+        ]
+        mock_pr_team_rows = [
+            {"pr_sig_label": "sig-network", "count": 1},
+            {"pr_sig_label": "sig-compute", "count": 1},
+        ]
+
+        with patch("backend.routes.api.cross_team.db_manager") as mock_db:
+            # Mock count query
+            mock_db.fetchval = AsyncMock(return_value=2)
+            # Mock all fetch queries (data, by_reviewer_team, by_pr_team)
+            mock_db.fetch = AsyncMock(side_effect=[mock_data_rows, mock_reviewer_team_rows, mock_pr_team_rows])
+
+            client = TestClient(app)
+            response = client.get(
+                "/api/metrics/cross-team-reviews",
+                params={
+                    "start_time": "2024-01-01T00:00:00Z",
+                    "end_time": "2024-01-31T23:59:59Z",
+                    "repositories": ["org/repo1"],
+                    "reviewer_team": "sig-storage",
+                },
+            )
+
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+
+            # Verify data array
+            assert len(data["data"]) == 2
+            assert data["data"][0]["pr_number"] == 123
+            assert data["data"][0]["reviewer"] == "alice"
+            assert data["data"][0]["reviewer_team"] == "sig-storage"
+            assert data["data"][0]["pr_sig_label"] == "sig-network"
+            assert data["data"][0]["review_type"] == "approved"
+
+            # Verify summary
+            assert data["summary"]["total_cross_team_reviews"] == 2
+            assert data["summary"]["by_reviewer_team"]["sig-storage"] == 2
+            assert data["summary"]["by_pr_team"]["sig-network"] == 1
+            assert data["summary"]["by_pr_team"]["sig-compute"] == 1
+
+            # Verify pagination
+            assert data["pagination"]["total"] == 2
+            assert data["pagination"]["page"] == 1
+
+    def test_get_cross_team_reviews_pagination(self) -> None:
+        """Test cross-team reviews pagination parameters."""
+        # Mock data for pagination test
+        mock_data_rows = [
+            {
+                "pr_number": 789,
+                "repository": "org/repo2",
+                "reviewer": "charlie",
+                "reviewer_team": "sig-network",
+                "pr_sig_label": "sig-storage",
+                "review_type": "commented",
+                "created_at": datetime(2024, 1, 20, 14, 0, 0, tzinfo=UTC),
+            },
+        ]
+
+        mock_reviewer_team_rows = [
+            {"reviewer_team": "sig-network", "count": 50},
+        ]
+        mock_pr_team_rows = [
+            {"pr_sig_label": "sig-storage", "count": 50},
+        ]
+
+        with patch("backend.routes.api.cross_team.db_manager") as mock_db:
+            # Mock total count of 50 items
+            mock_db.fetchval = AsyncMock(return_value=50)
+            # Mock all fetch queries
+            mock_db.fetch = AsyncMock(side_effect=[mock_data_rows, mock_reviewer_team_rows, mock_pr_team_rows])
+
+            client = TestClient(app)
+            response = client.get(
+                "/api/metrics/cross-team-reviews",
+                params={"page": 2, "page_size": 10},
+            )
+
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+
+            # Verify pagination metadata
+            assert data["pagination"]["page"] == 2
+            assert data["pagination"]["page_size"] == 10
+            assert data["pagination"]["total"] == 50
+            assert data["pagination"]["total_pages"] == 5
+            assert data["pagination"]["has_next"] is True
+            assert data["pagination"]["has_prev"] is True
+
+    def test_get_cross_team_reviews_with_pr_team_filter(self) -> None:
+        """Test cross-team reviews with PR team filter."""
+        with patch("backend.routes.api.cross_team.db_manager") as mock_db:
+            mock_db.fetchval = AsyncMock(return_value=0)
+            mock_db.fetch = AsyncMock(side_effect=[[], [], []])
+
+            client = TestClient(app)
+            response = client.get(
+                "/api/metrics/cross-team-reviews",
+                params={"pr_team": "sig-network"},
+            )
+
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+            assert data["pagination"]["total"] == 0
+
+    def test_get_cross_team_reviews_database_unavailable(self) -> None:
+        """Test cross-team reviews when database unavailable."""
+        with patch("backend.routes.api.cross_team.db_manager", None):
+            client = TestClient(app)
+            response = client.get("/api/metrics/cross-team-reviews")
+
+            assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            assert "Metrics database not available" in response.json()["detail"]
+
+    def test_get_cross_team_reviews_database_error(self) -> None:
+        """Test cross-team reviews handles database errors."""
+        with patch("backend.routes.api.cross_team.db_manager") as mock_db:
+            mock_db.fetchval = AsyncMock(side_effect=asyncpg.PostgresError("Database error"))
+
+            client = TestClient(app)
+            response = client.get("/api/metrics/cross-team-reviews")
+
+            assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            assert "Failed to fetch cross-team review metrics" in response.json()["detail"]
+
+    def test_get_cross_team_reviews_invalid_datetime(self) -> None:
+        """Test cross-team reviews with invalid datetime format."""
+        with patch("backend.routes.api.cross_team.db_manager"):
+            client = TestClient(app)
+            response = client.get(
+                "/api/metrics/cross-team-reviews",
+                params={"start_time": "invalid-date"},
+            )
+
+            assert response.status_code == status.HTTP_400_BAD_REQUEST
+            assert "Invalid datetime format" in response.json()["detail"]
+
+    def test_get_cross_team_reviews_cancelled_error(self) -> None:
+        """Test cross-team reviews handles asyncio.CancelledError."""
+
+        with patch("backend.routes.api.cross_team.db_manager") as mock_db:
+            mock_db.fetchval = AsyncMock(side_effect=asyncio.CancelledError)
+            mock_db.fetch = AsyncMock(side_effect=asyncio.CancelledError)
+
+            client = TestClient(app)
+            # CancelledError is re-raised and handled by FastAPI/ASGI server
+            # TestClient may wrap it in concurrent.futures.CancelledError (detect cancellation, not specific type)
+            with pytest.raises((asyncio.CancelledError, concurrent.futures.CancelledError)):
+                client.get("/api/metrics/cross-team-reviews")
 
 
 class TestReviewTurnaroundEndpoint:

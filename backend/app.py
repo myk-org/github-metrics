@@ -27,6 +27,7 @@ from backend.metrics_tracker import MetricsTracker
 from backend.routes import health, webhooks
 from backend.routes.api import (
     contributors,
+    cross_team,
     pr_story,
     repositories,
     summary,
@@ -36,6 +37,7 @@ from backend.routes.api import (
     user_prs,
 )
 from backend.routes.api import webhooks as api_webhooks
+from backend.sig_teams import SigTeamsConfig
 from backend.utils.security import (
     get_cloudflare_allowlist,
     get_github_allowlist,
@@ -116,7 +118,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
                     ip_ranges.append(ipaddress.ip_network(ip_range))
                 except ValueError:
                     LOGGER.warning("Invalid IP range from GitHub allowlist, skipping", extra={"ip_range": ip_range})
-            LOGGER.info(f"Loaded {len(github_ips)} GitHub IP ranges")
+            LOGGER.info("Loaded %d GitHub IP ranges", len(github_ips))
         except Exception:
             LOGGER.exception("Failed to load GitHub IP allowlist")
             raise
@@ -130,7 +132,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
                     ip_ranges.append(ipaddress.ip_network(ip_range))
                 except ValueError:
                     LOGGER.warning("Invalid IP range from Cloudflare allowlist, skipping", extra={"ip_range": ip_range})
-            LOGGER.info(f"Loaded {len(cloudflare_ips)} Cloudflare IP ranges")
+            LOGGER.info("Loaded %d Cloudflare IP ranges", len(cloudflare_ips))
         except Exception:
             LOGGER.exception("Failed to load Cloudflare IP allowlist")
             raise
@@ -157,6 +159,18 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     metrics_tracker = MetricsTracker(db_manager, metrics_logger)
     LOGGER.info("Metrics tracker initialized")
 
+    # Initialize SIG teams config if configured
+    sig_teams_config: SigTeamsConfig | None = None
+    if config.sig_teams_config_path:
+        if config.sig_teams_config_path.exists():
+            sig_teams_config = SigTeamsConfig()
+            sig_teams_config.load_from_file(config.sig_teams_config_path)
+            LOGGER.info("Loaded SIG teams config from %s", config.sig_teams_config_path)
+        else:
+            LOGGER.warning(
+                "SIG teams config file not found: %s, cross-team tracking disabled", config.sig_teams_config_path
+            )
+
     # Set module-level variables for route modules
     # Set database manager for all API routes
     health.db_manager = db_manager
@@ -169,10 +183,12 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     pr_story.db_manager = db_manager
     turnaround.db_manager = db_manager
     team_dynamics.db_manager = db_manager
+    cross_team.db_manager = db_manager
 
     # Set webhook-specific globals
     webhooks.metrics_tracker = metrics_tracker
     webhooks.allowed_ips = allowed_ips
+    webhooks.sig_teams_config = sig_teams_config
 
     # Initialize MCP session manager if enabled
     # Note: We manually configure the session manager instead of using the library's
@@ -243,6 +259,7 @@ def create_app() -> FastAPI:
     app.include_router(pr_story.router)
     app.include_router(turnaround.router)
     app.include_router(team_dynamics.router)
+    app.include_router(cross_team.router)
 
     return app
 
@@ -347,4 +364,4 @@ if _static_path.exists() and _static_path.is_dir():
         # React Router will handle the routing client-side
         return FileResponse(_index_path)
 
-    LOGGER.info(f"Static files and SPA routing configured from {_static_path}")
+    LOGGER.info("Static files and SPA routing configured from %s", _static_path)

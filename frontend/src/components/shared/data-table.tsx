@@ -125,10 +125,6 @@ export function DataTable<T extends Record<string, unknown>>({
     );
   }
 
-  if (sortedData.length === 0) {
-    return <div className="text-center text-muted-foreground py-8">{emptyMessage}</div>;
-  }
-
   return (
     <Table>
       <TableHeader>
@@ -183,43 +179,51 @@ export function DataTable<T extends Record<string, unknown>>({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {sortedData.map((item) => (
-          <TableRow
-            key={String(keyExtractor(item))}
-            onClick={
-              onRowClick
-                ? () => {
-                    onRowClick(item);
-                  }
-                : undefined
-            }
-            className={onRowClick ? "cursor-pointer hover:bg-muted/50" : ""}
-          >
-            {columns.map((column) => (
-              <TableCell key={column.key} className={getAlignClass(column.align)}>
-                {column.render
-                  ? column.render(item)
-                  : (() => {
-                      const value = column.getValue ? column.getValue(item) : item[column.key];
-                      if (value === null || value === undefined) {
-                        return "";
-                      }
-                      if (typeof value === "object") {
-                        return JSON.stringify(value);
-                      }
-                      if (
-                        typeof value === "string" ||
-                        typeof value === "number" ||
-                        typeof value === "boolean"
-                      ) {
-                        return String(value);
-                      }
-                      return "";
-                    })()}
-              </TableCell>
-            ))}
+        {sortedData.length === 0 ? (
+          <TableRow>
+            <TableCell colSpan={columns.length} className="text-center text-muted-foreground py-8">
+              {emptyMessage}
+            </TableCell>
           </TableRow>
-        ))}
+        ) : (
+          sortedData.map((item) => (
+            <TableRow
+              key={String(keyExtractor(item))}
+              onClick={
+                onRowClick
+                  ? () => {
+                      onRowClick(item);
+                    }
+                  : undefined
+              }
+              className={onRowClick ? "cursor-pointer hover:bg-muted/50" : ""}
+            >
+              {columns.map((column) => (
+                <TableCell key={column.key} className={getAlignClass(column.align)}>
+                  {column.render
+                    ? column.render(item)
+                    : (() => {
+                        const value = column.getValue ? column.getValue(item) : item[column.key];
+                        if (value === null || value === undefined) {
+                          return "";
+                        }
+                        if (typeof value === "object") {
+                          return JSON.stringify(value);
+                        }
+                        if (
+                          typeof value === "string" ||
+                          typeof value === "number" ||
+                          typeof value === "boolean"
+                        ) {
+                          return String(value);
+                        }
+                        return "";
+                      })()}
+                </TableCell>
+              ))}
+            </TableRow>
+          ))
+        )}
       </TableBody>
     </Table>
   );

@@ -221,6 +221,21 @@ class Webhook(Base):
         nullable=True,
         comment="Label name for label events (extracted from payload for query performance)",
     )
+    is_cross_team: Mapped[bool | None] = mapped_column(
+        Boolean,
+        nullable=True,
+        comment="Whether PR has cross-team reviews (reviewer from different sig/team than author)",
+    )
+    reviewer_team: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        comment="Team/sig label of reviewer for cross-team review tracking",
+    )
+    pr_sig_label: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        comment="PR's sig/team label (e.g., sig/storage, sig/network) for cross-team analysis",
+    )
 
     # Relationships
     pr_events: Mapped[list["PREvent"]] = relationship(
