@@ -616,16 +616,24 @@ async def get_metrics_contributors(
         paginated_reviewers = reviewer_list[start_idx:end_idx]
 
         # Format PR reviewers with avg_reviews_per_pr
-        pr_reviewers: list[PrReviewerRow] = [
-            PrReviewerRow(
-                user=reviewer["user"],
-                total_reviews=reviewer["total_reviews"],
-                prs_reviewed=reviewer["prs_reviewed"],
-                avg_reviews_per_pr=round(reviewer["total_reviews"] / max(reviewer["prs_reviewed"], 1), 2),
-                cross_team_reviews=reviewer["cross_team_reviews"],
+        pr_reviewers: list[PrReviewerRow] = []
+        reviewer_item: ReviewerListItem
+        for reviewer_item in paginated_reviewers:
+            prs_reviewed = reviewer_item["prs_reviewed"]
+            if prs_reviewed == 0:
+                raise ValueError(
+                    f"Impossible state: reviewer '{reviewer_item['user']}' has {reviewer_item['total_reviews']} "
+                    f"reviews but 0 PRs reviewed"
+                )
+            pr_reviewers.append(
+                PrReviewerRow(
+                    user=reviewer_item["user"],
+                    total_reviews=reviewer_item["total_reviews"],
+                    prs_reviewed=prs_reviewed,
+                    avg_reviews_per_pr=round(reviewer_item["total_reviews"] / prs_reviewed, 2),
+                    cross_team_reviews=reviewer_item["cross_team_reviews"],
+                )
             )
-            for reviewer in paginated_reviewers
-        ]
 
         # Format PR approvers
         pr_approvers: list[PrApproverRow] = [
