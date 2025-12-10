@@ -18,13 +18,13 @@ Before writing ANY new code:
 3. **VERIFY** no similar logic exists elsewhere
 4. **NEVER** duplicate logic - extract to shared module
 
-| Logic Type                                       | Location                       |
-| ------------------------------------------------ | ------------------------------ |
-| Role-based queries (PR creators, reviewers)      | `utils/contributor_queries.py` |
-| SQL query building (params, filters, pagination) | `utils/query_builders.py`      |
-| Response formatting (pagination metadata)        | `utils/response_formatters.py` |
-| Time/date utilities                              | `utils/datetime_utils.py`      |
-| Security (IP validation, HMAC)                   | `utils/security.py`            |
+| Logic Type                                       | Location                              |
+| ------------------------------------------------ | ------------------------------------- |
+| Role-based queries (PR creators, reviewers)      | `backend/utils/contributor_queries.py` |
+| SQL query building (params, filters, pagination) | `backend/utils/query_builders.py`      |
+| Response formatting (pagination metadata)        | `backend/utils/response_formatters.py` |
+| Time/date utilities                              | `backend/utils/datetime_utils.py`      |
+| Security (IP validation, HMAC)                   | `backend/utils/security.py`            |
 
 ### Python Backend Requirements
 

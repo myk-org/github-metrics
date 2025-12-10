@@ -255,8 +255,14 @@ async def get_metrics_cross_team_reviews(
             db_manager.fetch(summary_by_pr_team_query, *params_without_pagination),
         )
 
-        # Convert potentially None total to integer
-        total_count = int(total_count or 0)
+        # Validate total_count - None indicates a query anomaly
+        if total_count is None:
+            LOGGER.error("COUNT query returned NULL - database anomaly detected")
+            raise HTTPException(
+                status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to fetch cross-team review count",
+            )
+        total_count = int(total_count)
 
         # Format data
         data: list[CrossTeamReviewRow] = [
