@@ -12,6 +12,7 @@ export interface PRReviewer {
   readonly total_reviews: number;
   readonly prs_reviewed: number;
   readonly avg_reviews_per_pr: number;
+  readonly cross_team_reviews: number;
   readonly [key: string]: unknown;
 }
 

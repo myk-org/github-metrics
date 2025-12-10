@@ -1,7 +1,8 @@
 """
 Configuration for GitHub Metrics service.
 
-All configuration is loaded from environment variables - no config files.
+All configuration is loaded from environment variables.
+SIG team mappings can optionally be loaded from a YAML file.
 This ensures clean containerized deployment with Docker/Kubernetes.
 
 Required environment variables:
@@ -30,11 +31,15 @@ GitHub webhook setup (optional - for automatic webhook creation):
 - METRICS_GITHUB_TOKEN: GitHub token for API access
 - METRICS_WEBHOOK_URL: URL where metrics service receives webhooks
 - METRICS_REPOSITORIES: Comma-separated list of org/repo to configure webhooks
+
+SIG Teams configuration (optional - file-backed team mappings):
+- METRICS_SIG_TEAMS_CONFIG: Path to sig-teams.yaml file (optional, default: none)
 """
 
 import os
 import threading
 from dataclasses import dataclass
+from pathlib import Path
 from urllib.parse import quote_plus
 
 
@@ -224,6 +229,10 @@ class MetricsConfig:
         self.mcp = MCPConfig(
             enabled=_parse_bool(os.environ.get("METRICS_MCP_ENABLED", "true")),
         )
+
+        # SIG Teams configuration
+        sig_teams_config = os.environ.get("METRICS_SIG_TEAMS_CONFIG", "").strip()
+        self.sig_teams_config_path: Path | None = Path(sig_teams_config) if sig_teams_config else None
 
 
 # Singleton instance - lazy loaded with thread-safe initialization

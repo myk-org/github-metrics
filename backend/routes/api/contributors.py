@@ -1,25 +1,144 @@
 """API routes for contributor statistics."""
 
 import asyncio
-from typing import Annotated, Any
+from typing import Annotated, TypedDict
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi import status as http_status
 from simple_logger.logger import get_logger
 
 from backend.database import DatabaseManager
+from backend.sig_teams import SigTeamsConfig
 from backend.utils.contributor_queries import get_pr_creators_count_query, get_pr_creators_data_query
 from backend.utils.datetime_utils import parse_datetime_string
 from backend.utils.query_builders import QueryParams, build_repository_filter, build_time_filter
-from backend.utils.response_formatters import format_pagination_metadata
 
 # Module-level logger
 LOGGER = get_logger(name="backend.routes.api.contributors")
+
+# Maximum number of raw review rows to process in-memory for cross-team computation
+# This prevents OOM when fetching unbounded review data for Python-side processing
+# If a query would return more rows, an HTTP 413 error is raised asking the user
+# to narrow their filters (time range, repositories, users)
+#
+# Rationale: Each row contains ~5-6 fields (user, repository, pr_number, pr_author, pr_sig_label),
+# approximately 200-500 bytes per row. At 100k rows, this is ~20-50 MB in memory, well within
+# safe limits for in-memory processing. Adjust if row structure changes significantly.
+MAX_REVIEWERS_RAW_ROWS = 100_000
+
+
+class PrCreatorRow(TypedDict):
+    """Individual PR creator statistics."""
+
+    user: str
+    total_prs: int
+    merged_prs: int
+    closed_prs: int
+    avg_commits_per_pr: float
+
+
+class PrReviewerRow(TypedDict):
+    """Individual PR reviewer statistics."""
+
+    user: str
+    total_reviews: int
+    prs_reviewed: int
+    avg_reviews_per_pr: float
+    cross_team_reviews: int
+
+
+class PrApproverRow(TypedDict):
+    """Individual PR approver statistics."""
+
+    user: str
+    total_approvals: int
+    prs_approved: int
+
+
+class PrLgtmRow(TypedDict):
+    """Individual LGTM statistics."""
+
+    user: str
+    total_lgtm: int
+    prs_lgtm: int
+
+
+class PaginationInfo(TypedDict):
+    """Pagination metadata."""
+
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    has_next: bool
+    has_prev: bool
+
+
+class TimeRange(TypedDict):
+    """Time range filter information."""
+
+    start_time: str | None
+    end_time: str | None
+
+
+class PrCreatorsSection(TypedDict):
+    """PR creators section with data and pagination."""
+
+    data: list[PrCreatorRow]
+    pagination: PaginationInfo
+
+
+class PrReviewersSection(TypedDict):
+    """PR reviewers section with data and pagination."""
+
+    data: list[PrReviewerRow]
+    pagination: PaginationInfo
+
+
+class PrApproversSection(TypedDict):
+    """PR approvers section with data and pagination."""
+
+    data: list[PrApproverRow]
+    pagination: PaginationInfo
+
+
+class PrLgtmSection(TypedDict):
+    """PR LGTM section with data and pagination."""
+
+    data: list[PrLgtmRow]
+    pagination: PaginationInfo
+
+
+# Internal type for reviewer statistics during processing
+class ReviewerStatsInternal(TypedDict):
+    total_reviews: int
+    prs_reviewed: set[str]
+    cross_team_reviews: int
+
+
+# Internal type for reviewer list (before pagination)
+class ReviewerListItem(TypedDict):
+    user: str
+    total_reviews: int
+    prs_reviewed: int
+    cross_team_reviews: int
+
+
+class ContributorsResponse(TypedDict):
+    """Response structure for contributors endpoint."""
+
+    time_range: TimeRange
+    pr_creators: PrCreatorsSection
+    pr_reviewers: PrReviewersSection
+    pr_approvers: PrApproversSection
+    pr_lgtm: PrLgtmSection
+
 
 router = APIRouter(prefix="/api/metrics")
 
 # Global database manager (set by app.py during lifespan)
 db_manager: DatabaseManager | None = None
+sig_teams_config: SigTeamsConfig | None = None
 
 
 @router.get("/contributors", operation_id="get_metrics_contributors")
@@ -33,7 +152,7 @@ async def get_metrics_contributors(
     repositories: Annotated[list[str] | None, Query(description="Filter by repositories (org/repo format)")] = None,
     page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(default=10, ge=1, description="Items per page"),
-) -> dict[str, Any]:
+) -> ContributorsResponse:
     """Get PR contributors statistics (creators, reviewers, approvers, LGTM).
 
     Analyzes webhook payloads to extract contributor activity including PR creation,
@@ -96,7 +215,8 @@ async def get_metrics_contributors(
             "user": "jane-smith",
             "total_reviews": 78,
             "prs_reviewed": 65,
-            "avg_reviews_per_pr": 1.2
+            "avg_reviews_per_pr": 1.2,
+            "cross_team_reviews": 15
           }
         ],
         "pagination": {
@@ -151,6 +271,7 @@ async def get_metrics_contributors(
     - LGTM is separate from approvals in this workflow
 
     **Errors:**
+    - 413: Query would fetch too many review rows (exceeds 100,000). Narrow your filters.
     - 500: Database connection error or metrics server disabled
     """
     if db_manager is None:
@@ -230,13 +351,18 @@ async def get_metrics_contributors(
         offset_placeholder,
     )
 
-    # Count query for PR Reviewers
-    pr_reviewers_count_query = (
+    # Note: pr_reviewers count is computed in Python after processing (see below)
+    # This is because we need to compute cross-team reviews at query time, which requires
+    # fetching all review data and processing in Python.
+
+    # Count query for PR Reviewers raw data (before Python processing)
+    # This is used to enforce a safeguard against unbounded queries that could cause OOM
+    pr_reviewers_raw_count_query = (
         """
-        SELECT COUNT(DISTINCT sender) as total
+        SELECT COUNT(*) as total
         FROM webhooks
         WHERE event_type = 'pull_request_review'
-          AND action = 'submitted'
+          AND action != 'dismissed'
           AND sender IS DISTINCT FROM pr_author
           """
         + time_filter
@@ -246,26 +372,31 @@ async def get_metrics_contributors(
     )
 
     # Query PR Reviewers (from pull_request_review events)
+    # Note: We fetch ALL review data and compute cross-team in Python to handle historical data
+    # where is_cross_team was NULL. This ensures accurate cross-team counts regardless of when
+    # the data was collected.
+    # SAFEGUARD: We enforce a maximum row count to prevent OOM (checked before query execution)
     pr_reviewers_query = (
         """
         SELECT
             sender as user,
-            COUNT(*) as total_reviews,
-            COUNT(DISTINCT pr_number) as prs_reviewed
+            repository,
+            pr_number,
+            pr_author,
+            (SELECT label_elem->>'name'
+             FROM jsonb_array_elements(payload->'pull_request'->'labels') AS label_elem
+             WHERE label_elem->>'name' LIKE 'sig-%'
+             ORDER BY label_elem->>'name' ASC
+             LIMIT 1) AS pr_sig_label
         FROM webhooks
         WHERE event_type = 'pull_request_review'
-          AND action = 'submitted'
+          AND action != 'dismissed'
           AND sender IS DISTINCT FROM pr_author
           """
         + time_filter
         + user_filter_reviewers
         + exclude_user_filter_reviewers
         + repository_filter
-        + f"""
-        GROUP BY sender
-        ORDER BY total_reviews DESC
-        LIMIT {page_size_placeholder} OFFSET {offset_placeholder}
-        """
     )
 
     # Count query for PR Approvers
@@ -353,99 +484,212 @@ async def get_metrics_contributors(
         # Get all params for data queries
         all_params = params.get_params()
 
-        # Execute all count queries in parallel (params without LIMIT/OFFSET)
+        # Execute count queries in parallel (params without LIMIT/OFFSET)
+        # Note: pr_reviewers_total computed after Python processing (see below)
+        # Include pr_reviewers_raw_count to enforce safeguard before fetching data
         (
             pr_creators_total,
-            pr_reviewers_total,
+            pr_reviewers_raw_total,
             pr_approvers_total,
             pr_lgtm_total,
         ) = await asyncio.gather(
             db_manager.fetchval(pr_creators_count_query, *params_without_pagination),
-            db_manager.fetchval(pr_reviewers_count_query, *params_without_pagination),
+            db_manager.fetchval(pr_reviewers_raw_count_query, *params_without_pagination),
             db_manager.fetchval(pr_approvers_count_query, *params_without_pagination),
             db_manager.fetchval(pr_lgtm_count_query, *params_without_pagination),
         )
 
-        # Convert potentially None values to integers with safe defaults
-        pr_creators_total = int(pr_creators_total or 0)
-        pr_reviewers_total = int(pr_reviewers_total or 0)
-        pr_approvers_total = int(pr_approvers_total or 0)
-        pr_lgtm_total = int(pr_lgtm_total or 0)
+        # Fail-fast: Check for unexpected NULL counts from database
+        if (
+            pr_creators_total is None
+            or pr_reviewers_raw_total is None
+            or pr_approvers_total is None
+            or pr_lgtm_total is None
+        ):
+            raise ValueError(
+                f"Unexpected NULL count from database: "
+                f"pr_creators_total={pr_creators_total}, "
+                f"pr_reviewers_raw_total={pr_reviewers_raw_total}, "
+                f"pr_approvers_total={pr_approvers_total}, "
+                f"pr_lgtm_total={pr_lgtm_total}"
+            )
+
+        # Convert to integers (no defensive fallback)
+        pr_creators_total = int(pr_creators_total)
+        pr_reviewers_raw_total = int(pr_reviewers_raw_total)
+        # Note: pr_reviewers_total will be recomputed after Python-side processing
+        pr_approvers_total = int(pr_approvers_total)
+        pr_lgtm_total = int(pr_lgtm_total)
+
+        # SAFEGUARD: Prevent OOM by rejecting queries that would fetch too many review rows
+        # Cross-team computation requires fetching all matching reviews into memory
+        # Users should narrow their filters (time range, repositories, users) if they hit this limit
+        if pr_reviewers_raw_total > MAX_REVIEWERS_RAW_ROWS:
+            raise HTTPException(
+                status_code=http_status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=(
+                    f"Query would return {pr_reviewers_raw_total} review rows, "
+                    f"exceeding maximum of {MAX_REVIEWERS_RAW_ROWS}. "
+                    f"Please narrow your filters (time range, repositories, or users) to reduce the result set."
+                ),
+            )
 
         # Execute all data queries in parallel for better performance
-        pr_creators_rows, pr_reviewers_rows, pr_approvers_rows, pr_lgtm_rows = await asyncio.gather(
+        pr_creators_rows, pr_reviewers_raw_rows, pr_approvers_rows, pr_lgtm_rows = await asyncio.gather(
             db_manager.fetch(pr_creators_query, *all_params),
-            db_manager.fetch(pr_reviewers_query, *all_params),
+            db_manager.fetch(pr_reviewers_query, *params_without_pagination),
             db_manager.fetch(pr_approvers_query, *all_params),
             db_manager.fetch(pr_lgtm_query, *all_params),
         )
 
         # Format PR creators
-        pr_creators = [
-            {
-                "user": row["user"],
-                "total_prs": row["total_prs"],
-                "merged_prs": row["merged_prs"] or 0,
-                "closed_prs": row["closed_prs"] or 0,
-                "avg_commits_per_pr": round(row["avg_commits"] or 0, 1),
-            }
+        pr_creators: list[PrCreatorRow] = [
+            PrCreatorRow(
+                user=row["user"],
+                total_prs=row["total_prs"],
+                merged_prs=row["merged_prs"],
+                closed_prs=row["closed_prs"],
+                avg_commits_per_pr=round(row["avg_commits"], 1),
+            )
             for row in pr_creators_rows
         ]
 
-        # Format PR reviewers
-        pr_reviewers = [
-            {
-                "user": row["user"],
-                "total_reviews": row["total_reviews"],
-                "prs_reviewed": row["prs_reviewed"],
-                "avg_reviews_per_pr": round(row["total_reviews"] / max(row["prs_reviewed"], 1), 2),
-            }
-            for row in pr_reviewers_rows
+        # Process PR reviewers: compute cross-team reviews in Python
+        # Group reviews by reviewer
+        reviewer_stats: dict[str, ReviewerStatsInternal] = {}
+
+        for row in pr_reviewers_raw_rows:
+            if row["user"] is None or row["repository"] is None or row["pr_number"] is None:
+                LOGGER.error(
+                    "Unexpected NULL in review row: user=%s, repository=%s, pr_number=%s",
+                    row["user"],
+                    row["repository"],
+                    row["pr_number"],
+                )
+                continue  # Skip malformed row
+            reviewer = str(row["user"])
+            repository = str(row["repository"])
+            pr_number = int(row["pr_number"])
+            pr_sig_label = row["pr_sig_label"]
+
+            # Initialize reviewer stats if not exists
+            if reviewer not in reviewer_stats:
+                reviewer_stats[reviewer] = ReviewerStatsInternal(
+                    total_reviews=0,
+                    prs_reviewed=set(),
+                    cross_team_reviews=0,
+                )
+
+            # Count total reviews
+            reviewer_stats[reviewer]["total_reviews"] += 1
+
+            # Track unique PRs (composite key: repository + pr_number)
+            pr_key = f"{repository}#{pr_number}"
+            reviewer_stats[reviewer]["prs_reviewed"].add(pr_key)
+
+            # Compute cross-team status if sig_teams_config is available and PR has sig label
+            if sig_teams_config and sig_teams_config.is_loaded and pr_sig_label:
+                is_cross_team = sig_teams_config.is_cross_team_review(repository, reviewer, str(pr_sig_label))
+                if is_cross_team is True:
+                    reviewer_stats[reviewer]["cross_team_reviews"] += 1
+
+        # Convert to sorted list
+        reviewer_list: list[ReviewerListItem] = [
+            ReviewerListItem(
+                user=user,
+                total_reviews=stats["total_reviews"],
+                prs_reviewed=len(stats["prs_reviewed"]),
+                cross_team_reviews=stats["cross_team_reviews"],
+            )
+            for user, stats in reviewer_stats.items()
         ]
 
+        # Sort by total_reviews descending
+        reviewer_list.sort(key=lambda x: x["total_reviews"], reverse=True)
+
+        # Update total count based on actual unique reviewers (post Python-side filtering)
+        pr_reviewers_total = len(reviewer_list)
+
+        # Apply pagination
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        paginated_reviewers = reviewer_list[start_idx:end_idx]
+
+        # Format PR reviewers with avg_reviews_per_pr
+        pr_reviewers: list[PrReviewerRow] = []
+        reviewer_item: ReviewerListItem
+        for reviewer_item in paginated_reviewers:
+            prs_reviewed = reviewer_item["prs_reviewed"]
+            if prs_reviewed == 0:
+                raise ValueError(
+                    f"Impossible state: reviewer '{reviewer_item['user']}' has {reviewer_item['total_reviews']} "
+                    f"reviews but 0 PRs reviewed"
+                )
+            pr_reviewers.append(
+                PrReviewerRow(
+                    user=reviewer_item["user"],
+                    total_reviews=reviewer_item["total_reviews"],
+                    prs_reviewed=prs_reviewed,
+                    avg_reviews_per_pr=round(reviewer_item["total_reviews"] / prs_reviewed, 2),
+                    cross_team_reviews=reviewer_item["cross_team_reviews"],
+                )
+            )
+
         # Format PR approvers
-        pr_approvers = [
-            {
-                "user": row["user"],
-                "total_approvals": row["total_approvals"],
-                "prs_approved": row["prs_approved"],
-            }
+        pr_approvers: list[PrApproverRow] = [
+            PrApproverRow(
+                user=row["user"],
+                total_approvals=row["total_approvals"],
+                prs_approved=row["prs_approved"],
+            )
             for row in pr_approvers_rows
         ]
 
         # Format LGTM
-        pr_lgtm = [
-            {
-                "user": row["user"],
-                "total_lgtm": row["total_lgtm"],
-                "prs_lgtm": row["prs_lgtm"],
-            }
+        pr_lgtm: list[PrLgtmRow] = [
+            PrLgtmRow(
+                user=row["user"],
+                total_lgtm=row["total_lgtm"],
+                prs_lgtm=row["prs_lgtm"],
+            )
             for row in pr_lgtm_rows
         ]
 
-        # Calculate pagination metadata for each category using shared formatter
-        return {
-            "time_range": {
-                "start_time": start_datetime.isoformat() if start_datetime else None,
-                "end_time": end_datetime.isoformat() if end_datetime else None,
-            },
-            "pr_creators": {
-                "data": pr_creators,
-                "pagination": format_pagination_metadata(pr_creators_total, page, page_size),
-            },
-            "pr_reviewers": {
-                "data": pr_reviewers,
-                "pagination": format_pagination_metadata(pr_reviewers_total, page, page_size),
-            },
-            "pr_approvers": {
-                "data": pr_approvers,
-                "pagination": format_pagination_metadata(pr_approvers_total, page, page_size),
-            },
-            "pr_lgtm": {
-                "data": pr_lgtm,
-                "pagination": format_pagination_metadata(pr_lgtm_total, page, page_size),
-            },
-        }
+        # Calculate pagination metadata for each category
+        # Helper to create pagination info
+        def make_pagination(total: int) -> PaginationInfo:
+            total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+            return PaginationInfo(
+                total=total,
+                page=page,
+                page_size=page_size,
+                total_pages=total_pages,
+                has_next=page < total_pages,
+                has_prev=page > 1,
+            )
+
+        return ContributorsResponse(
+            time_range=TimeRange(
+                start_time=start_datetime.isoformat() if start_datetime else None,
+                end_time=end_datetime.isoformat() if end_datetime else None,
+            ),
+            pr_creators=PrCreatorsSection(
+                data=pr_creators,
+                pagination=make_pagination(pr_creators_total),
+            ),
+            pr_reviewers=PrReviewersSection(
+                data=pr_reviewers,
+                pagination=make_pagination(pr_reviewers_total),
+            ),
+            pr_approvers=PrApproversSection(
+                data=pr_approvers,
+                pagination=make_pagination(pr_approvers_total),
+            ),
+            pr_lgtm=PrLgtmSection(
+                data=pr_lgtm,
+                pagination=make_pagination(pr_lgtm_total),
+            ),
+        )
     except asyncio.CancelledError:
         LOGGER.debug("Contributors metrics request was cancelled")
         raise  # Re-raise directly, let FastAPI handle

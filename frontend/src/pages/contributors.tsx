@@ -239,6 +239,13 @@ export function ContributorsPage(): React.ReactElement {
         typeof item.avg_reviews_per_pr === "number" ? item.avg_reviews_per_pr.toFixed(1) : "N/A",
       getValue: (item) => item.avg_reviews_per_pr,
     },
+    {
+      key: "cross_team_reviews",
+      label: "Cross-Team",
+      align: "right",
+      sortable: true,
+      getValue: (item) => item.cross_team_reviews,
+    },
   ];
 
   // Column definitions for PR Approvers
