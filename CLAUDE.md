@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-## Strict Rules (MANDATORY)
+## Strict Rules (MANDAORY)
 
 ### Linter Suppressions PROHIBITED
 
@@ -18,13 +18,13 @@ Before writing ANY new code:
 3. **VERIFY** no similar logic exists elsewhere
 4. **NEVER** duplicate logic - extract to shared module
 
-| Logic Type | Location |
-|------------|----------|
-| Role-based queries (PR creators, reviewers) | `utils/contributor_queries.py` |
-| SQL query building (params, filters, pagination) | `utils/query_builders.py` |
-| Response formatting (pagination metadata) | `utils/response_formatters.py` |
-| Time/date utilities | `utils/datetime_utils.py` |
-| Security (IP validation, HMAC) | `utils/security.py` |
+| Logic Type                                       | Location                       |
+| ------------------------------------------------ | ------------------------------ |
+| Role-based queries (PR creators, reviewers)      | `utils/contributor_queries.py` |
+| SQL query building (params, filters, pagination) | `utils/query_builders.py`      |
+| Response formatting (pagination metadata)        | `utils/response_formatters.py` |
+| Time/date utilities                              | `utils/datetime_utils.py`      |
+| Security (IP validation, HMAC)                   | `utils/security.py`            |
 
 ### Python Backend Requirements
 
@@ -141,23 +141,23 @@ cd frontend && bun install
 
 ### Testing
 
-**Two test suites - BOTH must pass:**
+**All tests must pass - run in parallel:**
 
 ```bash
-# API tests (unit + integration with mocks)
-tox
-
-# UI tests (Playwright browser automation)
-tox -e ui
-
-# Run both
-tox && tox -e ui
+tox                                        # API tests (unit + integration)
+tox -e ui                                  # UI tests (Playwright)
+docker build -t github-metrics-testing .   # Docker build verification
+bun run lint                               # Frontend linting
+prek run --all-files                       # Pre-commit hooks (Python linting, formatting, type checking)
 ```
 
 **Run tests in parallel with Claude Code:**
 
-- Agent 1: `tox` (API tests - fast)
-- Agent 2: `tox -e ui` (UI tests - slower, requires browser)
+- Agent 1: `tox` (API tests)
+- Agent 2: `tox -e ui` (UI tests - requires browser)
+- Agent 3: `docker build -t github-metrics-testing .` (Docker build)
+- Agent 4: `bun run lint` (Frontend linting)
+- Agent 5: `prek run --all-files` (Pre-commit hooks)
 
 ### Code Quality
 
@@ -290,7 +290,7 @@ interface SummaryCardsProps {
 export function SummaryCards({
   metrics,
   isLoading,
-  onRefresh
+  onRefresh,
 }: SummaryCardsProps): JSX.Element {
   // implementation
 }
@@ -364,7 +364,7 @@ export function useRepositories(filters: FilterState) {
     queryKey: ["repositories", filters],
     queryFn: async (): Promise<RepositoryData> => {
       const response = await fetch(
-        `/api/metrics/repositories?${new URLSearchParams(filters)}`
+        `/api/metrics/repositories?${new URLSearchParams(filters)}`,
       );
       if (!response.ok) {
         throw new Error(`Failed to fetch repositories: ${response.statusText}`);
@@ -372,7 +372,7 @@ export function useRepositories(filters: FilterState) {
       return response.json() as Promise<RepositoryData>;
     },
     retry: 1,
-    staleTime: 1000 * 60 * 5
+    staleTime: 1000 * 60 * 5,
   });
 }
 
@@ -457,9 +457,7 @@ const response = await fetch(`/api/data?page_size=100`);
 // User can't see item #101
 
 // ✅ CORRECT - Server-side pagination
-const response = await fetch(
-  `/api/data?page=${page}&page_size=${pageSize}`
-);
+const response = await fetch(`/api/data?page=${page}&page_size=${pageSize}`);
 ```
 
 ### Pagination Metadata

@@ -9,7 +9,7 @@ from simple_logger.logger import get_logger
 
 from backend.database import DatabaseManager
 from backend.utils.datetime_utils import parse_datetime_string
-from backend.utils.query_builders import QueryParams, build_repository_filter, build_time_filter
+from backend.utils.query_builders import QueryParams, build_pagination_sql, build_repository_filter, build_time_filter
 from backend.utils.response_formatters import format_pagination_metadata
 
 # Module-level logger
@@ -117,12 +117,6 @@ async def get_metrics_cross_team_reviews(
         pr_team_param = params.add(pr_team)
         pr_team_filter = " AND pr_sig_label = " + pr_team_param
 
-    # Mark pagination start before adding pagination parameters
-    params.mark_pagination_start()
-    # Add pagination parameters and use placeholders directly
-    page_size_placeholder = params.add(page_size)
-    offset_placeholder = params.add((page - 1) * page_size)
-
     # Count query for total cross-team reviews
     count_query = (
         """
@@ -156,10 +150,10 @@ async def get_metrics_cross_team_reviews(
         + repository_filter
         + reviewer_team_filter
         + pr_team_filter
-        + f"""
+        + """
         ORDER BY created_at DESC
-        LIMIT {page_size_placeholder} OFFSET {offset_placeholder}
         """
+        + build_pagination_sql(params, page, page_size)
     )
 
     # Summary query - group by reviewer_team

@@ -22,7 +22,7 @@ Adds columns for tracking cross-team reviews and team affiliations:
 
 2. Composite partial index for efficient cross-team queries:
    - ix_webhooks_cross_team: Index on (is_cross_team, reviewer_team, pr_sig_label)
-   - Only indexes rows WHERE is_cross_team IS NOT NULL
+   - Only indexes rows WHERE is_cross_team IS TRUE
    - Optimizes queries filtering by cross-team status and team affiliations
 
 Benefits:
@@ -61,12 +61,12 @@ def upgrade() -> None:
     op.add_column("webhooks", sa.Column("pr_sig_label", sa.String(length=100), nullable=True))
 
     # 2. Create partial composite index for efficient cross-team queries
-    # Only index rows where is_cross_team is known (not NULL)
+    # Only index rows where is_cross_team is TRUE (actual cross-team reviews)
     op.execute(
         """
         CREATE INDEX ix_webhooks_cross_team
         ON webhooks (is_cross_team, reviewer_team, pr_sig_label)
-        WHERE is_cross_team IS NOT NULL
+        WHERE is_cross_team IS TRUE
         """
     )
 
