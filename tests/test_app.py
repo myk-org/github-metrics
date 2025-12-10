@@ -1003,9 +1003,8 @@ class TestContributorsEndpoint:
 
     def test_get_contributors_success(self) -> None:
         """Test successful contributors retrieval."""
-        # Mock count queries
+        # Mock count queries (only 3 now - reviewers count is computed in Python)
         mock_creators_count = 5
-        mock_reviewers_count = 3
         mock_approvers_count = 2
         mock_lgtm_count = 1
 
@@ -1019,12 +1018,28 @@ class TestContributorsEndpoint:
                 "avg_commits": 3.5,
             },
         ]
-        mock_reviewers_rows = [
+        # Reviewers now returns raw review data (not aggregated)
+        mock_reviewers_raw_rows = [
             {
                 "user": "bob",
-                "total_reviews": 15,
-                "prs_reviewed": 12,
-                "cross_team_reviews": 2,
+                "repository": "org/repo",
+                "pr_number": 1,
+                "pr_author": "alice",
+                "pr_sig_label": "sig-storage",
+            },
+            {
+                "user": "bob",
+                "repository": "org/repo",
+                "pr_number": 2,
+                "pr_author": "alice",
+                "pr_sig_label": "sig-network",
+            },
+            {
+                "user": "bob",
+                "repository": "org/repo",
+                "pr_number": 1,
+                "pr_author": "alice",
+                "pr_sig_label": "sig-storage",
             },
         ]
         mock_approvers_rows = [
@@ -1042,14 +1057,17 @@ class TestContributorsEndpoint:
             },
         ]
 
-        with patch("backend.routes.api.contributors.db_manager") as mock_db:
-            # Mock fetchval for count queries (4 calls)
+        with (
+            patch("backend.routes.api.contributors.db_manager") as mock_db,
+            patch("backend.routes.api.contributors.sig_teams_config"),
+        ):
+            # Mock fetchval for count queries (3 calls - no reviewers count)
             mock_db.fetchval = AsyncMock(
-                side_effect=[mock_creators_count, mock_reviewers_count, mock_approvers_count, mock_lgtm_count],
+                side_effect=[mock_creators_count, mock_approvers_count, mock_lgtm_count],
             )
             # Mock fetch for data queries (4 calls)
             mock_db.fetch = AsyncMock(
-                side_effect=[mock_creators_rows, mock_reviewers_rows, mock_approvers_rows, mock_lgtm_rows],
+                side_effect=[mock_creators_rows, mock_reviewers_raw_rows, mock_approvers_rows, mock_lgtm_rows],
             )
 
             client = TestClient(app)
@@ -1068,10 +1086,21 @@ class TestContributorsEndpoint:
             assert data["pr_creators"]["data"][0]["total_prs"] == 10
             assert data["pr_creators"]["pagination"]["total"] == mock_creators_count
 
+            # Verify pr_reviewers (computed in Python)
+            assert len(data["pr_reviewers"]["data"]) == 1
+            assert data["pr_reviewers"]["data"][0]["user"] == "bob"
+            assert data["pr_reviewers"]["data"][0]["total_reviews"] == 3
+            assert data["pr_reviewers"]["data"][0]["prs_reviewed"] == 2
+            assert data["pr_reviewers"]["pagination"]["total"] == 1
+
     def test_get_contributors_with_filters(self) -> None:
         """Test contributors with user and repository filters."""
-        with patch("backend.routes.api.contributors.db_manager") as mock_db:
-            mock_db.fetchval = AsyncMock(side_effect=[0, 0, 0, 0])
+        with (
+            patch("backend.routes.api.contributors.db_manager") as mock_db,
+            patch("backend.routes.api.contributors.sig_teams_config"),
+        ):
+            # Only 3 fetchval calls now (no reviewers count)
+            mock_db.fetchval = AsyncMock(side_effect=[0, 0, 0])
             mock_db.fetch = AsyncMock(side_effect=[[], [], [], []])
 
             client = TestClient(app)
@@ -1093,13 +1122,16 @@ class TestContributorsEndpoint:
         """Test contributors pagination."""
         # Mock counts for pagination calculation
         mock_creators_count = 100
-        mock_reviewers_count = 80
         mock_approvers_count = 60
         mock_lgtm_count = 40
 
-        with patch("backend.routes.api.contributors.db_manager") as mock_db:
+        with (
+            patch("backend.routes.api.contributors.db_manager") as mock_db,
+            patch("backend.routes.api.contributors.sig_teams_config"),
+        ):
+            # Only 3 fetchval calls (no reviewers count)
             mock_db.fetchval = AsyncMock(
-                side_effect=[mock_creators_count, mock_reviewers_count, mock_approvers_count, mock_lgtm_count],
+                side_effect=[mock_creators_count, mock_approvers_count, mock_lgtm_count],
             )
             mock_db.fetch = AsyncMock(side_effect=[[], [], [], []])
 
@@ -1919,11 +1951,16 @@ class TestCrossTeamReviewsEndpoint:
 
     def test_get_cross_team_reviews_empty(self) -> None:
         """Test cross-team reviews returns empty data when no reviews exist."""
-        with patch("backend.routes.api.cross_team.db_manager") as mock_db:
-            # Mock count query
-            mock_db.fetchval = AsyncMock(return_value=0)
-            # Mock all fetch queries (data, by_reviewer_team, by_pr_team)
-            mock_db.fetch = AsyncMock(side_effect=[[], [], []])
+        # Create mock SIG teams config
+        mock_sig_config = Mock()
+        mock_sig_config.is_loaded = True
+
+        with (
+            patch("backend.routes.api.cross_team.db_manager") as mock_db,
+            patch("backend.routes.api.cross_team.sig_teams_config", mock_sig_config),
+        ):
+            # Mock database fetch - no review events
+            mock_db.fetch = AsyncMock(return_value=[])
 
             client = TestClient(app)
             response = client.get("/api/metrics/cross-team-reviews")
@@ -1949,42 +1986,47 @@ class TestCrossTeamReviewsEndpoint:
 
     def test_get_cross_team_reviews_with_filters(self) -> None:
         """Test cross-team reviews with time range, repositories, and team filters."""
-        # Mock data for cross-team reviews
-        mock_data_rows = [
+        # Create mock SIG teams config
+        mock_sig_config = Mock()
+        mock_sig_config.is_loaded = True
+        mock_sig_config.get_user_team = Mock(
+            side_effect=lambda repo, user: {
+                ("org/repo1", "alice"): "sig-storage",
+                ("org/repo1", "bob"): "sig-storage",
+            }.get((repo, user))
+        )
+        mock_sig_config.is_cross_team_review = Mock(
+            side_effect=lambda repo, user, label: {
+                ("org/repo1", "alice", "sig-network"): True,
+                ("org/repo1", "bob", "sig-compute"): True,
+            }.get((repo, user, label))
+        )
+
+        # Mock database rows with proper webhook payload structure
+        mock_db_rows = [
             {
                 "pr_number": 123,
                 "repository": "org/repo1",
                 "reviewer": "alice",
-                "reviewer_team": "sig-storage",
-                "pr_sig_label": "sig-network",
                 "review_type": "approved",
                 "created_at": datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC),
+                "extracted_pr_sig_label": "sig-network",
             },
             {
                 "pr_number": 456,
                 "repository": "org/repo1",
                 "reviewer": "bob",
-                "reviewer_team": "sig-storage",
-                "pr_sig_label": "sig-compute",
                 "review_type": "changes_requested",
                 "created_at": datetime(2024, 1, 15, 12, 0, 0, tzinfo=UTC),
+                "extracted_pr_sig_label": "sig-compute",
             },
         ]
 
-        # Mock summary data
-        mock_reviewer_team_rows = [
-            {"reviewer_team": "sig-storage", "count": 2},
-        ]
-        mock_pr_team_rows = [
-            {"pr_sig_label": "sig-network", "count": 1},
-            {"pr_sig_label": "sig-compute", "count": 1},
-        ]
-
-        with patch("backend.routes.api.cross_team.db_manager") as mock_db:
-            # Mock count query
-            mock_db.fetchval = AsyncMock(return_value=2)
-            # Mock all fetch queries (data, by_reviewer_team, by_pr_team)
-            mock_db.fetch = AsyncMock(side_effect=[mock_data_rows, mock_reviewer_team_rows, mock_pr_team_rows])
+        with (
+            patch("backend.routes.api.cross_team.db_manager") as mock_db,
+            patch("backend.routes.api.cross_team.sig_teams_config", mock_sig_config),
+        ):
+            mock_db.fetch = AsyncMock(return_value=mock_db_rows)
 
             client = TestClient(app)
             response = client.get(
@@ -2018,33 +2060,139 @@ class TestCrossTeamReviewsEndpoint:
             assert data["pagination"]["total"] == 2
             assert data["pagination"]["page"] == 1
 
-    def test_get_cross_team_reviews_pagination(self) -> None:
-        """Test cross-team reviews pagination parameters."""
-        # Mock data for pagination test
-        mock_data_rows = [
+    def test_get_cross_team_reviews_filters_non_cross_team(self) -> None:
+        """Test that non-cross-team reviews are filtered out."""
+        # Create mock SIG teams config
+        mock_sig_config = Mock()
+        mock_sig_config.is_loaded = True
+        mock_sig_config.get_user_team = Mock(return_value="sig-storage")
+        # Simulate is_cross_team_review returning False for same-team review
+        mock_sig_config.is_cross_team_review = Mock(return_value=False)
+
+        # Mock database rows
+        mock_db_rows = [
             {
-                "pr_number": 789,
-                "repository": "org/repo2",
-                "reviewer": "charlie",
-                "reviewer_team": "sig-network",
-                "pr_sig_label": "sig-storage",
-                "review_type": "commented",
-                "created_at": datetime(2024, 1, 20, 14, 0, 0, tzinfo=UTC),
+                "pr_number": 123,
+                "repository": "org/repo1",
+                "reviewer": "alice",
+                "review_type": "approved",
+                "created_at": datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC),
+                "extracted_pr_sig_label": "sig-storage",  # Same team as reviewer
             },
         ]
 
-        mock_reviewer_team_rows = [
-            {"reviewer_team": "sig-network", "count": 50},
-        ]
-        mock_pr_team_rows = [
-            {"pr_sig_label": "sig-storage", "count": 50},
+        with (
+            patch("backend.routes.api.cross_team.db_manager") as mock_db,
+            patch("backend.routes.api.cross_team.sig_teams_config", mock_sig_config),
+        ):
+            mock_db.fetch = AsyncMock(return_value=mock_db_rows)
+
+            client = TestClient(app)
+            response = client.get("/api/metrics/cross-team-reviews")
+
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+
+            # Should be filtered out because it's not cross-team
+            assert len(data["data"]) == 0
+            assert data["summary"]["total_cross_team_reviews"] == 0
+
+    def test_get_cross_team_reviews_filters_no_sig_label(self) -> None:
+        """Test that reviews without sig labels are filtered out."""
+        # Create mock SIG teams config
+        mock_sig_config = Mock()
+        mock_sig_config.is_loaded = True
+
+        # Mock database rows - PR without sig label
+        mock_db_rows = [
+            {
+                "pr_number": 123,
+                "repository": "org/repo1",
+                "reviewer": "alice",
+                "review_type": "approved",
+                "created_at": datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC),
+                "extracted_pr_sig_label": None,  # No sig label
+            },
         ]
 
-        with patch("backend.routes.api.cross_team.db_manager") as mock_db:
-            # Mock total count of 50 items
-            mock_db.fetchval = AsyncMock(return_value=50)
-            # Mock all fetch queries
-            mock_db.fetch = AsyncMock(side_effect=[mock_data_rows, mock_reviewer_team_rows, mock_pr_team_rows])
+        with (
+            patch("backend.routes.api.cross_team.db_manager") as mock_db,
+            patch("backend.routes.api.cross_team.sig_teams_config", mock_sig_config),
+        ):
+            mock_db.fetch = AsyncMock(return_value=mock_db_rows)
+
+            client = TestClient(app)
+            response = client.get("/api/metrics/cross-team-reviews")
+
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+
+            # Should be filtered out because no sig label
+            assert len(data["data"]) == 0
+            assert data["summary"]["total_cross_team_reviews"] == 0
+
+    def test_get_cross_team_reviews_filters_unknown_reviewer(self) -> None:
+        """Test that reviews from unknown reviewers (not in config) are filtered out."""
+        # Create mock SIG teams config
+        mock_sig_config = Mock()
+        mock_sig_config.is_loaded = True
+        mock_sig_config.get_user_team = Mock(return_value=None)  # Unknown reviewer
+        mock_sig_config.is_cross_team_review = Mock(return_value=None)  # Cannot determine
+
+        # Mock database rows
+        mock_db_rows = [
+            {
+                "pr_number": 123,
+                "repository": "org/repo1",
+                "reviewer": "unknown_user",
+                "review_type": "approved",
+                "created_at": datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC),
+                "extracted_pr_sig_label": "sig-network",
+            },
+        ]
+
+        with (
+            patch("backend.routes.api.cross_team.db_manager") as mock_db,
+            patch("backend.routes.api.cross_team.sig_teams_config", mock_sig_config),
+        ):
+            mock_db.fetch = AsyncMock(return_value=mock_db_rows)
+
+            client = TestClient(app)
+            response = client.get("/api/metrics/cross-team-reviews")
+
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+
+            # Should be filtered out because reviewer not in config
+            assert len(data["data"]) == 0
+            assert data["summary"]["total_cross_team_reviews"] == 0
+
+    def test_get_cross_team_reviews_pagination(self) -> None:
+        """Test cross-team reviews pagination with Python-level filtering."""
+        # Create mock SIG teams config
+        mock_sig_config = Mock()
+        mock_sig_config.is_loaded = True
+        mock_sig_config.get_user_team = Mock(return_value="sig-storage")
+        mock_sig_config.is_cross_team_review = Mock(return_value=True)
+
+        # Create 50 mock rows
+        mock_db_rows = [
+            {
+                "pr_number": i,
+                "repository": "org/repo1",
+                "reviewer": f"user{i}",
+                "review_type": "approved",
+                "created_at": datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC),
+                "extracted_pr_sig_label": "sig-network",
+            }
+            for i in range(50)
+        ]
+
+        with (
+            patch("backend.routes.api.cross_team.db_manager") as mock_db,
+            patch("backend.routes.api.cross_team.sig_teams_config", mock_sig_config),
+        ):
+            mock_db.fetch = AsyncMock(return_value=mock_db_rows)
 
             client = TestClient(app)
             response = client.get(
@@ -2063,11 +2211,43 @@ class TestCrossTeamReviewsEndpoint:
             assert data["pagination"]["has_next"] is True
             assert data["pagination"]["has_prev"] is True
 
+            # Verify we get the right page of data (items 10-19)
+            assert len(data["data"]) == 10
+            assert data["data"][0]["pr_number"] == 10
+
     def test_get_cross_team_reviews_with_pr_team_filter(self) -> None:
         """Test cross-team reviews with PR team filter."""
-        with patch("backend.routes.api.cross_team.db_manager") as mock_db:
-            mock_db.fetchval = AsyncMock(return_value=0)
-            mock_db.fetch = AsyncMock(side_effect=[[], [], []])
+        # Create mock SIG teams config
+        mock_sig_config = Mock()
+        mock_sig_config.is_loaded = True
+        mock_sig_config.get_user_team = Mock(return_value="sig-storage")
+        mock_sig_config.is_cross_team_review = Mock(return_value=True)
+
+        # Mock database rows with different PR teams
+        mock_db_rows = [
+            {
+                "pr_number": 123,
+                "repository": "org/repo1",
+                "reviewer": "alice",
+                "review_type": "approved",
+                "created_at": datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC),
+                "extracted_pr_sig_label": "sig-network",
+            },
+            {
+                "pr_number": 456,
+                "repository": "org/repo1",
+                "reviewer": "bob",
+                "review_type": "approved",
+                "created_at": datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC),
+                "extracted_pr_sig_label": "sig-compute",
+            },
+        ]
+
+        with (
+            patch("backend.routes.api.cross_team.db_manager") as mock_db,
+            patch("backend.routes.api.cross_team.sig_teams_config", mock_sig_config),
+        ):
+            mock_db.fetch = AsyncMock(return_value=mock_db_rows)
 
             client = TestClient(app)
             response = client.get(
@@ -2077,7 +2257,93 @@ class TestCrossTeamReviewsEndpoint:
 
             assert response.status_code == status.HTTP_200_OK
             data = response.json()
-            assert data["pagination"]["total"] == 0
+
+            # Should only include sig-network PR
+            assert data["pagination"]["total"] == 1
+            assert len(data["data"]) == 1
+            assert data["data"][0]["pr_sig_label"] == "sig-network"
+
+    def test_get_cross_team_reviews_with_reviewer_team_filter(self) -> None:
+        """Test cross-team reviews with reviewer team filter."""
+        # Create mock SIG teams config
+        mock_sig_config = Mock()
+        mock_sig_config.is_loaded = True
+        mock_sig_config.get_user_team = Mock(
+            side_effect=lambda repo, user: {
+                ("org/repo1", "alice"): "sig-storage",
+                ("org/repo1", "bob"): "sig-compute",
+            }.get((repo, user))
+        )
+        mock_sig_config.is_cross_team_review = Mock(return_value=True)
+
+        # Mock database rows with different reviewers
+        mock_db_rows = [
+            {
+                "pr_number": 123,
+                "repository": "org/repo1",
+                "reviewer": "alice",
+                "review_type": "approved",
+                "created_at": datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC),
+                "extracted_pr_sig_label": "sig-network",
+            },
+            {
+                "pr_number": 456,
+                "repository": "org/repo1",
+                "reviewer": "bob",
+                "review_type": "approved",
+                "created_at": datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC),
+                "extracted_pr_sig_label": "sig-network",
+            },
+        ]
+
+        with (
+            patch("backend.routes.api.cross_team.db_manager") as mock_db,
+            patch("backend.routes.api.cross_team.sig_teams_config", mock_sig_config),
+        ):
+            mock_db.fetch = AsyncMock(return_value=mock_db_rows)
+
+            client = TestClient(app)
+            response = client.get(
+                "/api/metrics/cross-team-reviews",
+                params={"reviewer_team": "sig-storage"},
+            )
+
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+
+            # Should only include alice (sig-storage reviewer)
+            assert data["pagination"]["total"] == 1
+            assert len(data["data"]) == 1
+            assert data["data"][0]["reviewer"] == "alice"
+            assert data["data"][0]["reviewer_team"] == "sig-storage"
+
+    def test_get_cross_team_reviews_sig_config_not_loaded(self) -> None:
+        """Test cross-team reviews when SIG config not loaded."""
+        # Create mock SIG teams config that's not loaded
+        mock_sig_config = Mock()
+        mock_sig_config.is_loaded = False
+
+        with (
+            patch("backend.routes.api.cross_team.db_manager"),
+            patch("backend.routes.api.cross_team.sig_teams_config", mock_sig_config),
+        ):
+            client = TestClient(app)
+            response = client.get("/api/metrics/cross-team-reviews")
+
+            assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+            assert "SIG teams configuration not loaded" in response.json()["detail"]
+
+    def test_get_cross_team_reviews_sig_config_none(self) -> None:
+        """Test cross-team reviews when SIG config is None."""
+        with (
+            patch("backend.routes.api.cross_team.db_manager"),
+            patch("backend.routes.api.cross_team.sig_teams_config", None),
+        ):
+            client = TestClient(app)
+            response = client.get("/api/metrics/cross-team-reviews")
+
+            assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+            assert "SIG teams configuration not loaded" in response.json()["detail"]
 
     def test_get_cross_team_reviews_database_unavailable(self) -> None:
         """Test cross-team reviews when database unavailable."""
@@ -2090,8 +2356,15 @@ class TestCrossTeamReviewsEndpoint:
 
     def test_get_cross_team_reviews_database_error(self) -> None:
         """Test cross-team reviews handles database errors."""
-        with patch("backend.routes.api.cross_team.db_manager") as mock_db:
-            mock_db.fetchval = AsyncMock(side_effect=asyncpg.PostgresError("Database error"))
+        # Create mock SIG teams config
+        mock_sig_config = Mock()
+        mock_sig_config.is_loaded = True
+
+        with (
+            patch("backend.routes.api.cross_team.db_manager") as mock_db,
+            patch("backend.routes.api.cross_team.sig_teams_config", mock_sig_config),
+        ):
+            mock_db.fetch = AsyncMock(side_effect=asyncpg.PostgresError("Database error"))
 
             client = TestClient(app)
             response = client.get("/api/metrics/cross-team-reviews")
@@ -2101,7 +2374,14 @@ class TestCrossTeamReviewsEndpoint:
 
     def test_get_cross_team_reviews_invalid_datetime(self) -> None:
         """Test cross-team reviews with invalid datetime format."""
-        with patch("backend.routes.api.cross_team.db_manager"):
+        # Create mock SIG teams config
+        mock_sig_config = Mock()
+        mock_sig_config.is_loaded = True
+
+        with (
+            patch("backend.routes.api.cross_team.db_manager"),
+            patch("backend.routes.api.cross_team.sig_teams_config", mock_sig_config),
+        ):
             client = TestClient(app)
             response = client.get(
                 "/api/metrics/cross-team-reviews",
@@ -2113,9 +2393,14 @@ class TestCrossTeamReviewsEndpoint:
 
     def test_get_cross_team_reviews_cancelled_error(self) -> None:
         """Test cross-team reviews handles asyncio.CancelledError."""
+        # Create mock SIG teams config
+        mock_sig_config = Mock()
+        mock_sig_config.is_loaded = True
 
-        with patch("backend.routes.api.cross_team.db_manager") as mock_db:
-            mock_db.fetchval = AsyncMock(side_effect=asyncio.CancelledError)
+        with (
+            patch("backend.routes.api.cross_team.db_manager") as mock_db,
+            patch("backend.routes.api.cross_team.sig_teams_config", mock_sig_config),
+        ):
             mock_db.fetch = AsyncMock(side_effect=asyncio.CancelledError)
 
             client = TestClient(app)

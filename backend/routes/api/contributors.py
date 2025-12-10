@@ -8,6 +8,7 @@ from fastapi import status as http_status
 from simple_logger.logger import get_logger
 
 from backend.database import DatabaseManager
+from backend.sig_teams import SigTeamsConfig
 from backend.utils.contributor_queries import get_pr_creators_count_query, get_pr_creators_data_query
 from backend.utils.datetime_utils import parse_datetime_string
 from backend.utils.query_builders import QueryParams, build_repository_filter, build_time_filter
@@ -20,6 +21,7 @@ router = APIRouter(prefix="/api/metrics")
 
 # Global database manager (set by app.py during lifespan)
 db_manager: DatabaseManager | None = None
+sig_teams_config: SigTeamsConfig | None = None
 
 
 @router.get("/contributors", operation_id="get_metrics_contributors")
@@ -231,43 +233,34 @@ async def get_metrics_contributors(
         offset_placeholder,
     )
 
-    # Count query for PR Reviewers
-    pr_reviewers_count_query = (
-        """
-        SELECT COUNT(DISTINCT sender) as total
-        FROM webhooks
-        WHERE event_type = 'pull_request_review'
-          AND action = 'submitted'
-          AND sender IS DISTINCT FROM pr_author
-          """
-        + time_filter
-        + user_filter_reviewers
-        + exclude_user_filter_reviewers
-        + repository_filter
-    )
+    # Note: pr_reviewers count is computed in Python after processing (see below)
+    # This is because we need to compute cross-team reviews at query time, which requires
+    # fetching all review data and processing in Python.
 
     # Query PR Reviewers (from pull_request_review events)
+    # Note: We fetch ALL review data and compute cross-team in Python to handle historical data
+    # where is_cross_team was NULL. This ensures accurate cross-team counts regardless of when
+    # the data was collected.
     pr_reviewers_query = (
         """
         SELECT
             sender as user,
-            COUNT(*) as total_reviews,
-            COUNT(DISTINCT pr_number) as prs_reviewed,
-            COUNT(*) FILTER (WHERE is_cross_team = TRUE) as cross_team_reviews
+            repository,
+            pr_number,
+            pr_author,
+            (SELECT label_elem->>'name'
+             FROM jsonb_array_elements(payload->'pull_request'->'labels') AS label_elem
+             WHERE label_elem->>'name' LIKE 'sig-%'
+             LIMIT 1) AS pr_sig_label
         FROM webhooks
         WHERE event_type = 'pull_request_review'
-          AND action = 'submitted'
+          AND action != 'dismissed'
           AND sender IS DISTINCT FROM pr_author
           """
         + time_filter
         + user_filter_reviewers
         + exclude_user_filter_reviewers
         + repository_filter
-        + f"""
-        GROUP BY sender
-        ORDER BY total_reviews DESC
-        LIMIT {page_size_placeholder} OFFSET {offset_placeholder}
-        """
     )
 
     # Count query for PR Approvers
@@ -355,29 +348,28 @@ async def get_metrics_contributors(
         # Get all params for data queries
         all_params = params.get_params()
 
-        # Execute all count queries in parallel (params without LIMIT/OFFSET)
+        # Execute count queries in parallel (params without LIMIT/OFFSET)
+        # Note: pr_reviewers_total computed after Python processing (see below)
         (
             pr_creators_total,
-            pr_reviewers_total,
             pr_approvers_total,
             pr_lgtm_total,
         ) = await asyncio.gather(
             db_manager.fetchval(pr_creators_count_query, *params_without_pagination),
-            db_manager.fetchval(pr_reviewers_count_query, *params_without_pagination),
             db_manager.fetchval(pr_approvers_count_query, *params_without_pagination),
             db_manager.fetchval(pr_lgtm_count_query, *params_without_pagination),
         )
 
         # Convert potentially None values to integers with safe defaults
         pr_creators_total = int(pr_creators_total or 0)
-        pr_reviewers_total = int(pr_reviewers_total or 0)
+        # Note: pr_reviewers_total will be recomputed after Python-side processing
         pr_approvers_total = int(pr_approvers_total or 0)
         pr_lgtm_total = int(pr_lgtm_total or 0)
 
         # Execute all data queries in parallel for better performance
-        pr_creators_rows, pr_reviewers_rows, pr_approvers_rows, pr_lgtm_rows = await asyncio.gather(
+        pr_creators_rows, pr_reviewers_raw_rows, pr_approvers_rows, pr_lgtm_rows = await asyncio.gather(
             db_manager.fetch(pr_creators_query, *all_params),
-            db_manager.fetch(pr_reviewers_query, *all_params),
+            db_manager.fetch(pr_reviewers_query, *params_without_pagination),
             db_manager.fetch(pr_approvers_query, *all_params),
             db_manager.fetch(pr_lgtm_query, *all_params),
         )
@@ -394,16 +386,69 @@ async def get_metrics_contributors(
             for row in pr_creators_rows
         ]
 
-        # Format PR reviewers
+        # Process PR reviewers: compute cross-team reviews in Python
+        # Group reviews by reviewer
+        reviewer_stats: dict[str, dict[str, Any]] = {}
+
+        for row in pr_reviewers_raw_rows:
+            reviewer = str(row["user"])
+            repository = str(row["repository"])
+            pr_number = int(row["pr_number"])
+            pr_sig_label = row["pr_sig_label"]
+
+            # Initialize reviewer stats if not exists
+            if reviewer not in reviewer_stats:
+                reviewer_stats[reviewer] = {
+                    "total_reviews": 0,
+                    "prs_reviewed": set(),
+                    "cross_team_reviews": 0,
+                }
+
+            # Count total reviews
+            reviewer_stats[reviewer]["total_reviews"] += 1
+
+            # Track unique PRs (composite key: repository + pr_number)
+            pr_key = f"{repository}#{pr_number}"
+            reviewer_stats[reviewer]["prs_reviewed"].add(pr_key)
+
+            # Compute cross-team status if sig_teams_config is available and PR has sig label
+            if sig_teams_config and sig_teams_config.is_loaded and pr_sig_label:
+                is_cross_team = sig_teams_config.is_cross_team_review(repository, reviewer, str(pr_sig_label))
+                if is_cross_team is True:
+                    reviewer_stats[reviewer]["cross_team_reviews"] += 1
+
+        # Convert to sorted list
+        reviewer_list = [
+            {
+                "user": user,
+                "total_reviews": stats["total_reviews"],
+                "prs_reviewed": len(stats["prs_reviewed"]),
+                "cross_team_reviews": stats["cross_team_reviews"],
+            }
+            for user, stats in reviewer_stats.items()
+        ]
+
+        # Sort by total_reviews descending
+        reviewer_list.sort(key=lambda x: x["total_reviews"], reverse=True)
+
+        # Update total count based on actual unique reviewers (post Python-side filtering)
+        pr_reviewers_total = len(reviewer_list)
+
+        # Apply pagination
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        paginated_reviewers = reviewer_list[start_idx:end_idx]
+
+        # Format PR reviewers with avg_reviews_per_pr
         pr_reviewers = [
             {
-                "user": row["user"],
-                "total_reviews": row["total_reviews"],
-                "prs_reviewed": row["prs_reviewed"],
-                "avg_reviews_per_pr": round(row["total_reviews"] / max(row["prs_reviewed"], 1), 2),
-                "cross_team_reviews": row["cross_team_reviews"],
+                "user": reviewer["user"],
+                "total_reviews": reviewer["total_reviews"],
+                "prs_reviewed": reviewer["prs_reviewed"],
+                "avg_reviews_per_pr": round(reviewer["total_reviews"] / max(reviewer["prs_reviewed"], 1), 2),
+                "cross_team_reviews": reviewer["cross_team_reviews"],
             }
-            for row in pr_reviewers_rows
+            for reviewer in paginated_reviewers
         ]
 
         # Format PR approvers

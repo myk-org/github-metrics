@@ -1,13 +1,16 @@
 import { useState } from "react";
 import { useFilters } from "@/hooks/use-filters";
-import { useTeamDynamics, useCrossTeamReviews } from "@/hooks/use-api";
+import { useTeamDynamics, useCrossTeamReviews, usePRStory } from "@/hooks/use-api";
 import { CollapsibleSection } from "@/components/shared/collapsible-section";
 import { DataTable, type ColumnDef } from "@/components/shared/data-table";
 import { KPICards, type KPIItem } from "@/components/shared/kpi-cards";
 import { DownloadButtons } from "@/components/shared/download-buttons";
 import { PaginationControls } from "@/components/shared/pagination-controls";
 import { UserPRsModal } from "@/components/user-prs";
+import { PRStoryModal } from "@/components/pr-story/pr-story-modal";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { History } from "lucide-react";
 import { formatHours } from "@/utils/time-format";
 import type {
   WorkloadContributor,
@@ -33,6 +36,35 @@ export function TeamDynamicsPage(): React.ReactElement {
     setSelectedUser(username);
     setSelectedCategory(category);
     setIsModalOpen(true);
+  };
+
+  // PR Story modal state
+  const [prStoryModalOpen, setPrStoryModalOpen] = useState(false);
+  const [selectedPR, setSelectedPR] = useState<{ repository: string; number: number } | null>(null);
+
+  // Fetch PR Story when modal is open and PR is selected
+  const {
+    data: prStoryData,
+    isLoading: prStoryLoading,
+    error: prStoryError,
+  } = usePRStory(
+    selectedPR?.repository ?? "",
+    selectedPR?.number ?? 0,
+    prStoryModalOpen && selectedPR !== null
+  );
+
+  // Handlers for PR Story modal
+  const handleOpenPRStory = (repository: string, prNumber: number): void => {
+    setSelectedPR({ repository, number: prNumber });
+    setPrStoryModalOpen(true);
+  };
+
+  const handleClosePRStory = (): void => {
+    setPrStoryModalOpen(false);
+    // Don't clear selectedPR immediately to avoid flashing during close animation
+    setTimeout(() => {
+      setSelectedPR(null);
+    }, 200);
   };
 
   // Fetch team dynamics data with server-side pagination
@@ -274,6 +306,16 @@ export function TeamDynamicsPage(): React.ReactElement {
       key: "pr_number",
       label: "PR#",
       sortable: true,
+      render: (item) => (
+        <a
+          href={`https://github.com/${item.repository}/pull/${String(item.pr_number)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary hover:underline"
+        >
+          #{item.pr_number}
+        </a>
+      ),
       getValue: (item) => item.pr_number,
     },
     {
@@ -324,6 +366,25 @@ export function TeamDynamicsPage(): React.ReactElement {
       sortable: true,
       render: (item) => new Date(item.created_at).toLocaleDateString(),
       getValue: (item) => item.created_at,
+    },
+    {
+      key: "actions",
+      label: "Timeline",
+      sortable: false,
+      render: (item) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleOpenPRStory(item.repository, item.pr_number);
+          }}
+          className="h-8 w-8 p-0"
+          aria-label={`View PR story for #${String(item.pr_number)}`}
+        >
+          <History className="h-4 w-4" />
+        </Button>
+      ),
     },
   ];
 
@@ -510,6 +571,15 @@ export function TeamDynamicsPage(): React.ReactElement {
         onOpenChange={setIsModalOpen}
         username={selectedUser}
         category={selectedCategory}
+      />
+
+      {/* PR Story Modal */}
+      <PRStoryModal
+        isOpen={prStoryModalOpen}
+        onClose={handleClosePRStory}
+        prStory={prStoryData}
+        isLoading={prStoryLoading}
+        error={prStoryError}
       />
     </div>
   );

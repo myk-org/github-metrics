@@ -119,36 +119,53 @@ Export data from production/staging and import to local development database.
 **Usage:**
 
 ```bash
-./dev/export-db.sh <ssh_host> [container_name] [prod_db] [prod_user] [local_container]
+./dev/export-db.sh <ssh_host> [container_name] [prod_db] [prod_user] [prod_password] [local_container] [remote_runtime] [use_sudo]
 ```
 
-**Example:**
+**Parameters:**
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| ssh_host | **required** | SSH host to connect to |
+| container_name | `github-metrics-db` | Container name on remote host |
+| prod_db | `github_metrics` | Production database name |
+| prod_user | `metrics` | Production database user |
+| prod_password | *(empty)* | Database password (or peer/trust auth if empty) |
+| local_container | `github-metrics-dev-db` | Local dev container name |
+| remote_runtime | `docker` | Remote container runtime: `docker` or `podman` |
+| use_sudo | `false` | Use sudo for remote commands: `true` or `false` |
+
+**Examples:**
 
 ```bash
-# Export from production server
-./dev/export-db.sh prod-server.example.com github-metrics-db github_metrics metrics github-metrics-dev-db
+# Basic usage (docker, no sudo, peer/trust auth)
+./dev/export-db.sh prod-server.example.com
+
+# With password authentication
+./dev/export-db.sh prod-server.example.com github-metrics-db github_metrics metrics mypassword
+
+# Using podman with sudo on remote host
+./dev/export-db.sh prod-server.example.com github-metrics-db github_metrics metrics "" github-metrics-dev-db podman true
 ```
 
 **What it does:**
-1. Connects to production server via SSH
-2. Auto-detects container runtime (Docker or Podman)
-3. Exports data from production database (data only, no schema)
-4. Imports data into local development database
-5. Preserves local schema (uses migrations for schema)
+
+1. Connects to remote server via SSH
+2. Exports data from production database (data only, no schema)
+3. Imports data into local development database
+4. Preserves local schema (uses migrations for schema)
 
 **Prerequisites:**
+
 - SSH access to production server
 - Local dev database running (`./dev/run-backend.sh` or `./dev/run-all.sh`)
 - Database migrations completed (automatic on server start)
 
-**Default values:**
-- Container name: `github-metrics-db`
-- Production database: `github_metrics`
-- Production user: `metrics`
-- Local container: `github-metrics-dev-db`
+**Notes:**
 
-**Output:**
-Exported data is temporarily saved to `/tmp/prod_data.sql` and cleaned up after import.
+- Local container runtime is auto-detected (docker preferred, podman fallback)
+- Exported data is temporarily saved to `/tmp/prod_data.sql` and cleaned up after import
+- Use empty string `""` for prod_password to skip password auth when specifying later parameters
 
 ### Database Persistence
 

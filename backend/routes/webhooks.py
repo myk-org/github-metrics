@@ -82,28 +82,6 @@ async def receive_webhook(request: Request) -> dict[str, str]:
     # Calculate processing time
     processing_time_ms = int((time.time() - start_time) * 1000)
 
-    # Detect cross-team reviews
-    is_cross_team: bool | None = None
-    reviewer_team: str | None = None
-    pr_sig_label: str | None = None
-
-    if event_type == "pull_request_review" and sig_teams_config is not None:
-        # Extract sig-* labels from the PR (defensive extraction to handle None values)
-        pull_request = payload.get("pull_request") or {}
-        pr_labels = pull_request.get("labels") or []
-        for label_data in pr_labels:
-            label_name = label_data.get("name", "")
-            if label_name.startswith("sig-"):
-                pr_sig_label = label_name
-                break
-
-        # Get reviewer's team (sender is the reviewer for pull_request_review events)
-        reviewer_team = sig_teams_config.get_user_team(repository, sender)
-
-        # Determine if this is a cross-team review using centralized logic
-        if pr_sig_label is not None:
-            is_cross_team = sig_teams_config.is_cross_team_review(repository, sender, pr_sig_label)
-
     # Store the webhook event
     if metrics_tracker is not None:
         try:
@@ -117,9 +95,6 @@ async def receive_webhook(request: Request) -> dict[str, str]:
                 processing_time_ms=processing_time_ms,
                 status="success",
                 pr_number=pr_number,
-                is_cross_team=is_cross_team,
-                reviewer_team=reviewer_team,
-                pr_sig_label=pr_sig_label,
             )
         except Exception:
             # CRITICAL: Metrics tracking failure indicates potential data loss
