@@ -16,6 +16,12 @@ from backend.utils.query_builders import QueryParams, build_repository_filter, b
 # Module-level logger
 LOGGER = get_logger(name="backend.routes.api.contributors")
 
+# Maximum number of raw review rows to process in-memory for cross-team computation
+# This prevents OOM when fetching unbounded review data for Python-side processing
+# If a query would return more rows, an HTTP 413 error is raised asking the user
+# to narrow their filters (time range, repositories, users)
+MAX_REVIEWERS_RAW_ROWS = 100_000
+
 
 class PrCreatorRow(TypedDict):
     """Individual PR creator statistics."""
@@ -246,6 +252,7 @@ async def get_metrics_contributors(
     - LGTM is separate from approvals in this workflow
 
     **Errors:**
+    - 413: Query would fetch too many review rows (exceeds 100,000). Narrow your filters.
     - 500: Database connection error or metrics server disabled
     """
     if db_manager is None:
@@ -329,10 +336,27 @@ async def get_metrics_contributors(
     # This is because we need to compute cross-team reviews at query time, which requires
     # fetching all review data and processing in Python.
 
+    # Count query for PR Reviewers raw data (before Python processing)
+    # This is used to enforce a safeguard against unbounded queries that could cause OOM
+    pr_reviewers_raw_count_query = (
+        """
+        SELECT COUNT(*) as total
+        FROM webhooks
+        WHERE event_type = 'pull_request_review'
+          AND action != 'dismissed'
+          AND sender IS DISTINCT FROM pr_author
+          """
+        + time_filter
+        + user_filter_reviewers
+        + exclude_user_filter_reviewers
+        + repository_filter
+    )
+
     # Query PR Reviewers (from pull_request_review events)
     # Note: We fetch ALL review data and compute cross-team in Python to handle historical data
     # where is_cross_team was NULL. This ensures accurate cross-team counts regardless of when
     # the data was collected.
+    # SAFEGUARD: We enforce a maximum row count to prevent OOM (checked before query execution)
     pr_reviewers_query = (
         """
         SELECT
@@ -442,30 +466,53 @@ async def get_metrics_contributors(
 
         # Execute count queries in parallel (params without LIMIT/OFFSET)
         # Note: pr_reviewers_total computed after Python processing (see below)
+        # Include pr_reviewers_raw_count to enforce safeguard before fetching data
         (
             pr_creators_total,
+            pr_reviewers_raw_total,
             pr_approvers_total,
             pr_lgtm_total,
         ) = await asyncio.gather(
             db_manager.fetchval(pr_creators_count_query, *params_without_pagination),
+            db_manager.fetchval(pr_reviewers_raw_count_query, *params_without_pagination),
             db_manager.fetchval(pr_approvers_count_query, *params_without_pagination),
             db_manager.fetchval(pr_lgtm_count_query, *params_without_pagination),
         )
 
         # Fail-fast: Check for unexpected NULL counts from database
-        if pr_creators_total is None or pr_approvers_total is None or pr_lgtm_total is None:
+        if (
+            pr_creators_total is None
+            or pr_reviewers_raw_total is None
+            or pr_approvers_total is None
+            or pr_lgtm_total is None
+        ):
             raise ValueError(
                 f"Unexpected NULL count from database: "
                 f"pr_creators_total={pr_creators_total}, "
+                f"pr_reviewers_raw_total={pr_reviewers_raw_total}, "
                 f"pr_approvers_total={pr_approvers_total}, "
                 f"pr_lgtm_total={pr_lgtm_total}"
             )
 
         # Convert to integers (no defensive fallback)
         pr_creators_total = int(pr_creators_total)
+        pr_reviewers_raw_total = int(pr_reviewers_raw_total)
         # Note: pr_reviewers_total will be recomputed after Python-side processing
         pr_approvers_total = int(pr_approvers_total)
         pr_lgtm_total = int(pr_lgtm_total)
+
+        # SAFEGUARD: Prevent OOM by rejecting queries that would fetch too many review rows
+        # Cross-team computation requires fetching all matching reviews into memory
+        # Users should narrow their filters (time range, repositories, users) if they hit this limit
+        if pr_reviewers_raw_total > MAX_REVIEWERS_RAW_ROWS:
+            raise HTTPException(
+                status_code=http_status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=(
+                    f"Query would return {pr_reviewers_raw_total} review rows, "
+                    f"exceeding maximum of {MAX_REVIEWERS_RAW_ROWS}. "
+                    f"Please narrow your filters (time range, repositories, or users) to reduce the result set."
+                ),
+            )
 
         # Execute all data queries in parallel for better performance
         pr_creators_rows, pr_reviewers_raw_rows, pr_approvers_rows, pr_lgtm_rows = await asyncio.gather(

@@ -1003,8 +1003,9 @@ class TestContributorsEndpoint:
 
     def test_get_contributors_success(self) -> None:
         """Test successful contributors retrieval."""
-        # Mock count queries (only 3 now - reviewers count is computed in Python)
+        # Mock count queries (4 now - includes reviewers raw count for OOM safeguard)
         mock_creators_count = 5
+        mock_reviewers_raw_count = 3  # Raw review rows (before Python processing)
         mock_approvers_count = 2
         mock_lgtm_count = 1
 
@@ -1061,9 +1062,14 @@ class TestContributorsEndpoint:
             patch("backend.routes.api.contributors.db_manager") as mock_db,
             patch("backend.routes.api.contributors.sig_teams_config"),
         ):
-            # Mock fetchval for count queries (3 calls - no reviewers count)
+            # Mock fetchval for count queries (4 calls - includes reviewers raw count)
             mock_db.fetchval = AsyncMock(
-                side_effect=[mock_creators_count, mock_approvers_count, mock_lgtm_count],
+                side_effect=[
+                    mock_creators_count,
+                    mock_reviewers_raw_count,
+                    mock_approvers_count,
+                    mock_lgtm_count,
+                ],
             )
             # Mock fetch for data queries (4 calls)
             mock_db.fetch = AsyncMock(
@@ -1099,8 +1105,8 @@ class TestContributorsEndpoint:
             patch("backend.routes.api.contributors.db_manager") as mock_db,
             patch("backend.routes.api.contributors.sig_teams_config"),
         ):
-            # Only 3 fetchval calls now (no reviewers count)
-            mock_db.fetchval = AsyncMock(side_effect=[0, 0, 0])
+            # 4 fetchval calls (includes reviewers raw count)
+            mock_db.fetchval = AsyncMock(side_effect=[0, 0, 0, 0])
             mock_db.fetch = AsyncMock(side_effect=[[], [], [], []])
 
             client = TestClient(app)
@@ -1122,6 +1128,7 @@ class TestContributorsEndpoint:
         """Test contributors pagination."""
         # Mock counts for pagination calculation
         mock_creators_count = 100
+        mock_reviewers_raw_count = 50
         mock_approvers_count = 60
         mock_lgtm_count = 40
 
@@ -1129,9 +1136,14 @@ class TestContributorsEndpoint:
             patch("backend.routes.api.contributors.db_manager") as mock_db,
             patch("backend.routes.api.contributors.sig_teams_config"),
         ):
-            # Only 3 fetchval calls (no reviewers count)
+            # 4 fetchval calls (includes reviewers raw count)
             mock_db.fetchval = AsyncMock(
-                side_effect=[mock_creators_count, mock_approvers_count, mock_lgtm_count],
+                side_effect=[
+                    mock_creators_count,
+                    mock_reviewers_raw_count,
+                    mock_approvers_count,
+                    mock_lgtm_count,
+                ],
             )
             mock_db.fetch = AsyncMock(side_effect=[[], [], [], []])
 
@@ -1178,6 +1190,36 @@ class TestContributorsEndpoint:
             # TestClient may wrap it in concurrent.futures.CancelledError (detect cancellation, not specific type)
             with pytest.raises((asyncio.CancelledError, concurrent.futures.CancelledError)):
                 client.get("/api/metrics/contributors")
+
+    def test_get_contributors_too_many_review_rows(self) -> None:
+        """Test contributors rejects queries with too many review rows (OOM safeguard)."""
+        # Mock count queries - pr_reviewers_raw_count exceeds MAX_REVIEWERS_RAW_ROWS (100,000)
+        mock_creators_count = 5
+        mock_reviewers_raw_count = 150_000  # Exceeds limit
+        mock_approvers_count = 2
+        mock_lgtm_count = 1
+
+        with (
+            patch("backend.routes.api.contributors.db_manager") as mock_db,
+            patch("backend.routes.api.contributors.sig_teams_config"),
+        ):
+            # Mock fetchval for count queries (4 calls now - includes reviewers raw count)
+            mock_db.fetchval = AsyncMock(
+                side_effect=[
+                    mock_creators_count,
+                    mock_reviewers_raw_count,
+                    mock_approvers_count,
+                    mock_lgtm_count,
+                ],
+            )
+
+            client = TestClient(app)
+            response = client.get("/api/metrics/contributors")
+
+            # Should return 413 Request Entity Too Large
+            assert response.status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+            assert "exceeding maximum of 100000" in response.json()["detail"]
+            assert "narrow your filters" in response.json()["detail"].lower()
 
 
 class TestUserPullRequestsEndpoint:
