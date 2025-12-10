@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-## Strict Rules (MANDAORY)
+## Strict Rules (MANDATORY)
 
 ### Linter Suppressions PROHIBITED
 

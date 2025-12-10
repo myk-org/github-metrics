@@ -1,7 +1,7 @@
 """API routes for cross-team review metrics."""
 
 import asyncio
-from typing import Annotated, Any
+from typing import Annotated, TypedDict
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi import status as http_status
@@ -14,6 +14,46 @@ from backend.utils.response_formatters import format_pagination_metadata
 
 # Module-level logger
 LOGGER = get_logger(name="backend.routes.api.cross_team")
+
+
+class CrossTeamReviewRow(TypedDict):
+    """Individual cross-team review record."""
+
+    pr_number: int
+    repository: str
+    reviewer: str
+    reviewer_team: str | None
+    pr_sig_label: str | None
+    review_type: str
+    created_at: str
+
+
+class CrossTeamSummary(TypedDict):
+    """Summary statistics for cross-team reviews."""
+
+    total_cross_team_reviews: int
+    by_reviewer_team: dict[str, int]
+    by_pr_team: dict[str, int]
+
+
+class PaginationInfo(TypedDict):
+    """Pagination metadata."""
+
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    has_next: bool
+    has_prev: bool
+
+
+class CrossTeamResponse(TypedDict):
+    """Response structure for cross-team reviews endpoint."""
+
+    data: list[CrossTeamReviewRow]
+    summary: CrossTeamSummary
+    pagination: PaginationInfo
+
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
 
@@ -32,7 +72,7 @@ async def get_metrics_cross_team_reviews(
     pr_team: str | None = Query(default=None, description="Filter by PR's sig label (e.g., sig-network)"),
     page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(default=25, ge=1, description="Items per page"),
-) -> dict[str, Any]:
+) -> CrossTeamResponse:
     """Get cross-team review metrics.
 
     Analyzes webhook payloads to extract cross-team review activity where reviewers
@@ -219,35 +259,50 @@ async def get_metrics_cross_team_reviews(
         total_count = int(total_count or 0)
 
         # Format data
-        data = [
-            {
-                "pr_number": row["pr_number"],
-                "repository": row["repository"],
-                "reviewer": row["reviewer"],
-                "reviewer_team": row["reviewer_team"],
-                "pr_sig_label": row["pr_sig_label"],
-                "review_type": row["review_type"],
-                "created_at": row["created_at"].isoformat(),
-            }
+        data: list[CrossTeamReviewRow] = [
+            CrossTeamReviewRow(
+                pr_number=row["pr_number"],
+                repository=row["repository"],
+                reviewer=row["reviewer"],
+                reviewer_team=row["reviewer_team"],
+                pr_sig_label=row["pr_sig_label"],
+                review_type=row["review_type"],
+                created_at=row["created_at"].isoformat(),
+            )
             for row in data_rows
         ]
 
-        # Format summary - by reviewer team
-        by_reviewer_team = {row["reviewer_team"]: row["count"] for row in summary_by_reviewer_team_rows}
-
-        # Format summary - by PR team
-        by_pr_team = {row["pr_sig_label"]: row["count"] for row in summary_by_pr_team_rows}
-
-        # Calculate pagination metadata using shared formatter
-        return {
-            "data": data,
-            "summary": {
-                "total_cross_team_reviews": total_count,
-                "by_reviewer_team": by_reviewer_team,
-                "by_pr_team": by_pr_team,
-            },
-            "pagination": format_pagination_metadata(total_count, page, page_size),
+        # Format summary - by reviewer team (normalize NULL to "unknown")
+        by_reviewer_team: dict[str, int] = {
+            (row["reviewer_team"] or "unknown"): row["count"] for row in summary_by_reviewer_team_rows
         }
+
+        # Format summary - by PR team (normalize NULL to "unknown")
+        by_pr_team: dict[str, int] = {
+            (row["pr_sig_label"] or "unknown"): row["count"] for row in summary_by_pr_team_rows
+        }
+
+        # Calculate pagination metadata
+        pagination_metadata = format_pagination_metadata(total_count, page, page_size)
+        pagination: PaginationInfo = PaginationInfo(
+            total=pagination_metadata["total"],
+            page=pagination_metadata["page"],
+            page_size=pagination_metadata["page_size"],
+            total_pages=pagination_metadata["total_pages"],
+            has_next=pagination_metadata["has_next"],
+            has_prev=pagination_metadata["has_prev"],
+        )
+
+        # Build response
+        return CrossTeamResponse(
+            data=data,
+            summary=CrossTeamSummary(
+                total_cross_team_reviews=total_count,
+                by_reviewer_team=by_reviewer_team,
+                by_pr_team=by_pr_team,
+            ),
+            pagination=pagination,
+        )
     except asyncio.CancelledError:
         LOGGER.debug("Cross-team reviews request was cancelled")
         raise
