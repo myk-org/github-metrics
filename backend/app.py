@@ -38,7 +38,7 @@ from backend.routes.api import (
     user_prs,
 )
 from backend.routes.api import webhooks as api_webhooks
-from backend.sig_teams import SigTeamsConfig
+from backend.sig_teams import SigTeamsConfig, get_sig_teams_config
 from backend.utils.security import (
     get_cloudflare_allowlist,
     get_github_allowlist,
@@ -164,7 +164,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     sig_teams_config: SigTeamsConfig | None = None
     if config.sig_teams_config_path:
         if config.sig_teams_config_path.exists():
-            sig_teams_config = SigTeamsConfig()
+            sig_teams_config = get_sig_teams_config()
             sig_teams_config.load_from_file(config.sig_teams_config_path)
             LOGGER.info("Loaded SIG teams config from %s", config.sig_teams_config_path)
         else:

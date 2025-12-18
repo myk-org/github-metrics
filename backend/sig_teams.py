@@ -57,9 +57,6 @@ class SigTeamsConfig:
         # Internal lookup structure: {repository: {username: team_name}}
         # Example: {"myk-org/repo": {"user1": "sig-network", "user2": "sig-storage"}}
         self._user_to_team: dict[str, dict[str, str]] = {}
-
-        # Internal maintainers storage: {repository: [username1, username2, ...]}
-        # Example: {"myk-org/repo": ["maintainer1", "maintainer2"]}
         self._maintainers: dict[str, list[str]] = {}
 
     def load_from_file(self, path: Path) -> None:
@@ -128,7 +125,7 @@ class SigTeamsConfig:
         mapping_count = sum(len(users) for users in self._user_to_team.values())
         maintainers_count = sum(len(maintainers) for maintainers in self._maintainers.values())
         LOGGER.info(
-            "Successfully loaded SIG teams configuration: %s repositories, %s total user-team mappings, %s maintainers",
+            f"Successfully loaded SIG teams configuration: %s repositories, %s total user-team mappings, %s maintainers",
             repo_count,
             mapping_count,
             maintainers_count,
