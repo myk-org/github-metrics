@@ -66,6 +66,7 @@ Thumbs.db
 
 # AI
 .claude
+.claude/plan/
 
 # Dev
 dev/sig-teams.yaml
