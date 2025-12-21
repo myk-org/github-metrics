@@ -39,6 +39,15 @@ const getAlignClass = (align: ColumnDef<unknown>["align"]): string => {
   return "";
 };
 
+const stringifyValue = (val: unknown): string => {
+  if (typeof val === "string") return val;
+  if (typeof val === "number") return String(val);
+  if (typeof val === "boolean") return String(val);
+  if (typeof val === "object") return JSON.stringify(val);
+  // Symbol, function, or other edge cases
+  return "";
+};
+
 export function DataTable<T extends Record<string, unknown>>({
   columns,
   data,
@@ -99,15 +108,6 @@ export function DataTable<T extends Record<string, unknown>>({
       }
 
       // String comparison fallback - handle objects and primitives
-      const stringifyValue = (val: unknown): string => {
-        if (typeof val === "string") return val;
-        if (typeof val === "number") return String(val);
-        if (typeof val === "boolean") return String(val);
-        if (typeof val === "object") return JSON.stringify(val);
-        // Symbol, function, or other edge cases
-        return "";
-      };
-
       const aStr = stringifyValue(aVal);
       const bStr = stringifyValue(bVal);
       const comparison = aStr.localeCompare(bStr);
