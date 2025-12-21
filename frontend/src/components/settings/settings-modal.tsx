@@ -6,26 +6,26 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import type { DateFormat } from "@/context/date-format-context";
 import type { Theme } from "@/context/theme-context";
+import type { SettingsModalProps } from "@/types/settings";
 
-interface SettingsModalProps {
-  readonly open: boolean;
-  readonly onOpenChange: (open: boolean) => void;
-}
+const THEMES: ReadonlyArray<{ readonly value: Theme; readonly label: string }> = [
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+  { value: "system", label: "System" },
+];
+
+const DATE_FORMATS: ReadonlyArray<{
+  readonly value: DateFormat;
+  readonly label: string;
+  readonly description: string;
+}> = [
+  { value: "MM/DD", label: "MM/DD", description: "US" },
+  { value: "DD/MM", label: "DD/MM", description: "International" },
+];
 
 export function SettingsModal({ open, onOpenChange }: SettingsModalProps): React.ReactElement {
   const { theme, setTheme } = useTheme();
   const { dateFormat, setDateFormat } = useDateFormat();
-
-  const themes: Array<{ value: Theme; label: string }> = [
-    { value: "light", label: "Light" },
-    { value: "dark", label: "Dark" },
-    { value: "system", label: "System" },
-  ];
-
-  const dateFormats: Array<{ value: DateFormat; label: string; description: string }> = [
-    { value: "MM/DD", label: "MM/DD", description: "US" },
-    { value: "DD/MM", label: "DD/MM", description: "International" },
-  ];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -45,8 +45,8 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps): React
             </div>
             <div className="space-y-2">
               <Label>Theme</Label>
-              <div className="flex gap-2">
-                {themes.map(({ value, label }) => (
+              <div className="flex gap-2" role="group" aria-label="Theme selection">
+                {THEMES.map(({ value, label }) => (
                   <Button
                     key={value}
                     variant={theme === value ? "default" : "outline"}
@@ -54,6 +54,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps): React
                     onClick={() => {
                       setTheme(value);
                     }}
+                    aria-pressed={theme === value}
                     className="flex-1"
                   >
                     {label}
@@ -73,8 +74,8 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps): React
             </div>
             <div className="space-y-2">
               <Label>Date Format</Label>
-              <div className="flex gap-2">
-                {dateFormats.map(({ value, label, description }) => (
+              <div className="flex gap-2" role="group" aria-label="Date format selection">
+                {DATE_FORMATS.map(({ value, label, description }) => (
                   <Button
                     key={value}
                     variant={dateFormat === value ? "default" : "outline"}
@@ -82,6 +83,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps): React
                     onClick={() => {
                       setDateFormat(value);
                     }}
+                    aria-pressed={dateFormat === value}
                     className="flex-1"
                   >
                     <span className="flex flex-col items-center gap-0.5">
