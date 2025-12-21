@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "./app-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { SettingsTrigger } from "@/components/settings/settings-trigger";
 import { FilterPanel } from "@/components/dashboard/filter-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -185,6 +186,7 @@ export function Layout(): React.ReactElement {
                 </svg>
               </a>
             </Button>
+            <SettingsTrigger />
             <ThemeToggle />
           </div>
         </header>

@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "./components/theme-provider";
+import { DateFormatProvider } from "./components/date-format-provider";
 import "./index.css";
 import App from "./App.tsx";
 
@@ -21,7 +22,9 @@ if (!rootElement) {
 createRoot(rootElement).render(
   <QueryClientProvider client={queryClient}>
     <ThemeProvider defaultTheme="system" storageKey="github-metrics-theme">
-      <App />
+      <DateFormatProvider>
+        <App />
+      </DateFormatProvider>
     </ThemeProvider>
   </QueryClientProvider>
 );

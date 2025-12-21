@@ -22,7 +22,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
-import { formatRelativeTime, formatAbsoluteTime } from "@/utils/time-format";
+import { formatRelativeTime, formatDateTime } from "@/utils/time-format";
+import { useDateFormat } from "@/hooks/use-date-format";
 import type { PRStoryEvent, PREventType } from "@/types/pr-story";
 
 interface PRStoryTimelineProps {
@@ -183,6 +184,7 @@ function TimelineEvent({ event, isLast }: TimelineEventProps): React.ReactElemen
   const config = getEventConfig(event.event_type);
   const Icon = config.icon;
   const [isExpanded, setIsExpanded] = useState(false);
+  const { dateFormat } = useDateFormat();
 
   const hasChildren = event.children && event.children.length > 0;
 
@@ -222,7 +224,7 @@ function TimelineEvent({ event, isLast }: TimelineEventProps): React.ReactElemen
               </span>
             </div>
             <div className="text-xs text-muted-foreground mb-2">
-              {formatAbsoluteTime(event.timestamp)}
+              {formatDateTime(event.timestamp, dateFormat)}
             </div>
 
             <CollapsibleContent>
@@ -262,7 +264,7 @@ function TimelineEvent({ event, isLast }: TimelineEventProps): React.ReactElemen
               </span>
             </div>
             <div className="text-xs text-muted-foreground mb-2">
-              {formatAbsoluteTime(event.timestamp)}
+              {formatDateTime(event.timestamp, dateFormat)}
             </div>
 
             {event.description && (
