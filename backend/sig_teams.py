@@ -57,7 +57,7 @@ class SigTeamsConfig:
         # Internal lookup structure: {repository: {username: team_name}}
         # Example: {"myk-org/repo": {"user1": "sig-network", "user2": "sig-storage"}}
         self._user_to_team: dict[str, dict[str, str]] = {}
-        self._maintainers: dict[str, list[str]] = {}
+        self._maintainers: dict[str, set[str]] = {}
 
     def load_from_file(self, path: Path) -> None:
         """
@@ -139,12 +139,12 @@ class SigTeamsConfig:
             {"org/repo": {"maintainers": ["m1", "m2"], "sig-network": ["user1", "user2"], "sig-storage": ["user3"]}}
         Into:
             {"org/repo": {"user1": "sig-network", "user2": "sig-network", "user3": "sig-storage"}}
-        And stores maintainers separately in self._maintainers:
-            {"org/repo": ["m1", "m2"]}
+        And stores maintainers separately in self._maintainers as sets:
+            {"org/repo": {"m1", "m2"}}
 
         Note:
             The 'maintainers' key is treated specially - users under it are stored in
-            self._maintainers and are NOT added to the user->team mapping.
+            self._maintainers as sets (for O(1) lookups) and are NOT added to the user->team mapping.
 
         Args:
             raw_config: Raw YAML configuration loaded from file
@@ -157,7 +157,7 @@ class SigTeamsConfig:
             ValueError: If configuration structure has invalid values (e.g., duplicate users in teams)
         """
         lookup: dict[str, dict[str, str]] = {}
-        maintainers: dict[str, list[str]] = {}
+        maintainers: dict[str, set[str]] = {}
 
         for repository, teams in raw_config.items():
             if not isinstance(repository, str):
@@ -189,7 +189,7 @@ class SigTeamsConfig:
                     LOGGER.error(msg)
                     raise TypeError(msg)
 
-                # Handle maintainers specially - store separately, skip team assignment
+                # Handle maintainers specially - store separately as set, skip team assignment
                 if team_name == MAINTAINERS_KEY:
                     for user in users:
                         if not isinstance(user, str):
@@ -199,7 +199,7 @@ class SigTeamsConfig:
                             )
                             LOGGER.error(msg)
                             raise TypeError(msg)
-                    maintainers[repository] = list(users)
+                    maintainers[repository] = set(users)
                     continue  # Skip adding maintainers to team mapping
 
                 # Regular team processing - process users for this team
@@ -309,11 +309,15 @@ class SigTeamsConfig:
         Returns:
             List of maintainer usernames for the repository, or empty list if none configured
 
+        Note:
+            Internally maintainers are stored as sets for O(1) lookups, but this method
+            returns a list for API compatibility.
+
         Example:
             maintainers = config.get_maintainers("myk-org/github-metrics")
             # Returns ["maintainer1", "maintainer2"] or [] if no maintainers configured
         """
-        return list(self._maintainers.get(repository, []))
+        return list(self._maintainers.get(repository, set()))
 
     def is_maintainer(self, repository: str, username: str) -> bool:
         """
@@ -326,11 +330,14 @@ class SigTeamsConfig:
         Returns:
             True if user is a maintainer for the repository, False otherwise
 
+        Note:
+            Uses O(1) set membership lookup for optimal performance.
+
         Example:
             is_maint = config.is_maintainer("myk-org/github-metrics", "maintainer1")
-            # Returns True if maintainer1 is in maintainers list, False otherwise
+            # Returns True if maintainer1 is in maintainers set, False otherwise
         """
-        return username in self._maintainers.get(repository, [])
+        return username in self._maintainers.get(repository, set())
 
     def get_all_maintainers(self) -> list[str]:
         """
