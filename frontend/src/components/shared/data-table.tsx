@@ -18,7 +18,7 @@ export interface ColumnDef<T> {
   readonly sortable?: boolean;
   readonly align?: "left" | "center" | "right";
   readonly render?: (item: T) => ReactNode;
-  readonly getValue?: (item: T) => string | number;
+  readonly getValue?: (item: T) => string | number | null | undefined;
 }
 
 interface DataTableProps<T> {
@@ -36,6 +36,15 @@ type SortDirection = "asc" | "desc" | null;
 const getAlignClass = (align: ColumnDef<unknown>["align"]): string => {
   if (align === "right") return "text-right";
   if (align === "center") return "text-center";
+  return "";
+};
+
+const stringifyValue = (val: unknown): string => {
+  if (typeof val === "string") return val;
+  if (typeof val === "number") return String(val);
+  if (typeof val === "boolean") return String(val);
+  if (typeof val === "object") return JSON.stringify(val);
+  // Symbol, function, or other edge cases
   return "";
 };
 
@@ -85,12 +94,22 @@ export function DataTable<T extends Record<string, unknown>>({
       const aVal = getValue(a);
       const bVal = getValue(b);
 
+      // Handle null/undefined - always sort to end
+      const aIsNull = aVal === null || aVal === undefined;
+      const bIsNull = bVal === null || bVal === undefined;
+
+      if (aIsNull && bIsNull) return 0;
+      if (aIsNull) return 1; // a goes to end
+      if (bIsNull) return -1; // b goes to end
+
+      // Numeric comparison
       if (typeof aVal === "number" && typeof bVal === "number") {
         return sortDirection === "asc" ? aVal - bVal : bVal - aVal;
       }
 
-      const aStr = String(aVal);
-      const bStr = String(bVal);
+      // String comparison fallback - handle objects and primitives
+      const aStr = stringifyValue(aVal);
+      const bStr = stringifyValue(bVal);
       const comparison = aStr.localeCompare(bStr);
       return sortDirection === "asc" ? comparison : -comparison;
     });

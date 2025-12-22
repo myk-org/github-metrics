@@ -13,6 +13,8 @@ import {
 import { PRStoryTimeline, EventTypeFilter } from "@/components/pr-story";
 import { useUserPRs, usePRStory } from "@/hooks/use-api";
 import { useFilters } from "@/hooks/use-filters";
+import { useDateFormat } from "@/hooks/use-date-format";
+import { formatDate } from "@/utils/time-format";
 import { cn } from "@/lib/utils";
 import { Search, ChevronLeft, ChevronRight } from "lucide-react";
 import type { UserPR } from "@/types/user-prs";
@@ -44,15 +46,6 @@ function getPRStateBadgeVariant(
   return "outline";
 }
 
-function formatDate(timestamp: string): string {
-  try {
-    const date = new Date(timestamp);
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  } catch {
-    return timestamp;
-  }
-}
-
 interface PRListItemProps {
   readonly pr: UserPR;
   readonly isSelected: boolean;
@@ -60,6 +53,7 @@ interface PRListItemProps {
 }
 
 function PRListItem({ pr, isSelected, onClick }: PRListItemProps): React.ReactElement {
+  const { dateFormat } = useDateFormat();
   const stateLabel = pr.merged ? "merged" : pr.state;
   const badgeVariant = getPRStateBadgeVariant(pr.state, pr.merged);
 
@@ -84,7 +78,7 @@ function PRListItem({ pr, isSelected, onClick }: PRListItemProps): React.ReactEl
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className="font-mono">{pr.repository}</span>
             <span>•</span>
-            <span>{formatDate(pr.created_at)}</span>
+            <span>{formatDate(pr.created_at, dateFormat)}</span>
           </div>
         </div>
         <div className="flex-shrink-0">

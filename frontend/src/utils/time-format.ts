@@ -1,3 +1,5 @@
+import type { DateFormat } from "@/context/date-format-context";
+
 /**
  * Format hours into human-readable format.
  *
@@ -81,6 +83,35 @@ export function formatRelativeTime(timestamp: string): string {
 export function formatAbsoluteTime(timestamp: string): string {
   const date = new Date(timestamp);
   return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+/**
+ * Format timestamp into date string respecting user's date format preference.
+ */
+export function formatDate(timestamp: string, dateFormat: DateFormat = "MM/DD"): string {
+  const date = new Date(timestamp);
+  const locale = dateFormat === "DD/MM" ? "en-GB" : "en-US";
+  return date.toLocaleDateString(locale, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+/**
+ * Format timestamp into date+time string respecting user's date format preference.
+ */
+export function formatDateTime(timestamp: string, dateFormat: DateFormat = "MM/DD"): string {
+  const date = new Date(timestamp);
+  const locale = dateFormat === "DD/MM" ? "en-GB" : "en-US";
+  return date.toLocaleString(locale, {
     month: "short",
     day: "numeric",
     year: "numeric",

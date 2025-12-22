@@ -2,11 +2,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFilters } from "@/hooks/use-filters";
 import { useTrends } from "@/hooks/use-api";
+import { useDateFormat } from "@/hooks/use-date-format";
+import { formatDateTime } from "@/utils/time-format";
 import { TrendingUp } from "lucide-react";
 
 export function TrendsPage(): React.ReactElement {
   const { filters } = useFilters();
   const { data, isLoading, error } = useTrends(filters.timeRange);
+  const { dateFormat } = useDateFormat();
 
   if (error) {
     return <div className="text-destructive">Failed to load trends: {error.message}</div>;
@@ -33,7 +36,7 @@ export function TrendsPage(): React.ReactElement {
                   className="flex justify-between items-center py-2 border-b last:border-0"
                 >
                   <span className="text-sm text-muted-foreground">
-                    {new Date(point.timestamp).toLocaleString()}
+                    {formatDateTime(point.timestamp, dateFormat)}
                   </span>
                   <span className="font-medium">{point.count} events</span>
                 </div>

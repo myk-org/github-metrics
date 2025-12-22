@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useFilters } from "@/hooks/use-filters";
+import { useDateFormat } from "@/hooks/use-date-format";
 import { useTeamDynamics, useCrossTeamReviews, usePRStory, useExcludeUsers } from "@/hooks/use-api";
 import { CollapsibleSection } from "@/components/shared/collapsible-section";
 import { DataTable, type ColumnDef } from "@/components/shared/data-table";
@@ -11,7 +12,7 @@ import { PRStoryModal } from "@/components/pr-story/pr-story-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { History } from "lucide-react";
-import { formatHours } from "@/utils/time-format";
+import { formatHours, formatDate } from "@/utils/time-format";
 import type {
   WorkloadContributor,
   ReviewerEfficiency,
@@ -22,6 +23,7 @@ import type { CrossTeamReviewRow } from "@/types/cross-team";
 
 export function TeamDynamicsPage(): React.ReactElement {
   const { filters } = useFilters();
+  const { dateFormat } = useDateFormat();
   // Single page state for all sections since API returns all team dynamics data in one call
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -378,7 +380,7 @@ export function TeamDynamicsPage(): React.ReactElement {
       key: "created_at",
       label: "Date",
       sortable: true,
-      render: (item) => new Date(item.created_at).toLocaleDateString(),
+      render: (item) => formatDate(item.created_at, dateFormat),
       getValue: (item) => item.created_at,
     },
     {

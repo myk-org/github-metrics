@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useFilters } from "@/hooks/use-filters";
+import { useDateFormat } from "@/hooks/use-date-format";
 import {
   useRepositories,
   useWebhooks,
@@ -15,12 +16,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PRStoryModal } from "@/components/pr-story";
 import { History } from "lucide-react";
+import { formatDate, formatDateTime } from "@/utils/time-format";
 import type { Repository } from "@/types/repositories";
 import type { WebhookEvent } from "@/types/webhooks";
 import type { UserPR } from "@/types/user-prs";
 
 export function OverviewPage(): React.ReactElement {
   const { filters } = useFilters();
+  const { dateFormat } = useDateFormat();
   const [reposPage, setReposPage] = useState(1);
   const [reposPageSize, setReposPageSize] = useState(25);
   const [webhookPage, setWebhookPage] = useState(1);
@@ -197,7 +200,7 @@ export function OverviewPage(): React.ReactElement {
       key: "created_at",
       label: "Time",
       sortable: true,
-      render: (item) => new Date(item.created_at).toLocaleString(),
+      render: (item) => formatDateTime(item.created_at, dateFormat),
     },
     {
       key: "repository",
@@ -282,13 +285,13 @@ export function OverviewPage(): React.ReactElement {
       key: "created_at",
       label: "Created",
       sortable: true,
-      render: (item) => new Date(item.created_at).toLocaleDateString(),
+      render: (item) => formatDate(item.created_at, dateFormat),
     },
     {
       key: "updated_at",
       label: "Updated",
       sortable: true,
-      render: (item) => new Date(item.updated_at).toLocaleDateString(),
+      render: (item) => formatDate(item.updated_at, dateFormat),
     },
     {
       key: "commits_count",
