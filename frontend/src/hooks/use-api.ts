@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import type { MetricsSummary, TrendDataPoint, TurnaroundMetrics } from "@/types/metrics";
 import type { WebhookEvent } from "@/types/webhooks";
 import type { ContributorMetrics } from "@/types/contributors";
@@ -8,6 +9,7 @@ import type { UserPRsResponse } from "@/types/user-prs";
 import type { TeamDynamicsResponse } from "@/types/team-dynamics";
 import type { PRStory } from "@/types/pr-story";
 import type { CrossTeamData } from "@/types/cross-team";
+import type { MaintainersResponse } from "@/types/maintainers";
 
 const API_BASE = "/api/metrics";
 
@@ -166,6 +168,7 @@ export const queryKeys = {
       page,
       pageSize,
     ] as const,
+  maintainers: () => ["metrics", "maintainers"] as const,
 };
 
 interface WebhookParams {
@@ -219,7 +222,7 @@ function buildFilterParams(timeRange?: TimeRange, filters?: FilterParams): URLSe
 }
 
 // Hooks
-export function useSummary(timeRange?: TimeRange, filters?: FilterParams) {
+export function useSummary(timeRange?: TimeRange, filters?: FilterParams, enabled: boolean = true) {
   return useQuery<MetricsSummary>({
     queryKey: queryKeys.summary(
       timeRange,
@@ -228,6 +231,7 @@ export function useSummary(timeRange?: TimeRange, filters?: FilterParams) {
       filters?.exclude_users
     ),
     queryFn: () => fetchApi<MetricsSummary>("/summary", buildFilterParams(timeRange, filters)),
+    enabled,
   });
 }
 
@@ -252,7 +256,8 @@ export function useRepositories(
   timeRange?: TimeRange,
   filters?: FilterParams,
   page: number = 1,
-  pageSize: number = 10
+  pageSize: number = 10,
+  enabled: boolean = true
 ) {
   const params = buildFilterParams(timeRange, filters);
   params.set("page", String(page));
@@ -268,6 +273,7 @@ export function useRepositories(
       pageSize
     ),
     queryFn: () => fetchApi<RepositoriesResponse>("/repositories", params),
+    enabled,
   });
 }
 
@@ -275,7 +281,8 @@ export function useContributors(
   timeRange?: TimeRange,
   filters?: FilterParams,
   page: number = 1,
-  pageSize: number = 10
+  pageSize: number = 10,
+  enabled: boolean = true
 ) {
   const params = buildFilterParams(timeRange, filters);
   params.set("page", String(page));
@@ -291,6 +298,7 @@ export function useContributors(
       pageSize
     ),
     queryFn: () => fetchApi<ContributorMetrics>("/contributors", params),
+    enabled,
   });
 }
 
@@ -304,7 +312,11 @@ export function useTrends(timeRange?: TimeRange, bucket: string = "hour") {
   });
 }
 
-export function useTurnaround(timeRange?: TimeRange, filters?: FilterParams) {
+export function useTurnaround(
+  timeRange?: TimeRange,
+  filters?: FilterParams,
+  enabled: boolean = true
+) {
   return useQuery<TurnaroundMetrics>({
     queryKey: queryKeys.turnaround(
       timeRange,
@@ -314,10 +326,11 @@ export function useTurnaround(timeRange?: TimeRange, filters?: FilterParams) {
     ),
     queryFn: () =>
       fetchApi<TurnaroundMetrics>("/turnaround", buildFilterParams(timeRange, filters)),
+    enabled,
   });
 }
 
-export function useUserPRs(params?: UserPRParams) {
+export function useUserPRs(params?: UserPRParams, enabled: boolean = true) {
   // Build URLSearchParams with proper array serialization
   const urlParams = new URLSearchParams();
 
@@ -335,6 +348,7 @@ export function useUserPRs(params?: UserPRParams) {
   return useQuery<UserPRsResponse>({
     queryKey: queryKeys.userPrs(params),
     queryFn: () => fetchApi<UserPRsResponse>("/user-prs", urlParams),
+    enabled,
   });
 }
 
@@ -342,7 +356,8 @@ export function useTeamDynamics(
   timeRange?: TimeRange,
   filters?: FilterParams,
   page: number = 1,
-  pageSize: number = 25
+  pageSize: number = 25,
+  enabled: boolean = true
 ) {
   const params = buildFilterParams(timeRange, filters);
   params.set("page", String(page));
@@ -358,6 +373,7 @@ export function useTeamDynamics(
       pageSize
     ),
     queryFn: () => fetchApi<TeamDynamicsResponse>("/team-dynamics", params),
+    enabled,
   });
 }
 
@@ -374,7 +390,8 @@ export function useCrossTeamReviews(
   timeRange?: TimeRange,
   filters?: FilterParams,
   page: number = 1,
-  pageSize: number = 25
+  pageSize: number = 25,
+  enabled: boolean = true
 ) {
   const params = buildFilterParams(timeRange, filters);
   params.set("page", String(page));
@@ -390,5 +407,51 @@ export function useCrossTeamReviews(
       pageSize
     ),
     queryFn: () => fetchApi<CrossTeamData>("/cross-team-reviews", params),
+    enabled,
   });
+}
+
+export function useMaintainers() {
+  return useQuery<MaintainersResponse>({
+    queryKey: queryKeys.maintainers(),
+    queryFn: () => fetchApi<MaintainersResponse>("/maintainers"),
+    staleTime: 1000 * 60 * 5, // 5 minutes - maintainers don't change often
+  });
+}
+
+/**
+ * Helper hook to merge exclude_users with maintainers when excludeMaintainers is true.
+ * This ensures that maintainers are filtered out from API results when requested.
+ *
+ * @param excludeUsers - The base list of users to exclude
+ * @param excludeMaintainers - Whether to also exclude all maintainers
+ * @returns Object with combined list of users to exclude (deduplicated) and loading state
+ */
+export function useExcludeUsers(
+  excludeUsers: readonly string[],
+  excludeMaintainers: boolean
+): { readonly users: readonly string[]; readonly isLoading: boolean } {
+  const { data: maintainersData, isLoading: isMaintainersLoading } = useMaintainers();
+
+  const users = useMemo(() => {
+    // If not excluding maintainers, just return the base exclude list
+    if (!excludeMaintainers) {
+      return excludeUsers;
+    }
+
+    // If excluding maintainers but data not loaded yet, return empty array
+    // The isLoading flag will prevent dependent queries from firing
+    if (!maintainersData) {
+      return [];
+    }
+
+    // Merge and deduplicate
+    const combined = new Set([...excludeUsers, ...maintainersData.all_maintainers]);
+    return Array.from(combined);
+  }, [excludeUsers, excludeMaintainers, maintainersData]);
+
+  // Only show loading when we're trying to exclude maintainers but data isn't ready
+  const isLoading = excludeMaintainers && isMaintainersLoading;
+
+  return { users, isLoading };
 }

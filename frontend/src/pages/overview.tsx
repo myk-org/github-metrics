@@ -1,7 +1,13 @@
 import { useState, useMemo, useEffect } from "react";
 import { useFilters } from "@/hooks/use-filters";
 import { useDateFormat } from "@/hooks/use-date-format";
-import { useRepositories, useWebhooks, useUserPRs, usePRStory } from "@/hooks/use-api";
+import {
+  useRepositories,
+  useWebhooks,
+  useUserPRs,
+  usePRStory,
+  useExcludeUsers,
+} from "@/hooks/use-api";
 import { CollapsibleSection } from "@/components/shared/collapsible-section";
 import { DataTable, type ColumnDef } from "@/components/shared/data-table";
 import { DownloadButtons } from "@/components/shared/download-buttons";
@@ -92,17 +98,27 @@ export function OverviewPage(): React.ReactElement {
     }
   }, [prsExpanded]);
 
+  // Combine exclude_users with maintainers if excludeMaintainers is enabled
+  const { users: effectiveExcludeUsers, isLoading: isExcludeUsersLoading } = useExcludeUsers(
+    filters.excludeUsers,
+    filters.excludeMaintainers
+  );
+
   // Fetch data
-  const { data: repositoriesData, isLoading: reposLoading } = useRepositories(
+  const { data: repositoriesData, isLoading: reposDataLoading } = useRepositories(
     filters.timeRange,
     {
       repositories: filters.repositories,
       users: filters.users,
-      exclude_users: filters.excludeUsers,
+      exclude_users: effectiveExcludeUsers,
     },
     reposPage,
-    reposPageSize
+    reposPageSize,
+    !isExcludeUsersLoading
   );
+
+  // Combine loading states
+  const reposLoading = reposDataLoading || isExcludeUsersLoading;
 
   const { data: webhookData, isLoading: webhooksLoading } = useWebhooks({
     ...(filters.timeRange.start_time && { start_time: filters.timeRange.start_time }),
@@ -113,15 +129,18 @@ export function OverviewPage(): React.ReactElement {
     ...(filters.repositories.length === 1 ? { repository: filters.repositories[0] } : {}),
   });
 
-  const { data: userPRsData, isLoading: prsLoading } = useUserPRs({
+  const { data: userPRsData, isLoading: prsDataLoading } = useUserPRs({
     ...(filters.timeRange.start_time && { start_time: filters.timeRange.start_time }),
     ...(filters.timeRange.end_time && { end_time: filters.timeRange.end_time }),
     page: prPage,
     page_size: prPageSize,
     users: filters.users,
-    exclude_users: filters.excludeUsers,
+    exclude_users: effectiveExcludeUsers,
     repositories: filters.repositories,
   });
+
+  // Combine loading states
+  const prsLoading = prsDataLoading || isExcludeUsersLoading;
 
   // Calculate percentages for repositories
   const repositoriesWithPercentages = useMemo(() => {

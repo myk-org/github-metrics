@@ -7,6 +7,7 @@ export interface FilterState {
   readonly repositories: readonly string[];
   readonly users: readonly string[];
   readonly excludeUsers: readonly string[];
+  readonly excludeMaintainers: boolean;
 }
 
 export interface FilterContextType {
@@ -15,6 +16,7 @@ export interface FilterContextType {
   readonly setRepositories: (repos: readonly string[]) => void;
   readonly setUsers: (users: readonly string[]) => void;
   readonly setExcludeUsers: (users: readonly string[]) => void;
+  readonly setExcludeMaintainers: (exclude: boolean) => void;
   readonly resetFilters: () => void;
 }
 

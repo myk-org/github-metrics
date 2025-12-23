@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Outlet } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { useRepositories, useContributors, useSummary } from "@/hooks/use-api";
+import { useRepositories, useContributors, useSummary, useExcludeUsers } from "@/hooks/use-api";
 import { useFilters } from "@/hooks/use-filters";
 
 // Format trend indicator with arrow and percentage
@@ -35,12 +35,21 @@ export function Layout(): React.ReactElement {
   const queryClient = useQueryClient();
   const { filters } = useFilters();
 
+  // Combine exclude_users with maintainers if excludeMaintainers is enabled
+  const { users: effectiveExcludeUsers, isLoading: isExcludeUsersLoading } = useExcludeUsers(
+    filters.excludeUsers,
+    filters.excludeMaintainers
+  );
+
   // Fetch summary data for the tooltip
-  const { data: summaryData, isLoading: isSummaryLoading } = useSummary(filters.timeRange, {
+  const { data: summaryData, isLoading: isSummaryDataLoading } = useSummary(filters.timeRange, {
     repositories: filters.repositories,
     users: filters.users,
-    exclude_users: filters.excludeUsers,
+    exclude_users: effectiveExcludeUsers,
   });
+
+  // Combine loading states - show loading if either summary data or exclude users are loading
+  const isSummaryLoading = isSummaryDataLoading || isExcludeUsersLoading;
 
   // Fetch repositories and contributors for filter suggestions
   // Use a large page size to get all available options

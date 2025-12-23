@@ -2736,3 +2736,83 @@ class TestReviewTurnaroundEndpoint:
             # TestClient may wrap it in concurrent.futures.CancelledError (detect cancellation, not specific type)
             with pytest.raises((asyncio.CancelledError, concurrent.futures.CancelledError)):
                 client.get("/api/metrics/turnaround")
+
+
+class TestMaintainersEndpoint:
+    """Tests for /api/metrics/maintainers endpoint.
+
+    This endpoint returns repository maintainers configured in SIG teams YAML.
+    Used by frontend to exclude maintainers from contributor metrics when the
+    'Exclude Maintainers' filter is enabled.
+
+    Response format:
+        {
+            "maintainers": {"org/repo": ["user1", "user2"]},
+            "all_maintainers": ["user1", "user2", ...]
+        }
+    """
+
+    def test_get_maintainers_success(self) -> None:
+        """Test successful retrieval of maintainers."""
+        # Create mock SIG teams config with maintainers
+        mock_sig_config = Mock()
+        mock_sig_config.is_loaded = True
+        mock_sig_config.repositories = ["org/repo1", "org/repo2"]
+        mock_sig_config.get_maintainers = Mock(
+            side_effect=lambda repo: {
+                "org/repo1": ["maintainer1", "maintainer2"],
+                "org/repo2": ["maintainer3"],
+            }.get(repo, [])
+        )
+        mock_sig_config.get_all_maintainers = Mock(return_value=["maintainer1", "maintainer2", "maintainer3"])
+
+        with patch("backend.routes.api.maintainers.get_sig_teams_config", return_value=mock_sig_config):
+            client = TestClient(app)
+            response = client.get("/api/metrics/maintainers")
+
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+
+            # Verify response structure
+            assert "maintainers" in data
+            assert "all_maintainers" in data
+
+            # Verify maintainers per repository
+            assert data["maintainers"]["org/repo1"] == ["maintainer1", "maintainer2"]
+            assert data["maintainers"]["org/repo2"] == ["maintainer3"]
+
+            # Verify all_maintainers list
+            assert data["all_maintainers"] == ["maintainer1", "maintainer2", "maintainer3"]
+
+    def test_get_maintainers_empty_repositories(self) -> None:
+        """Test maintainers endpoint with repositories but no maintainers."""
+        # Create mock SIG teams config with repositories but no maintainers
+        mock_sig_config = Mock()
+        mock_sig_config.is_loaded = True
+        mock_sig_config.repositories = ["org/repo1", "org/repo2"]
+        mock_sig_config.get_maintainers = Mock(return_value=[])
+        mock_sig_config.get_all_maintainers = Mock(return_value=[])
+
+        with patch("backend.routes.api.maintainers.get_sig_teams_config", return_value=mock_sig_config):
+            client = TestClient(app)
+            response = client.get("/api/metrics/maintainers")
+
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+
+            # Should return empty structures
+            assert data["maintainers"] == {}
+            assert data["all_maintainers"] == []
+
+    def test_get_maintainers_config_not_loaded(self) -> None:
+        """Test maintainers endpoint when SIG config not loaded."""
+        # Create mock SIG teams config that's not loaded
+        mock_sig_config = Mock()
+        mock_sig_config.is_loaded = False
+
+        with patch("backend.routes.api.maintainers.get_sig_teams_config", return_value=mock_sig_config):
+            client = TestClient(app)
+            response = client.get("/api/metrics/maintainers")
+
+            assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+            assert "SIG teams configuration not loaded" in response.json()["detail"]

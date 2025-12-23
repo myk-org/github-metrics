@@ -88,6 +88,8 @@ async def get_metrics_cross_team_reviews(
     ),
     end_time: str | None = Query(default=None, description="End time in ISO 8601 format (e.g., 2024-01-31T23:59:59Z)"),
     repositories: Annotated[list[str] | None, Query(description="Filter by repositories (org/repo format)")] = None,
+    users: Annotated[list[str] | None, Query(description="Filter by reviewer usernames (include)")] = None,
+    exclude_users: Annotated[list[str] | None, Query(description="Exclude reviewers from results")] = None,
     reviewer_team: str | None = Query(default=None, description="Filter by reviewer's team (e.g., sig-storage)"),
     pr_team: str | None = Query(default=None, description="Filter by PR's sig label (e.g., sig-network)"),
     page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
@@ -110,6 +112,8 @@ async def get_metrics_cross_team_reviews(
     - `start_time` (str, optional): Start of time range in ISO 8601 format
     - `end_time` (str, optional): End of time range in ISO 8601 format
     - `repositories` (list[str], optional): Filter by repositories (org/repo format)
+    - `users` (list[str], optional): Filter by reviewer usernames to include
+    - `exclude_users` (list[str], optional): Exclude reviewers from results
     - `reviewer_team` (str, optional): Filter by reviewer's team (e.g., sig-storage)
     - `pr_team` (str, optional): Filter by PR's sig label (e.g., sig-network)
     - `page` (int, default=1): Page number (1-indexed)
@@ -164,6 +168,8 @@ async def get_metrics_cross_team_reviews(
             status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="SIG teams configuration not loaded - cross-team tracking unavailable",
         )
+
+    LOGGER.info("Cross-team reviews endpoint called with exclude_users=%s", exclude_users)
 
     start_datetime = parse_datetime_string(start_time, "start_time")
     end_datetime = parse_datetime_string(end_time, "end_time")
@@ -234,6 +240,14 @@ async def get_metrics_cross_team_reviews(
 
             # Skip if not cross-team (includes None - reviewer not in config)
             if is_cross_team is not True:
+                continue
+
+            # Apply users filter (include only specified reviewers)
+            if users and reviewer not in users:
+                continue
+
+            # Apply exclude_users filter (exclude specified reviewers)
+            if exclude_users and reviewer in exclude_users:
                 continue
 
             # Apply reviewer_team filter (post-SQL filtering)

@@ -419,3 +419,242 @@ class TestSigTeamsConfig:
 
         # Clean up
         _reset_sig_teams_config_for_testing()
+
+    def test_get_maintainers_returns_list(self, tmp_path: Path) -> None:
+        """Test get_maintainers returns correct list of maintainers."""
+        yaml_content = {
+            "org/repo1": {
+                "maintainers": ["maintainer1", "maintainer2"],
+                "sig-network": ["user1"],
+            },
+        }
+
+        config_file = tmp_path / "maintainers.yaml"
+        with config_file.open("w") as f:
+            yaml.dump(yaml_content, f)
+
+        config = SigTeamsConfig()
+        config.load_from_file(config_file)
+
+        # Test get_maintainers returns correct list
+        maintainers = config.get_maintainers("org/repo1")
+        assert isinstance(maintainers, list)
+        assert len(maintainers) == 2
+        assert "maintainer1" in maintainers
+        assert "maintainer2" in maintainers
+
+    def test_get_maintainers_empty_for_no_maintainers(self, tmp_path: Path) -> None:
+        """Test empty list when repository has no maintainers key."""
+        yaml_content = {
+            "org/repo1": {
+                "sig-network": ["user1"],
+            },
+        }
+
+        config_file = tmp_path / "no_maintainers.yaml"
+        with config_file.open("w") as f:
+            yaml.dump(yaml_content, f)
+
+        config = SigTeamsConfig()
+        config.load_from_file(config_file)
+
+        # Repository with no maintainers should return empty list
+        maintainers = config.get_maintainers("org/repo1")
+        assert isinstance(maintainers, list)
+        assert len(maintainers) == 0
+
+        # Unknown repository should also return empty list
+        maintainers = config.get_maintainers("org/unknown-repo")
+        assert isinstance(maintainers, list)
+        assert len(maintainers) == 0
+
+    def test_is_maintainer_returns_true(self, tmp_path: Path) -> None:
+        """Test is_maintainer returns True for users in maintainers list."""
+        yaml_content = {
+            "org/repo1": {
+                "maintainers": ["maintainer1", "maintainer2"],
+                "sig-network": ["user1"],
+            },
+        }
+
+        config_file = tmp_path / "is_maintainer.yaml"
+        with config_file.open("w") as f:
+            yaml.dump(yaml_content, f)
+
+        config = SigTeamsConfig()
+        config.load_from_file(config_file)
+
+        # Test is_maintainer returns True for maintainers
+        assert config.is_maintainer("org/repo1", "maintainer1") is True
+        assert config.is_maintainer("org/repo1", "maintainer2") is True
+
+    def test_is_maintainer_returns_false(self, tmp_path: Path) -> None:
+        """Test is_maintainer returns False for users not in maintainers list."""
+        yaml_content = {
+            "org/repo1": {
+                "maintainers": ["maintainer1"],
+                "sig-network": ["user1"],
+            },
+        }
+
+        config_file = tmp_path / "not_maintainer.yaml"
+        with config_file.open("w") as f:
+            yaml.dump(yaml_content, f)
+
+        config = SigTeamsConfig()
+        config.load_from_file(config_file)
+
+        # Test is_maintainer returns False for non-maintainers
+        assert config.is_maintainer("org/repo1", "user1") is False
+        assert config.is_maintainer("org/repo1", "unknown_user") is False
+
+        # Unknown repository should return False
+        assert config.is_maintainer("org/unknown-repo", "maintainer1") is False
+
+    def test_get_all_maintainers_deduplicates(self, tmp_path: Path) -> None:
+        """Test get_all_maintainers returns sorted deduplicated list across all repos."""
+        yaml_content = {
+            "org/repo1": {
+                "maintainers": ["maintainer1", "maintainer2"],
+                "sig-network": ["user1"],
+            },
+            "org/repo2": {
+                "maintainers": ["maintainer2", "maintainer3"],
+                "sig-storage": ["user2"],
+            },
+            "org/repo3": {
+                "sig-compute": ["user3"],
+            },
+        }
+
+        config_file = tmp_path / "all_maintainers.yaml"
+        with config_file.open("w") as f:
+            yaml.dump(yaml_content, f)
+
+        config = SigTeamsConfig()
+        config.load_from_file(config_file)
+
+        # Test get_all_maintainers returns deduplicated sorted list
+        all_maintainers = config.get_all_maintainers()
+        assert isinstance(all_maintainers, list)
+        assert len(all_maintainers) == 3
+        assert all_maintainers == ["maintainer1", "maintainer2", "maintainer3"]  # Sorted
+
+    def test_maintainers_not_added_to_team_lookup(self, tmp_path: Path) -> None:
+        """Test maintainers are NOT included in user_to_team mapping."""
+        yaml_content = {
+            "org/repo1": {
+                "maintainers": ["maintainer1", "maintainer2"],
+                "sig-network": ["user1"],
+            },
+        }
+
+        config_file = tmp_path / "maintainer_team_lookup.yaml"
+        with config_file.open("w") as f:
+            yaml.dump(yaml_content, f)
+
+        config = SigTeamsConfig()
+        config.load_from_file(config_file)
+
+        # Maintainers should NOT be in team lookup
+        assert config.get_user_team("org/repo1", "maintainer1") is None
+        assert config.get_user_team("org/repo1", "maintainer2") is None
+
+        # Regular team member should be in team lookup
+        assert config.get_user_team("org/repo1", "user1") == "sig-network"
+
+    def test_user_can_be_both_maintainer_and_team_member(self, tmp_path: Path) -> None:
+        """Test a user can be both maintainer and belong to a team."""
+        yaml_content = {
+            "org/repo1": {
+                "maintainers": ["user1"],
+                "sig-network": ["user1"],
+            },
+        }
+
+        config_file = tmp_path / "dual_role.yaml"
+        with config_file.open("w") as f:
+            yaml.dump(yaml_content, f)
+
+        config = SigTeamsConfig()
+        config.load_from_file(config_file)
+
+        # user1 should be both maintainer and team member
+        assert config.is_maintainer("org/repo1", "user1") is True
+        assert config.get_user_team("org/repo1", "user1") == "sig-network"
+
+    def test_dual_role_user_appears_in_both_lists_independently(self, tmp_path: Path) -> None:
+        """Test that a user who is both maintainer and team member appears in both lists."""
+        yaml_content = {
+            "org/repo1": {
+                "maintainers": ["shared_user", "only_maintainer"],
+                "sig-network": ["shared_user", "only_team_member"],
+            },
+        }
+
+        config_file = tmp_path / "dual_role_isolation.yaml"
+        with config_file.open("w") as f:
+            yaml.dump(yaml_content, f)
+
+        config = SigTeamsConfig()
+        config.load_from_file(config_file)
+
+        # Verify shared_user appears in maintainers
+        maintainers = config.get_maintainers("org/repo1")
+        assert "shared_user" in maintainers
+        assert "only_maintainer" in maintainers
+        assert "only_team_member" not in maintainers
+
+        # Verify shared_user appears in team lookup
+        assert config.get_user_team("org/repo1", "shared_user") == "sig-network"
+        assert config.get_user_team("org/repo1", "only_team_member") == "sig-network"
+        assert config.get_user_team("org/repo1", "only_maintainer") is None
+
+        # Verify all_maintainers includes shared_user
+        all_maintainers = config.get_all_maintainers()
+        assert "shared_user" in all_maintainers
+        assert "only_maintainer" in all_maintainers
+
+    def test_invalid_maintainer_username_type(self, tmp_path: Path) -> None:
+        """Test TypeError for non-string username in maintainers list."""
+        # YAML with integer as maintainer username
+        config_file = tmp_path / "invalid_maintainer_username.yaml"
+        with config_file.open("w") as f:
+            # Write raw YAML with numeric maintainer username
+            f.write("org/repo:\n  maintainers:\n    - 123\n")
+
+        config = SigTeamsConfig()
+
+        with pytest.raises(TypeError, match="Invalid username type in maintainers list"):
+            config.load_from_file(config_file)
+
+    def test_user_in_team_then_maintainers_dict_order(self, tmp_path: Path) -> None:
+        """Test user can be in team first, then maintainers (dict iteration order).
+
+        This test verifies the fix for the bug where users could not be both
+        maintainers AND team members when the YAML dict is iterated with
+        team appearing before maintainers.
+
+        Regression test for:
+        ValueError: Duplicate user assignment in 'RedHatQE/openshift-virtualization-tests':
+        'vsibirsk' is already in team 'sig-virt', cannot also be in 'maintainers'
+        """
+        # YAML with team defined before maintainers to test dict iteration order
+        yaml_content = {
+            "RedHatQE/openshift-virtualization-tests": {
+                "sig-virt": ["vsibirsk"],
+                "maintainers": ["vsibirsk"],
+            },
+        }
+
+        config_file = tmp_path / "team_then_maintainers.yaml"
+        with config_file.open("w") as f:
+            yaml.dump(yaml_content, f)
+
+        config = SigTeamsConfig()
+        # Should NOT raise ValueError about duplicate user assignment
+        config.load_from_file(config_file)
+
+        # User should be both maintainer AND team member
+        assert config.is_maintainer("RedHatQE/openshift-virtualization-tests", "vsibirsk") is True
+        assert config.get_user_team("RedHatQE/openshift-virtualization-tests", "vsibirsk") == "sig-virt"

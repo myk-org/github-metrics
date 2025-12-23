@@ -25,6 +25,7 @@ export function FilterProvider({ children }: FilterProviderProps): React.ReactEl
     repositories: [],
     users: [],
     excludeUsers: [],
+    excludeMaintainers: false,
   });
 
   const setTimeRange = useCallback((range: TimeRange, quickRange: string): void => {
@@ -49,6 +50,10 @@ export function FilterProvider({ children }: FilterProviderProps): React.ReactEl
     setFilters((prev) => ({ ...prev, excludeUsers: users }));
   }, []);
 
+  const setExcludeMaintainers = useCallback((exclude: boolean): void => {
+    setFilters((prev) => ({ ...prev, excludeMaintainers: exclude }));
+  }, []);
+
   const resetFilters = useCallback((): void => {
     setFilters({
       timeRange: getDefaultTimeRange(),
@@ -56,6 +61,7 @@ export function FilterProvider({ children }: FilterProviderProps): React.ReactEl
       repositories: [],
       users: [],
       excludeUsers: [],
+      excludeMaintainers: false,
     });
   }, []);
 
@@ -67,6 +73,7 @@ export function FilterProvider({ children }: FilterProviderProps): React.ReactEl
         setRepositories,
         setUsers,
         setExcludeUsers,
+        setExcludeMaintainers,
         resetFilters,
       }}
     >

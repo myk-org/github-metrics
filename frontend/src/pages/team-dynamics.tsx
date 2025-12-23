@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useFilters } from "@/hooks/use-filters";
 import { useDateFormat } from "@/hooks/use-date-format";
-import { useTeamDynamics, useCrossTeamReviews, usePRStory } from "@/hooks/use-api";
+import { useTeamDynamics, useCrossTeamReviews, usePRStory, useExcludeUsers } from "@/hooks/use-api";
 import { CollapsibleSection } from "@/components/shared/collapsible-section";
 import { DataTable, type ColumnDef } from "@/components/shared/data-table";
 import { KPICards, type KPIItem } from "@/components/shared/kpi-cards";
@@ -69,32 +69,46 @@ export function TeamDynamicsPage(): React.ReactElement {
     }, 200);
   };
 
+  // Combine exclude_users with maintainers if excludeMaintainers is enabled
+  const { users: effectiveExcludeUsers, isLoading: isExcludeUsersLoading } = useExcludeUsers(
+    filters.excludeUsers,
+    filters.excludeMaintainers
+  );
+
   // Fetch team dynamics data with server-side pagination
-  const { data: teamData, isLoading } = useTeamDynamics(
+  const { data: teamData, isLoading: teamDataLoading } = useTeamDynamics(
     filters.timeRange,
     {
       repositories: filters.repositories,
       users: filters.users,
-      exclude_users: filters.excludeUsers,
+      exclude_users: effectiveExcludeUsers,
     },
     page,
-    pageSize
+    pageSize,
+    !isExcludeUsersLoading
   );
+
+  // Combine loading states
+  const isLoading = teamDataLoading || isExcludeUsersLoading;
 
   // Fetch cross-team reviews data with separate pagination
   const [crossTeamPage, setCrossTeamPage] = useState(1);
   const [crossTeamPageSize, setCrossTeamPageSize] = useState(25);
 
-  const { data: crossTeamData, isLoading: isCrossTeamLoading } = useCrossTeamReviews(
+  const { data: crossTeamData, isLoading: crossTeamDataLoading } = useCrossTeamReviews(
     filters.timeRange,
     {
       repositories: filters.repositories,
       users: filters.users,
-      exclude_users: filters.excludeUsers,
+      exclude_users: effectiveExcludeUsers,
     },
     crossTeamPage,
-    crossTeamPageSize
+    crossTeamPageSize,
+    !isExcludeUsersLoading
   );
+
+  // Combine loading states
+  const isCrossTeamLoading = crossTeamDataLoading || isExcludeUsersLoading;
 
   // Server-side paginated data for each section
   const workloadData = teamData?.workload.by_contributor ?? [];
@@ -542,7 +556,9 @@ export function TeamDynamicsPage(): React.ReactElement {
             columns={crossTeamColumns}
             data={crossTeamReviewsData}
             isLoading={isCrossTeamLoading}
-            keyExtractor={(item) => `${item.repository}-${String(item.pr_number)}-${item.reviewer}`}
+            keyExtractor={(item) =>
+              `${item.repository}-${String(item.pr_number)}-${item.reviewer}-${item.created_at}`
+            }
             emptyMessage="No cross-team review data available"
           />
           {crossTeamData?.pagination && (

@@ -304,6 +304,9 @@ Create a YAML file defining SIG team membership per repository:
 ```yaml
 # /config/sig-teams.yaml
 org/repo-name:
+  maintainers:        # Optional: repository maintainers (can be excluded from metrics)
+    - lead-maintainer
+    - co-maintainer
   sig-network:
     - user1
     - user2
@@ -311,6 +314,8 @@ org/repo-name:
     - user3
     - user4
 another-org/repo:
+  maintainers:
+    - repo-owner
   sig-compute:
     - user5
 ```
@@ -320,6 +325,7 @@ another-org/repo:
 - It looks up which team the reviewer belongs to (within the same repository)
 - If the reviewer's team differs from the PR's sig label, it's marked as a cross-team review
 - Cross-team reviews are displayed in the Team Dynamics dashboard and Contributors page
+- The optional `maintainers` key defines repository maintainers who can be excluded from metrics using the "Exclude Maintainers" filter
 
 **Note:** Cross-team tracking is per-repository. A user can belong to different teams in different repositories.
 

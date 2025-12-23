@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useFilters } from "@/hooks/use-filters";
-import { useContributors, useTurnaround } from "@/hooks/use-api";
+import { useContributors, useTurnaround, useExcludeUsers } from "@/hooks/use-api";
 import { CollapsibleSection } from "@/components/shared/collapsible-section";
 import { DataTable, type ColumnDef } from "@/components/shared/data-table";
 import { KPICards, type KPIItem } from "@/components/shared/kpi-cards";
@@ -29,25 +29,42 @@ export function ContributorsPage(): React.ReactElement {
     setIsModalOpen(true);
   };
 
-  // Fetch turnaround metrics for KPIs
-  const { data: turnaround, isLoading: turnaroundLoading } = useTurnaround(filters.timeRange, {
-    repositories: filters.repositories,
-    users: filters.users,
-    exclude_users: filters.excludeUsers,
-  });
+  // Combine exclude_users with maintainers if excludeMaintainers is enabled
+  const { users: effectiveExcludeUsers, isLoading: isExcludeUsersLoading } = useExcludeUsers(
+    filters.excludeUsers,
+    filters.excludeMaintainers
+  );
 
-  // Fetch contributor data with server-side pagination
-  // Note: The API returns all contributor types in one response with the same pagination params
-  const { data: contributorMetrics, isLoading } = useContributors(
+  // Fetch turnaround metrics for KPIs
+  const { data: turnaround, isLoading: turnaroundDataLoading } = useTurnaround(
     filters.timeRange,
     {
       repositories: filters.repositories,
       users: filters.users,
-      exclude_users: filters.excludeUsers,
+      exclude_users: effectiveExcludeUsers,
+    },
+    !isExcludeUsersLoading
+  );
+
+  // Combine loading states
+  const turnaroundLoading = turnaroundDataLoading || isExcludeUsersLoading;
+
+  // Fetch contributor data with server-side pagination
+  // Note: The API returns all contributor types in one response with the same pagination params
+  const { data: contributorMetrics, isLoading: contributorDataLoading } = useContributors(
+    filters.timeRange,
+    {
+      repositories: filters.repositories,
+      users: filters.users,
+      exclude_users: effectiveExcludeUsers,
     },
     page,
-    pageSize
+    pageSize,
+    !isExcludeUsersLoading
   );
+
+  // Combine loading states
+  const isLoading = contributorDataLoading || isExcludeUsersLoading;
 
   // Server-side paginated data for each section
   const creatorsData = contributorMetrics?.pr_creators.data ?? [];

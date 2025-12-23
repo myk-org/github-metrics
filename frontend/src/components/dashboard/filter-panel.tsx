@@ -3,6 +3,7 @@ import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -26,7 +27,14 @@ export function FilterPanel({
   userSuggestions = [],
   onRefresh,
 }: FilterPanelProps): React.ReactElement {
-  const { filters, setTimeRange, setRepositories, setUsers, setExcludeUsers } = useFilters();
+  const {
+    filters,
+    setTimeRange,
+    setRepositories,
+    setUsers,
+    setExcludeUsers,
+    setExcludeMaintainers,
+  } = useFilters();
 
   const [customStartTime, setCustomStartTime] = useState("");
   const [customEndTime, setCustomEndTime] = useState("");
@@ -205,6 +213,25 @@ export function FilterPanel({
             }}
             suggestions={userSuggestions}
           />
+        </div>
+
+        <div className="flex-shrink-0 space-y-1" style={{ minWidth: "150px" }}>
+          <Label className="text-xs invisible">Toggle</Label>
+          <div className="flex items-center h-9 space-x-2">
+            <Checkbox
+              id="exclude-maintainers"
+              checked={filters.excludeMaintainers}
+              onCheckedChange={(checked) => {
+                setExcludeMaintainers(checked === true);
+              }}
+            />
+            <Label
+              htmlFor="exclude-maintainers"
+              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+            >
+              Exclude Maintainers
+            </Label>
+          </div>
         </div>
 
         <div className="flex-shrink-0 space-y-1">
