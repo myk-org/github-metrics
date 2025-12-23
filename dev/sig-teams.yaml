@@ -1,0 +1,75 @@
+# SIG Teams - OpenShift Virtualization Tests
+
+RedHatQE/openshift-virtualization-tests:
+  sig-chaos:
+      - guchen11
+      - qwang1
+      - sarahbx
+  sig-infra:
+      - geetikakay
+      - RoniKishner
+  sig-iuo:
+      - albarker-rh
+      - hmeir
+      - OhadRevah
+      - rlobillo
+  sig-network:
+      - Anatw
+      - azhivovk
+      - EdDev
+      - servolkov
+      - yossisegev
+  sig-storage:
+      - Ahmad-Hafe
+      - dalia-frank
+      - duyanyan
+      - jpeimer
+      - josemacassan
+      - kgoldbla
+      - kshvaika
+      - stesrn
+  sig-virt:
+      - akri3i
+      - dshchedr
+      - jerry7z
+      - kbidarkar
+      - SamAlber
+      - SiboWang1997
+      - vsibirsk
+
+RedHatQE/cnv-tests:
+  sig-chaos_scale:
+      - guchen11
+      - qwang1
+      - sarahbx
+  sig-infrastructure:
+      - geetikakay
+      - RoniKishner
+  sig-install_upgrade_operators:
+      - albarker-rh
+      - hmeir
+      - OhadRevah
+      - rlobillo
+  sig-network:
+      - Anatw
+      - azhivovk
+      - EdDev
+      - servolkov
+      - yossisegev
+  sig-storage:
+      - Ahmad-Hafe
+      - dalia-frank
+      - duyanyan
+      - jpeimer
+      - josemacassan
+      - kgoldbla
+      - kshvaika
+      - stesrn
+  sig-virt:
+      - akri3i
+      - dshchedr
+      - jerry7z
+      - kbidarkar
+      - SamAlber
+      - SiboWang1997
+      - vsibirsk
