@@ -155,6 +155,7 @@ Team collaboration insights:
 - **Collaboration Patterns** - Cross-team interactions
 - **Workload Distribution** - Review load balancing across team members
 - **Cross-Team Collaboration** - Track reviews across SIG teams with summary stats and detailed review list
+- **Review Efficiency** - Fastest and slowest reviewer metrics with configurable minimum reviews threshold (default: 5). Reviewers with fewer reviews than the threshold are excluded from fastest/slowest calculations; a warning is shown when sample size is below the threshold.
 
 ### Common Features Across All Views
 

@@ -2372,8 +2372,10 @@ class TestCrossTeamReviewsEndpoint:
             client = TestClient(app)
             response = client.get("/api/metrics/cross-team-reviews")
 
-            assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
-            assert "SIG teams configuration not loaded" in response.json()["detail"]
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+            assert data["data"] == []
+            assert data["summary"]["total_cross_team_reviews"] == 0
 
     def test_get_cross_team_reviews_sig_config_none(self) -> None:
         """Test cross-team reviews when SIG config is None."""
@@ -2384,8 +2386,10 @@ class TestCrossTeamReviewsEndpoint:
             client = TestClient(app)
             response = client.get("/api/metrics/cross-team-reviews")
 
-            assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
-            assert "SIG teams configuration not loaded" in response.json()["detail"]
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+            assert data["data"] == []
+            assert data["summary"]["total_cross_team_reviews"] == 0
 
     def test_get_cross_team_reviews_database_unavailable(self) -> None:
         """Test cross-team reviews when database unavailable."""
@@ -2814,5 +2818,7 @@ class TestMaintainersEndpoint:
             client = TestClient(app)
             response = client.get("/api/metrics/maintainers")
 
-            assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
-            assert "SIG teams configuration not loaded" in response.json()["detail"]
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+            assert data["maintainers"] == {}
+            assert data["all_maintainers"] == []

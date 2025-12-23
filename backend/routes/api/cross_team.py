@@ -155,7 +155,10 @@ async def get_metrics_cross_team_reviews(
 
     **Errors:**
     - 500: Database connection error or metrics server disabled
-    - 503: SIG teams configuration not loaded
+
+    **Notes on SIG Teams Configuration:**
+    - If SIG teams configuration is not loaded, returns empty response with HTTP 200
+    - This allows the frontend to function gracefully when cross-team tracking is unavailable
     """
     if db_manager is None:
         raise HTTPException(
@@ -164,9 +167,22 @@ async def get_metrics_cross_team_reviews(
         )
 
     if sig_teams_config is None or not sig_teams_config.is_loaded:
-        raise HTTPException(
-            status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="SIG teams configuration not loaded - cross-team tracking unavailable",
+        LOGGER.debug("SIG teams configuration not loaded - returning empty cross-team reviews")
+        return CrossTeamResponse(
+            data=[],
+            summary=CrossTeamSummary(
+                total_cross_team_reviews=0,
+                by_reviewer_team={},
+                by_pr_team={},
+            ),
+            pagination=PaginationInfo(
+                total=0,
+                page=page,
+                page_size=page_size,
+                total_pages=0,
+                has_next=False,
+                has_prev=False,
+            ),
         )
 
     LOGGER.info("Cross-team reviews endpoint called with exclude_users=%s", exclude_users)

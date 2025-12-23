@@ -30,11 +30,16 @@ export interface ReviewEfficiencySummary {
   readonly fastest_reviewer: {
     readonly user: string;
     readonly avg_hours: number;
+    readonly total_reviews: number;
+    readonly low_sample_size?: boolean;
   } | null;
   readonly slowest_reviewer: {
     readonly user: string;
     readonly avg_hours: number;
+    readonly total_reviews: number;
+    readonly low_sample_size?: boolean;
   } | null;
+  readonly min_reviews_threshold: number;
 }
 
 export interface ApprovalBottleneck {

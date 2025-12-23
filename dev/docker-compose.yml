@@ -44,6 +44,9 @@ services:
       METRICS_VERIFY_GITHUB_IPS: "false"
       METRICS_VERIFY_CLOUDFLARE_IPS: "false"
       METRICS_SERVER_ALLOW_ALL_HOSTS: "true"
+      METRICS_SIG_TEAMS_CONFIG: /config/sig-teams.yaml
+    volumes:
+      - ./sig-teams.yaml:/config/sig-teams.yaml:ro
     ports:
       - "8765:8765"
 

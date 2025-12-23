@@ -136,7 +136,8 @@ export const queryKeys = {
     users?: readonly string[],
     excludeUsers?: readonly string[],
     page?: number,
-    pageSize?: number
+    pageSize?: number,
+    minReviews?: number
   ) =>
     [
       "metrics",
@@ -147,6 +148,7 @@ export const queryKeys = {
       excludeUsers,
       page,
       pageSize,
+      minReviews,
     ] as const,
   prStory: (repository: string, prNumber: number) =>
     ["metrics", "pr-story", repository, prNumber] as const,
@@ -357,11 +359,13 @@ export function useTeamDynamics(
   filters?: FilterParams,
   page: number = 1,
   pageSize: number = 25,
+  minReviews: number = 5,
   enabled: boolean = true
 ) {
   const params = buildFilterParams(timeRange, filters);
   params.set("page", String(page));
   params.set("page_size", String(pageSize));
+  params.set("min_reviews", String(minReviews));
 
   return useQuery<TeamDynamicsResponse>({
     queryKey: queryKeys.teamDynamics(
@@ -370,7 +374,8 @@ export function useTeamDynamics(
       filters?.users,
       filters?.exclude_users,
       page,
-      pageSize
+      pageSize,
+      minReviews
     ),
     queryFn: () => fetchApi<TeamDynamicsResponse>("/team-dynamics", params),
     enabled,

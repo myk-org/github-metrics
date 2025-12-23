@@ -2,6 +2,19 @@
 
 ## Strict Rules (MANDATORY)
 
+### Pre-Commit Verification (MANDATORY)
+
+Before ANY commit, the following commands MUST pass:
+
+```bash
+tox                                    # All API tests must pass
+docker build -t github-metrics-dev .   # Docker build must succeed
+```
+
+- ❌ **NEVER** commit if either command fails
+- ✅ **FIX** all issues before committing
+- **NO EXCEPTIONS** - Both tests and build are blockers
+
 ### Linter Suppressions PROHIBITED
 
 - ❌ **NEVER** add `# noqa`, `# type: ignore`, `per-file-ignores`

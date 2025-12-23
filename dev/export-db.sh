@@ -162,12 +162,18 @@ echo ""
 # ============================================
 # Import with optimizations for large files
 FILE_SIZE=$(du -h /tmp/prod_data.sql | cut -f1)
+
+# Truncate all tables before import (preserve schema, clear data)
+echo "Clearing existing data from local database..."
+"$LOCAL_RUNTIME" exec "$LOCAL_CONTAINER" psql -U "$LOCAL_USER" -d "$LOCAL_DB" -c "TRUNCATE TABLE webhooks, pull_requests, pr_events, pr_reviews, pr_labels, check_runs, api_usage CASCADE;"
+
 echo "Importing $FILE_SIZE of data (this may take a while for large databases)..."
 "$LOCAL_RUNTIME" cp /tmp/prod_data.sql "$LOCAL_CONTAINER":/tmp/prod_data.sql
 
 # Run import with performance optimizations
 # Single transaction mode (-1) is faster than individual commits
-"$LOCAL_RUNTIME" exec "$LOCAL_CONTAINER" psql -U "$LOCAL_USER" -d "$LOCAL_DB" -1 -f /tmp/prod_data.sql
+# ON_ERROR_STOP=1 exits on first error instead of cascading failures
+"$LOCAL_RUNTIME" exec "$LOCAL_CONTAINER" psql -U "$LOCAL_USER" -d "$LOCAL_DB" -1 --set ON_ERROR_STOP=1 -f /tmp/prod_data.sql
 
 "$LOCAL_RUNTIME" exec "$LOCAL_CONTAINER" rm /tmp/prod_data.sql
 rm /tmp/prod_data.sql

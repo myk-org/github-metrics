@@ -11,6 +11,8 @@ import { UserPRsModal } from "@/components/user-prs";
 import { PRStoryModal } from "@/components/pr-story/pr-story-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { History } from "lucide-react";
 import { formatHours, formatDate } from "@/utils/time-format";
 import type {
@@ -21,12 +23,15 @@ import type {
 } from "@/types/team-dynamics";
 import type { CrossTeamReviewRow } from "@/types/cross-team";
 
+const MAX_MIN_REVIEWS = 100;
+
 export function TeamDynamicsPage(): React.ReactElement {
   const { filters } = useFilters();
   const { dateFormat } = useDateFormat();
   // Single page state for all sections since API returns all team dynamics data in one call
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [minReviews, setMinReviews] = useState(5);
 
   // Modal state for user PRs
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
@@ -85,6 +90,7 @@ export function TeamDynamicsPage(): React.ReactElement {
     },
     page,
     pageSize,
+    minReviews,
     !isExcludeUsersLoading
   );
 
@@ -159,10 +165,16 @@ export function TeamDynamicsPage(): React.ReactElement {
         {
           label: "Fastest Reviewer",
           value: teamData.review_efficiency.summary.fastest_reviewer?.user ?? "N/A",
+          ...(teamData.review_efficiency.summary.fastest_reviewer?.low_sample_size && {
+            warning: `Sample size below ${String(teamData.review_efficiency.summary.min_reviews_threshold)} reviews`,
+          }),
         },
         {
           label: "Slowest Reviewer",
           value: teamData.review_efficiency.summary.slowest_reviewer?.user ?? "N/A",
+          ...(teamData.review_efficiency.summary.slowest_reviewer?.low_sample_size && {
+            warning: `Sample size below ${String(teamData.review_efficiency.summary.min_reviews_threshold)} reviews`,
+          }),
         },
       ]
     : [];
@@ -449,7 +461,34 @@ export function TeamDynamicsPage(): React.ReactElement {
       {/* Review Efficiency */}
       <CollapsibleSection
         title="Review Efficiency"
-        actions={<DownloadButtons data={reviewData} filename="review-efficiency" />}
+        actions={
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Label
+                htmlFor="min-reviews"
+                className="text-sm text-muted-foreground whitespace-nowrap"
+              >
+                Min Reviews:
+              </Label>
+              <Input
+                id="min-reviews"
+                type="number"
+                min={1}
+                max={MAX_MIN_REVIEWS}
+                step={1}
+                value={minReviews}
+                onChange={(e) => {
+                  setMinReviews(
+                    Math.min(MAX_MIN_REVIEWS, Math.max(1, Number(e.target.value) || 1))
+                  );
+                  setPage(1);
+                }}
+                className="w-20 h-8"
+              />
+            </div>
+            <DownloadButtons data={reviewData} filename="review-efficiency" />
+          </div>
+        }
       >
         <div className="space-y-4">
           <KPICards items={reviewKPIs} isLoading={isLoading} columns={4} />

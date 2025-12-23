@@ -64,6 +64,9 @@ async def get_team_dynamics(
     exclude_users: Annotated[list[str] | None, Query(description="Exclude users from results")] = None,
     page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(default=25, ge=1, description="Items per page"),
+    min_reviews: int = Query(
+        default=5, ge=1, description="Minimum reviews threshold for fastest/slowest reviewer calculation"
+    ),
 ) -> dict[str, Any]:
     """Get team dynamics and workload distribution metrics.
 
@@ -88,6 +91,7 @@ async def get_team_dynamics(
     - `exclude_users` (list[str], optional): Exclude users from results (usernames)
     - `page` (int, optional): Page number for pagination (1-indexed, default: 1)
     - `page_size` (int, optional): Number of items per page (default: 25)
+    - `min_reviews` (int, optional): Minimum reviews threshold for fastest/slowest reviewer calculation (default: 5)
 
     **Return Structure:**
     ```json
@@ -118,8 +122,9 @@ async def get_team_dynamics(
         "summary": {
           "avg_review_time_hours": 4.2,
           "median_review_time_hours": 2.5,
-          "fastest_reviewer": {"user": "bob", "avg_hours": 1.2},
-          "slowest_reviewer": {"user": "charlie", "avg_hours": 12.5}
+          "fastest_reviewer": {"user": "bob", "avg_hours": 1.2, "total_reviews": 150},
+          "slowest_reviewer": {"user": "charlie", "avg_hours": 12.5, "total_reviews": 25},
+          "min_reviews_threshold": 5
         },
         "by_reviewer": [
           {
@@ -170,7 +175,12 @@ async def get_team_dynamics(
     - `avg_review_time_hours`: Average time from PR creation to first review
     - `median_review_time_hours`: Median review time (less affected by outliers)
     - `fastest_reviewer`: User with lowest average review time
+      (includes `total_reviews`, `low_sample_size` if below threshold)
     - `slowest_reviewer`: User with highest average review time
+      (includes `total_reviews`, `low_sample_size` if below threshold)
+    - `min_reviews_threshold`: Minimum reviews threshold used for fastest/slowest calculation
+    - `total_reviews`: Number of reviews conducted by the reviewer
+    - `low_sample_size`: Warning flag indicating reviewer has fewer reviews than threshold
     - `avg_approval_hours`: Average time from PR creation to approval (per-approver metric)
     - `team_pending_count`: Total number of PRs currently awaiting approval (team-wide metric)
     - `severity`: Alert severity based on `avg_approval_hours` only ("critical" if >48h, "warning" if >24h)
@@ -494,17 +504,49 @@ async def get_team_dynamics(
             # Use proper aggregate median from database query
             median_review_time = float(review_rows[0]["overall_median_hours"] or 0) if review_rows else 0.0
 
-            fastest = min(review_data_full, key=lambda x: x["avg_review_time_hours"])
-            fastest_reviewer = {"user": fastest["user"], "avg_hours": fastest["avg_review_time_hours"]}
+            # Filter reviewers meeting the threshold
+            qualified_reviewers = [r for r in review_data_full if r["total_reviews"] >= min_reviews]
 
-            slowest = max(review_data_full, key=lambda x: x["avg_review_time_hours"])
-            slowest_reviewer = {"user": slowest["user"], "avg_hours": slowest["avg_review_time_hours"]}
+            # Calculate fastest/slowest only from qualified reviewers
+            if qualified_reviewers:
+                fastest = min(qualified_reviewers, key=lambda x: x["avg_review_time_hours"])
+                fastest_reviewer = {
+                    "user": fastest["user"],
+                    "avg_hours": fastest["avg_review_time_hours"],
+                    "total_reviews": fastest["total_reviews"],
+                }
+
+                slowest = max(qualified_reviewers, key=lambda x: x["avg_review_time_hours"])
+                slowest_reviewer = {
+                    "user": slowest["user"],
+                    "avg_hours": slowest["avg_review_time_hours"],
+                    "total_reviews": slowest["total_reviews"],
+                }
+            else:
+                # Fallback: use best available but add low_sample_size warning
+                if review_data_full:
+                    fastest = min(review_data_full, key=lambda x: x["avg_review_time_hours"])
+                    fastest_reviewer = {
+                        "user": fastest["user"],
+                        "avg_hours": fastest["avg_review_time_hours"],
+                        "total_reviews": fastest["total_reviews"],
+                        "low_sample_size": True,
+                    }
+
+                    slowest = max(review_data_full, key=lambda x: x["avg_review_time_hours"])
+                    slowest_reviewer = {
+                        "user": slowest["user"],
+                        "avg_hours": slowest["avg_review_time_hours"],
+                        "total_reviews": slowest["total_reviews"],
+                        "low_sample_size": True,
+                    }
 
         review_summary = {
             "avg_review_time_hours": avg_review_time,
             "median_review_time_hours": median_review_time,
             "fastest_reviewer": fastest_reviewer,
             "slowest_reviewer": slowest_reviewer,
+            "min_reviews_threshold": min_reviews,
         }
 
         # Apply pagination to review data

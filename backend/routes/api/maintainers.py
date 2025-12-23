@@ -2,8 +2,7 @@
 
 from typing import TypedDict
 
-from fastapi import APIRouter, HTTPException
-from fastapi import status as http_status
+from fastapi import APIRouter
 from simple_logger.logger import get_logger
 
 from backend.sig_teams import get_sig_teams_config
@@ -26,7 +25,7 @@ async def get_maintainers() -> MaintainersResponse:
     """Get list of maintainers grouped by repository.
 
     Returns maintainers configuration from SIG teams YAML file.
-    Raises 503 Service Unavailable if SIG teams config is not loaded.
+    Returns empty lists if SIG teams config is not loaded.
 
     **Response Format:**
     ```json
@@ -40,20 +39,17 @@ async def get_maintainers() -> MaintainersResponse:
     ```
 
     **Returns:**
-    - `maintainers`: Dictionary mapping repositories to their maintainers
-    - `all_maintainers`: Deduplicated sorted list of all maintainers across repositories
-
-    **Error Conditions:**
-    - 503: SIG teams configuration not loaded
+    - `maintainers`: Dictionary mapping repositories to their maintainers (empty if config not loaded)
+    - `all_maintainers`: Deduplicated sorted list of all maintainers across repositories (empty if config not loaded)
     """
     config = get_sig_teams_config()
 
     if not config.is_loaded:
-        LOGGER.warning("SIG teams configuration not loaded - cannot retrieve maintainers")
-        raise HTTPException(
-            status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="SIG teams configuration not loaded",
-        )
+        LOGGER.debug("SIG teams configuration not loaded - returning empty maintainers list")
+        return {
+            "maintainers": {},
+            "all_maintainers": [],
+        }
 
     # Build maintainers dictionary per repository
     maintainers_by_repo: dict[str, list[str]] = {}

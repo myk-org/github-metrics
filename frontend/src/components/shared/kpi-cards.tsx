@@ -9,6 +9,7 @@ export interface KPIItem {
     readonly value: number;
     readonly label: string;
   };
+  readonly warning?: string;
 }
 
 interface KPICardsProps {
@@ -66,6 +67,11 @@ export function KPICards({
                 className={`text-xs mt-1 ${item.trend.value >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
               >
                 {item.trend.value >= 0 ? "↑" : "↓"} {Math.abs(item.trend.value)}% {item.trend.label}
+              </div>
+            )}
+            {item.warning && (
+              <div className="text-xs mt-1 text-amber-600 dark:text-amber-400">
+                Warning: {item.warning}
               </div>
             )}
           </CardContent>

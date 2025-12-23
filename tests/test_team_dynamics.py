@@ -386,6 +386,7 @@ class TestTeamDynamicsEndpoint:
                 "median_review_time_hours",
                 "fastest_reviewer",
                 "slowest_reviewer",
+                "min_reviews_threshold",
             }
 
             # Verify pagination structure
