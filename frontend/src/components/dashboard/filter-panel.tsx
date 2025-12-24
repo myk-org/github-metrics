@@ -138,7 +138,7 @@ export function FilterPanel({
           </Select>
         </div>
 
-        <div className="flex-1 space-y-1" style={{ minWidth: "180px" }}>
+        <div className="flex-1 space-y-1" style={{ minWidth: "210px" }}>
           <Label htmlFor="start-time" className="text-xs">
             Start Time
           </Label>
@@ -154,7 +154,7 @@ export function FilterPanel({
           />
         </div>
 
-        <div className="flex-1 space-y-1" style={{ minWidth: "180px" }}>
+        <div className="flex-1 space-y-1" style={{ minWidth: "210px" }}>
           <Label htmlFor="end-time" className="text-xs">
             End Time
           </Label>
