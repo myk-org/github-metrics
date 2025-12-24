@@ -200,7 +200,7 @@ export function FilterPanel({
           />
         </div>
 
-        <div className="flex-1 space-y-1" style={{ minWidth: "180px" }}>
+        <div className="flex-1 space-y-1" style={{ minWidth: "200px" }}>
           <Label htmlFor="exclude-users" className="text-xs">
             Exclude Users
           </Label>
