@@ -121,7 +121,7 @@ export function FilterPanel({
   return (
     <CollapsibleSection title="Filters & Controls" defaultOpen={true}>
       <div className="flex flex-nowrap items-end gap-2 overflow-x-auto pb-4">
-        <div className="flex-1 space-y-1" style={{ minWidth: "140px" }}>
+        <div className="flex-1 space-y-1 min-w-[140px]">
           <Label htmlFor="quick-range" className="text-xs">
             Quick Range
           </Label>
@@ -138,7 +138,7 @@ export function FilterPanel({
           </Select>
         </div>
 
-        <div className="flex-1 space-y-1" style={{ minWidth: "210px" }}>
+        <div className="flex-1 space-y-1 min-w-[210px]">
           <Label htmlFor="start-time" className="text-xs">
             Start Time
           </Label>
@@ -154,7 +154,7 @@ export function FilterPanel({
           />
         </div>
 
-        <div className="flex-1 space-y-1" style={{ minWidth: "210px" }}>
+        <div className="flex-1 space-y-1 min-w-[210px]">
           <Label htmlFor="end-time" className="text-xs">
             End Time
           </Label>
@@ -170,7 +170,7 @@ export function FilterPanel({
           />
         </div>
 
-        <div className="flex-1 space-y-1" style={{ minWidth: "200px" }}>
+        <div className="flex-1 space-y-1 min-w-[200px]">
           <Label htmlFor="repositories" className="text-xs">
             Repositories
           </Label>
@@ -185,7 +185,7 @@ export function FilterPanel({
           />
         </div>
 
-        <div className="flex-1 space-y-1" style={{ minWidth: "180px" }}>
+        <div className="flex-1 space-y-1 min-w-[180px]">
           <Label htmlFor="users" className="text-xs">
             Users
           </Label>
@@ -200,7 +200,7 @@ export function FilterPanel({
           />
         </div>
 
-        <div className="flex-1 space-y-1" style={{ minWidth: "200px" }}>
+        <div className="flex-1 space-y-1 min-w-[200px]">
           <Label htmlFor="exclude-users" className="text-xs">
             Exclude Users
           </Label>
@@ -215,7 +215,7 @@ export function FilterPanel({
           />
         </div>
 
-        <div className="flex-shrink-0 space-y-1" style={{ minWidth: "150px" }}>
+        <div className="flex-shrink-0 space-y-1 min-w-[150px]">
           <Label className="text-xs invisible">Toggle</Label>
           <div className="flex items-center h-9 space-x-2">
             <Checkbox
