@@ -10,7 +10,14 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { LayoutDashboard, GitPullRequest, PanelLeft, Users, UsersRound } from "lucide-react";
+import {
+  LayoutDashboard,
+  GitPullRequest,
+  PanelLeft,
+  Users,
+  UsersRound,
+  MessageSquare,
+} from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
 interface MenuItem {
@@ -23,6 +30,7 @@ const menuItems: readonly MenuItem[] = [
   { title: "Overview", icon: LayoutDashboard, path: "/" },
   { title: "Contributors", icon: Users, path: "/contributors" },
   { title: "Team Dynamics", icon: UsersRound, path: "/team-dynamics" },
+  { title: "Comment Resolution", icon: MessageSquare, path: "/comment-resolution" },
 ];
 
 export function AppSidebar(): React.ReactElement {
