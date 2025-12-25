@@ -57,23 +57,25 @@ async def get_comment_resolution_time(
     ),
     end_time: str | None = Query(default=None, description="End time in ISO 8601 format (e.g., 2024-01-31T23:59:59Z)"),
     repositories: Annotated[list[str] | None, Query(description="Filter by repositories (org/repo format)")] = None,
-    pending_limit: int = Query(default=50, ge=1, description="Max pending PRs to return"),
+    page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(default=25, ge=1, description="Items per page for threads list"),
 ) -> dict[str, Any]:
-    """Get time from can-be-merged check success to last comment thread resolution.
+    """Get per-thread comment resolution metrics.
 
-    Calculates the time between when a PR's "can-be-merged" check run succeeds
-    and when the last comment thread is resolved. This metric helps track
-    how long it takes to address review comments after the PR is ready to merge.
+    Analyzes individual comment threads from pull_request_review_thread events
+    to provide granular metrics including time to first response, time to resolution,
+    participant lists, and correlation with can-be-merged check runs.
 
     **Primary Use Cases:**
-    - Monitor comment resolution efficiency
-    - Identify PRs stuck waiting for comment resolution
-    - Track team responsiveness to review feedback
-    - Optimize code review workflow
+    - Track per-thread resolution efficiency
+    - Identify slow-to-respond threads
+    - Monitor time from can-be-merged to resolution
+    - Analyze participant engagement per thread
+    - Calculate resolution rates
 
     **Prerequisites:**
     - GitHub webhook must be configured to send `pull_request_review_thread` events
-    - The repository must use a "can-be-merged" check run
+    - (Optional) Repository uses a "can-be-merged" check run for correlation
 
     **Enabling pull_request_review_thread webhooks:**
     1. Go to your GitHub repository → Settings → Webhooks
@@ -82,44 +84,62 @@ async def get_comment_resolution_time(
     4. Check "Pull request review threads" in the list
     5. Save the webhook
 
-    For organization-level webhooks, configure this in Organization Settings → Webhooks.
-
-    **Note:** If repositories don't have `pull_request_review_thread` events configured,
-    this endpoint will return empty results for those repositories (no errors).
-
     **Return Structure:**
     ```json
     {
       "summary": {
         "avg_resolution_time_hours": 2.5,
         "median_resolution_time_hours": 1.5,
-        "max_resolution_time_hours": 24.0,
-        "total_prs_analyzed": 50
+        "avg_time_to_first_response_hours": 0.8,
+        "avg_comments_per_thread": 3.2,
+        "total_threads_analyzed": 150,
+        "resolution_rate": 85.5
       },
       "by_repository": [
         {
           "repository": "org/repo1",
           "avg_resolution_time_hours": 2.0,
-          "total_prs": 25
+          "total_threads": 75,
+          "resolved_threads": 65
         }
       ],
-      "prs_pending_resolution": [
+      "threads": [
         {
+          "thread_node_id": "PRRT_abc123",
           "repository": "org/repo1",
           "pr_number": 123,
-          "can_be_merged_at": "2024-01-15T10:00:00Z",
-          "hours_waiting": 5.2
+          "first_comment_at": "2024-01-15T10:00:00Z",
+          "resolved_at": "2024-01-15T12:30:00Z",
+          "resolution_time_hours": 2.5,
+          "time_to_first_response_hours": 0.5,
+          "comment_count": 4,
+          "resolver": "user1",
+          "participants": ["user1", "user2", "user3"],
+          "file_path": "src/main.py",
+          "can_be_merged_at": "2024-01-15T11:00:00Z",
+          "time_from_can_be_merged_hours": 1.5
         }
-      ]
+      ],
+      "pagination": {
+        "total": 150,
+        "page": 1,
+        "page_size": 25,
+        "total_pages": 6,
+        "has_next": true,
+        "has_prev": false
+      }
     }
     ```
 
-    **Notes:**
-    - Only includes PRs that have both a successful can-be-merged check AND
-      at least one pull_request_review_thread event
-    - PRs without comment threads are excluded
-    - `prs_pending_resolution` shows PRs that have can-be-merged success but
-      still have unresolved comment threads
+    **Metrics Explained:**
+    - `avg_resolution_time_hours`: Average time from first comment to resolution
+    - `median_resolution_time_hours`: Median resolution time (less affected by outliers)
+    - `avg_time_to_first_response_hours`: Average time from first to second comment
+    - `avg_comments_per_thread`: Average number of comments per thread
+    - `total_threads_analyzed`: Total threads in dataset
+    - `resolution_rate`: Percentage of threads that have been resolved
+    - `time_to_first_response_hours`: Time from first to second comment (null if only 1 comment)
+    - `time_from_can_be_merged_hours`: Time from can-be-merged success to resolution (null if no can-be-merged)
 
     **Errors:**
     - 400: Invalid datetime format in parameters
@@ -139,84 +159,180 @@ async def get_comment_resolution_time(
     time_filter = build_time_filter(base_params, start_datetime, end_datetime)
     repository_filter = build_repository_filter(base_params, repositories)
 
-    # Query 1: Find PRs with can-be-merged success and their last thread resolution
-    resolution_time_query = (
+    # Calculate offset for pagination
+    offset = (page - 1) * page_size
+
+    # Query 1: Get all thread events with extracted metadata
+    threads_query = (
         """
         WITH """
         + _build_can_be_merged_cte(time_filter, repository_filter)
         + """,
-        last_thread_resolved AS (
-            -- Find the last thread resolution for each PR
+        thread_events AS (
+            -- Get all pull_request_review_thread events
             SELECT
                 w.repository,
                 w.pr_number,
-                MAX(w.created_at) as last_resolved_at
+                w.action,
+                w.created_at,
+                w.payload->'thread'->>'node_id' as thread_node_id,
+                w.payload->'thread'->>'path' as file_path,
+                w.payload->'thread'->'comments' as comments_array,
+                jsonb_array_length(w.payload->'thread'->'comments') as comment_count,
+                w.payload->'thread'->'comments'->0->>'created_at' as first_comment_at,
+                w.payload->'thread'->'comments'->0->'user'->>'login' as first_commenter,
+                w.payload->'thread'->'comments'->1->>'created_at' as second_comment_at,
+                w.payload->'sender'->>'login' as resolver
+            FROM webhooks w
+            WHERE w.event_type = 'pull_request_review_thread'
+              AND w.pr_number IS NOT NULL
+              AND w.payload->'thread'->>'node_id' IS NOT NULL
+              """
+        + time_filter
+        + repository_filter
+        + """
+        ),
+        resolved_threads AS (
+            -- Get resolution events
+            SELECT
+                thread_node_id,
+                repository,
+                pr_number,
+                created_at as resolved_at,
+                resolver
+            FROM thread_events
+            WHERE action = 'resolved'
+        ),
+        thread_metadata AS (
+            -- Get thread metadata from first event (resolved or unresolved)
+            SELECT DISTINCT ON (thread_node_id)
+                thread_node_id,
+                repository,
+                pr_number,
+                file_path,
+                comment_count,
+                first_comment_at::timestamptz as first_comment_at,
+                second_comment_at::timestamptz as second_comment_at,
+                comments_array
+            FROM thread_events
+            ORDER BY thread_node_id, created_at
+        ),
+        thread_participants AS (
+            -- Extract unique participants per thread
+            SELECT
+                tm.thread_node_id,
+                jsonb_agg(DISTINCT comment->'user'->>'login') as participants
+            FROM thread_metadata tm,
+                 jsonb_array_elements(tm.comments_array) as comment
+            WHERE comment->'user'->>'login' IS NOT NULL
+            GROUP BY tm.thread_node_id
+        ),
+        threads_with_resolution AS (
+            -- Combine all thread data
+            SELECT
+                tm.thread_node_id,
+                tm.repository,
+                tm.pr_number,
+                tm.file_path,
+                tm.first_comment_at,
+                tm.second_comment_at,
+                CASE
+                    WHEN tm.second_comment_at IS NOT NULL
+                    THEN EXTRACT(EPOCH FROM (tm.second_comment_at - tm.first_comment_at)) / 3600
+                    ELSE NULL
+                END as time_to_first_response_hours,
+                rt.resolved_at,
+                rt.resolver,
+                CASE
+                    WHEN rt.resolved_at IS NOT NULL
+                    THEN EXTRACT(EPOCH FROM (rt.resolved_at - tm.first_comment_at)) / 3600
+                    ELSE NULL
+                END as resolution_time_hours,
+                tm.comment_count,
+                tp.participants,
+                cm.can_be_merged_at,
+                CASE
+                    WHEN rt.resolved_at IS NOT NULL AND cm.can_be_merged_at IS NOT NULL
+                    THEN EXTRACT(EPOCH FROM (rt.resolved_at - cm.can_be_merged_at)) / 3600
+                    ELSE NULL
+                END as time_from_can_be_merged_hours
+            FROM thread_metadata tm
+            LEFT JOIN resolved_threads rt ON tm.thread_node_id = rt.thread_node_id
+            LEFT JOIN thread_participants tp ON tm.thread_node_id = tp.thread_node_id
+            LEFT JOIN can_be_merged cm ON tm.repository = cm.repository AND tm.pr_number::text = cm.pr_number_text
+        ),
+        counted_threads AS (
+            SELECT COUNT(*) as total_count
+            FROM threads_with_resolution
+        )
+        SELECT
+            twr.*,
+            ct.total_count
+        FROM threads_with_resolution twr
+        CROSS JOIN counted_threads ct
+        ORDER BY twr.first_comment_at DESC
+        LIMIT $"""
+        + str(len(base_params.get_params()) + 1)
+        + """ OFFSET $"""
+        + str(len(base_params.get_params()) + 2)
+    )
+
+    # Query 2: Get repository-level statistics
+    repo_stats_query = (
+        """
+        WITH thread_events AS (
+            SELECT
+                w.repository,
+                w.action,
+                w.payload->'thread'->>'node_id' as thread_node_id
+            FROM webhooks w
+            WHERE w.event_type = 'pull_request_review_thread'
+              AND w.pr_number IS NOT NULL
+              AND w.payload->'thread'->>'node_id' IS NOT NULL
+              """
+        + time_filter
+        + repository_filter
+        + """
+        ),
+        thread_counts AS (
+            SELECT
+                repository,
+                COUNT(DISTINCT thread_node_id) as total_threads,
+                COUNT(DISTINCT CASE WHEN action = 'resolved' THEN thread_node_id END) as resolved_threads
+            FROM thread_events
+            GROUP BY repository
+        ),
+        resolved_times AS (
+            SELECT
+                w.repository,
+                w.payload->'thread'->>'node_id' as thread_node_id,
+                w.payload->'thread'->'comments'->0->>'created_at' as first_comment_at_text,
+                w.created_at as resolved_at
             FROM webhooks w
             WHERE w.event_type = 'pull_request_review_thread'
               AND w.action = 'resolved'
-              AND w.pr_number IS NOT NULL
+              AND w.payload->'thread'->>'node_id' IS NOT NULL
               """
         + time_filter
         + repository_filter
         + """
-            GROUP BY w.repository, w.pr_number
-        )
-        SELECT
-            cm.repository,
-            cm.pr_number_text::int as pr_number,
-            cm.can_be_merged_at,
-            ltr.last_resolved_at,
-            EXTRACT(EPOCH FROM (ltr.last_resolved_at - cm.can_be_merged_at)) / 3600 as resolution_hours
-        FROM can_be_merged cm
-        INNER JOIN last_thread_resolved ltr
-            ON cm.repository = ltr.repository
-            AND cm.pr_number_text::int = ltr.pr_number
-        WHERE ltr.last_resolved_at > cm.can_be_merged_at
-        ORDER BY resolution_hours DESC
-    """
-    )
-
-    # Query 2: Find PRs pending resolution (have can-be-merged but unresolved threads)
-    pending_resolution_query = (
-        """
-        WITH """
-        + _build_can_be_merged_cte(time_filter, repository_filter)
-        + """,
-        thread_status AS (
-            -- Get thread resolution status per PR
-            SELECT
-                w.repository,
-                w.pr_number,
-                SUM(CASE WHEN w.action = 'resolved' THEN 1 ELSE 0 END) as resolved_count,
-                SUM(CASE WHEN w.action = 'unresolved' THEN 1 ELSE 0 END) as unresolved_count
-            FROM webhooks w
-            WHERE w.event_type = 'pull_request_review_thread'
-              AND w.pr_number IS NOT NULL
-              """
-        + time_filter
-        + repository_filter
-        + """
-            GROUP BY w.repository, w.pr_number
         ),
-        prs_with_unresolved AS (
-            -- PRs where unresolved > resolved (net unresolved threads)
-            SELECT repository, pr_number
-            FROM thread_status
-            WHERE unresolved_count > resolved_count
+        resolution_times_calculated AS (
+            SELECT
+                repository,
+                EXTRACT(EPOCH FROM (resolved_at - first_comment_at_text::timestamptz)) / 3600 as resolution_hours
+            FROM resolved_times
+            WHERE first_comment_at_text IS NOT NULL
         )
         SELECT
-            cm.repository,
-            cm.pr_number_text::int as pr_number,
-            cm.can_be_merged_at,
-            EXTRACT(EPOCH FROM (NOW() - cm.can_be_merged_at)) / 3600 as hours_waiting
-        FROM can_be_merged cm
-        INNER JOIN prs_with_unresolved pu
-            ON cm.repository = pu.repository
-            AND cm.pr_number_text::int = pu.pr_number
-        ORDER BY hours_waiting DESC
-        LIMIT $"""
-        + str(len(base_params.get_params()) + 1)
-        + """
+            tc.repository,
+            tc.total_threads,
+            tc.resolved_threads,
+            COALESCE(AVG(rtc.resolution_hours), 0.0) as avg_resolution_time_hours
+        FROM thread_counts tc
+        LEFT JOIN resolution_times_calculated rtc ON tc.repository = rtc.repository
+        GROUP BY tc.repository, tc.total_threads, tc.resolved_threads
+        ORDER BY tc.total_threads DESC
     """
     )
 
@@ -224,64 +340,87 @@ async def get_comment_resolution_time(
         param_list = base_params.get_params()
 
         # Execute queries in parallel
-        resolution_rows, pending_rows = await asyncio.gather(
-            db_manager.fetch(resolution_time_query, *param_list),
-            db_manager.fetch(pending_resolution_query, *param_list, pending_limit),
+        threads_rows, repo_stats_rows = await asyncio.gather(
+            db_manager.fetch(threads_query, *param_list, page_size, offset),
+            db_manager.fetch(repo_stats_query, *param_list),
         )
 
+        # Extract total count from first row (or 0 if no rows)
+        total_threads = threads_rows[0]["total_count"] if threads_rows else 0
+
         # Calculate summary statistics
-        resolution_times = [
-            row["resolution_hours"]
-            for row in resolution_rows
-            if row["resolution_hours"] is not None and row["resolution_hours"] > 0
-        ]
+        resolution_times: list[float] = []
+        response_times: list[float] = []
+        comment_counts: list[int] = []
+        resolved_count = 0
 
-        avg_resolution = 0.0
+        for row in threads_rows:
+            if row["comment_count"]:
+                comment_counts.append(row["comment_count"])
+
+            if row["resolution_time_hours"] is not None:
+                resolution_times.append(row["resolution_time_hours"])
+                resolved_count += 1
+
+            if row["time_to_first_response_hours"] is not None:
+                response_times.append(row["time_to_first_response_hours"])
+
+        # Calculate summary metrics
+        avg_resolution = round(sum(resolution_times) / len(resolution_times), 1) if resolution_times else 0.0
+
         median_resolution = 0.0
-        max_resolution = 0.0
-        total_prs = len(resolution_times)
-
         if resolution_times:
-            avg_resolution = round(sum(resolution_times) / len(resolution_times), 1)
             sorted_times = sorted(resolution_times)
             mid = len(sorted_times) // 2
             median_resolution = round(
                 sorted_times[mid] if len(sorted_times) % 2 == 1 else (sorted_times[mid - 1] + sorted_times[mid]) / 2,
                 1,
             )
-            max_resolution = round(max(resolution_times), 1)
 
-        # Group by repository
-        repo_stats: dict[str, dict[str, Any]] = {}
-        for row in resolution_rows:
-            repo = row["repository"]
-            if repo not in repo_stats:
-                repo_stats[repo] = {"times": [], "count": 0}
-            if row["resolution_hours"] is not None and row["resolution_hours"] > 0:
-                repo_stats[repo]["times"].append(row["resolution_hours"])
-                repo_stats[repo]["count"] += 1
+        avg_response = round(sum(response_times) / len(response_times), 1) if response_times else 0.0
+        avg_comments = round(sum(comment_counts) / len(comment_counts), 1) if comment_counts else 0.0
 
-        by_repository = [
+        resolution_rate = round((resolved_count / total_threads * 100), 1) if total_threads > 0 else 0.0
+
+        # Format threads for response
+        threads_list = [
             {
-                "repository": repo,
-                "avg_resolution_time_hours": round(sum(stats["times"]) / len(stats["times"]), 1)
-                if stats["times"]
-                else 0.0,
-                "total_prs": stats["count"],
-            }
-            for repo, stats in sorted(repo_stats.items(), key=lambda x: -x[1]["count"])
-        ]
-
-        # Format pending PRs
-        prs_pending = [
-            {
+                "thread_node_id": row["thread_node_id"],
                 "repository": row["repository"],
                 "pr_number": row["pr_number"],
+                "first_comment_at": row["first_comment_at"].isoformat() if row["first_comment_at"] else None,
+                "resolved_at": row["resolved_at"].isoformat() if row["resolved_at"] else None,
+                "resolution_time_hours": round(row["resolution_time_hours"], 1)
+                if row["resolution_time_hours"] is not None
+                else None,
+                "time_to_first_response_hours": round(row["time_to_first_response_hours"], 1)
+                if row["time_to_first_response_hours"] is not None
+                else None,
+                "comment_count": row["comment_count"],
+                "resolver": row["resolver"],
+                "participants": row["participants"] if row["participants"] else [],
+                "file_path": row["file_path"],
                 "can_be_merged_at": row["can_be_merged_at"].isoformat() if row["can_be_merged_at"] else None,
-                "hours_waiting": round(row["hours_waiting"], 1) if row["hours_waiting"] else 0.0,
+                "time_from_can_be_merged_hours": round(row["time_from_can_be_merged_hours"], 1)
+                if row["time_from_can_be_merged_hours"] is not None
+                else None,
             }
-            for row in pending_rows
+            for row in threads_rows
         ]
+
+        # Format repository stats
+        by_repository = [
+            {
+                "repository": row["repository"],
+                "avg_resolution_time_hours": round(row["avg_resolution_time_hours"], 1),
+                "total_threads": row["total_threads"],
+                "resolved_threads": row["resolved_threads"],
+            }
+            for row in repo_stats_rows
+        ]
+
+        # Calculate pagination metadata
+        total_pages = (total_threads + page_size - 1) // page_size if page_size > 0 else 0
 
     except asyncio.CancelledError:
         raise
@@ -298,9 +437,19 @@ async def get_comment_resolution_time(
             "summary": {
                 "avg_resolution_time_hours": avg_resolution,
                 "median_resolution_time_hours": median_resolution,
-                "max_resolution_time_hours": max_resolution,
-                "total_prs_analyzed": total_prs,
+                "avg_time_to_first_response_hours": avg_response,
+                "avg_comments_per_thread": avg_comments,
+                "total_threads_analyzed": total_threads,
+                "resolution_rate": resolution_rate,
             },
             "by_repository": by_repository,
-            "prs_pending_resolution": prs_pending,
+            "threads": threads_list,
+            "pagination": {
+                "total": total_threads,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "has_next": page < total_pages,
+                "has_prev": page > 1,
+            },
         }
