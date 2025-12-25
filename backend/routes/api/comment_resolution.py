@@ -75,6 +75,18 @@ async def get_comment_resolution_time(
     - GitHub webhook must be configured to send `pull_request_review_thread` events
     - The repository must use a "can-be-merged" check run
 
+    **Enabling pull_request_review_thread webhooks:**
+    1. Go to your GitHub repository → Settings → Webhooks
+    2. Click on your webhook (or create one)
+    3. Under "Which events would you like to trigger this webhook?", select "Let me select individual events"
+    4. Check "Pull request review threads" in the list
+    5. Save the webhook
+
+    For organization-level webhooks, configure this in Organization Settings → Webhooks.
+
+    **Note:** If repositories don't have `pull_request_review_thread` events configured,
+    this endpoint will return empty results for those repositories (no errors).
+
     **Return Structure:**
     ```json
     {

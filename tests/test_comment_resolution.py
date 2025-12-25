@@ -626,3 +626,49 @@ class TestCommentResolutionTimeEndpoint:
 
             # Verify all 1000 pending PRs returned (no artificial upper limit)
             assert len(data["prs_pending_resolution"]) == 1000
+
+    def test_get_comment_resolution_time_no_webhook_events_configured(self) -> None:
+        """Test no webhook events scenario (no pull_request_review_thread or check_run events).
+
+        This tests the edge case where repositories don't have:
+        - pull_request_review_thread webhook events configured
+        - can-be-merged check runs
+
+        The endpoint should return a valid response with all zeros/empty lists,
+        not errors or exceptions.
+        """
+        # Both queries return empty results (no webhook events exist)
+        mock_resolution_rows: list[dict[str, Any]] = []
+        mock_pending_rows: list[dict[str, Any]] = []
+
+        with patch("backend.routes.api.comment_resolution.db_manager") as mock_db:
+            # Simulate both SQL queries returning empty results
+            mock_db.fetch = AsyncMock(side_effect=[mock_resolution_rows, mock_pending_rows])
+
+            client = TestClient(app)
+            response = client.get("/api/metrics/comment-resolution-time")
+
+            # Should return 200 OK with valid response structure
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+
+            # Verify response structure is complete
+            assert "summary" in data
+            assert "by_repository" in data
+            assert "prs_pending_resolution" in data
+
+            # Verify summary has zeros (not errors or None)
+            assert data["summary"]["avg_resolution_time_hours"] == 0.0
+            assert data["summary"]["median_resolution_time_hours"] == 0.0
+            assert data["summary"]["max_resolution_time_hours"] == 0.0
+            assert data["summary"]["total_prs_analyzed"] == 0
+
+            # Verify empty lists (not None or missing)
+            assert isinstance(data["by_repository"], list)
+            assert len(data["by_repository"]) == 0
+
+            assert isinstance(data["prs_pending_resolution"], list)
+            assert len(data["prs_pending_resolution"]) == 0
+
+            # Verify database was queried correctly (both queries executed)
+            assert mock_db.fetch.call_count == 2
