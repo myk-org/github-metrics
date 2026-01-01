@@ -182,7 +182,7 @@ export function PRLifecyclePage(): React.ReactElement {
     {
       key: "avg_time_to_first_review_hours",
       label: "First Review",
-      tooltip: "Avg hours from PR opened to first review. From pull_request_review events.",
+      tooltip: "Average hours from PR opened to first review. From pull_request_review events.",
       align: "right",
       sortable: true,
       render: (item) => formatHours(item.avg_time_to_first_review_hours),
@@ -191,7 +191,7 @@ export function PRLifecyclePage(): React.ReactElement {
     {
       key: "avg_time_to_first_changes_requested_hours",
       label: "Changes Req.",
-      tooltip: "Avg hours to first changes_requested review",
+      tooltip: "Average hours to first changes_requested review",
       align: "right",
       sortable: true,
       render: (item) => formatHours(item.avg_time_to_first_changes_requested_hours),
@@ -200,7 +200,7 @@ export function PRLifecyclePage(): React.ReactElement {
     {
       key: "avg_time_to_approval_hours",
       label: "Approval",
-      tooltip: "Avg hours to first approved-* label",
+      tooltip: "Average hours to first approved-* label",
       align: "right",
       sortable: true,
       render: (item) => formatHours(item.avg_time_to_approval_hours),
@@ -209,7 +209,7 @@ export function PRLifecyclePage(): React.ReactElement {
     {
       key: "avg_time_to_first_verified_hours",
       label: "Verified",
-      tooltip: "Avg hours to first *verified* label",
+      tooltip: "Average hours to first *verified* label",
       align: "right",
       sortable: true,
       render: (item) => formatHours(item.avg_time_to_first_verified_hours),
@@ -218,7 +218,7 @@ export function PRLifecyclePage(): React.ReactElement {
     {
       key: "avg_pr_lifecycle_hours",
       label: "Lifecycle",
-      tooltip: "Avg hours from open to close (completed PRs only)",
+      tooltip: "Average hours from PR opened to closed/merged (completed PRs only)",
       align: "right",
       sortable: true,
       render: (item) => formatHours(item.avg_pr_lifecycle_hours),

@@ -165,7 +165,6 @@ export function OverviewPage(): React.ReactElement {
     {
       key: "repository",
       label: "Repository",
-      tooltip: "GitHub repository in org/repo format",
       sortable: true,
       render: (item) => (
         <a
@@ -181,7 +180,6 @@ export function OverviewPage(): React.ReactElement {
     {
       key: "total_events",
       label: "Events",
-      tooltip: "Total webhook events received from this repository",
       align: "right",
       sortable: true,
       getValue: (item) => item.total_events,
@@ -189,7 +187,6 @@ export function OverviewPage(): React.ReactElement {
     {
       key: "percentage",
       label: "%",
-      tooltip: "Percentage of total webhook events",
       align: "right",
       sortable: true,
       render: (item) => (item.percentage !== null ? `${item.percentage.toFixed(1)}%` : "N/A"),
@@ -202,14 +199,12 @@ export function OverviewPage(): React.ReactElement {
     {
       key: "created_at",
       label: "Time",
-      tooltip: "When webhook was received",
       sortable: true,
       render: (item) => formatDateTime(item.created_at, dateFormat),
     },
     {
       key: "repository",
       label: "Repository",
-      tooltip: "Source repository",
       sortable: true,
     },
     {
@@ -240,7 +235,6 @@ export function OverviewPage(): React.ReactElement {
     {
       key: "number",
       label: "PR",
-      tooltip: "Pull request number",
       sortable: true,
       render: (item) => (
         <a
@@ -257,25 +251,21 @@ export function OverviewPage(): React.ReactElement {
     {
       key: "title",
       label: "Title",
-      tooltip: "PR title",
       sortable: true,
     },
     {
       key: "owner",
       label: "Author",
-      tooltip: "User who opened the PR",
       sortable: true,
     },
     {
       key: "repository",
       label: "Repository",
-      tooltip: "GitHub repository",
       sortable: true,
     },
     {
       key: "state",
       label: "State",
-      tooltip: "PR state: open, closed, or merged",
       align: "center",
       sortable: true,
       render: (item) => {
@@ -296,7 +286,6 @@ export function OverviewPage(): React.ReactElement {
     {
       key: "created_at",
       label: "Created",
-      tooltip: "When PR was opened",
       sortable: true,
       render: (item) => formatDate(item.created_at, dateFormat),
     },

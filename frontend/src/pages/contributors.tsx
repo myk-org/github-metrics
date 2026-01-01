@@ -114,13 +114,12 @@ export function ContributorsPage(): React.ReactElement {
     {
       key: "repository",
       label: "Repository",
-      tooltip: "GitHub repository in org/repo format",
       sortable: true,
     },
     {
       key: "avg_time_to_first_review_hours",
       label: "First Review",
-      tooltip: "Avg hours to first review",
+      tooltip: "Average hours from PR opened to first review",
       align: "right",
       sortable: true,
       render: (item) => formatHours(item.avg_time_to_first_review_hours),
@@ -129,7 +128,7 @@ export function ContributorsPage(): React.ReactElement {
     {
       key: "avg_time_to_approval_hours",
       label: "Approval",
-      tooltip: "Avg hours to first approved-* label",
+      tooltip: "Average hours from PR opened to first approved-* label",
       align: "right",
       sortable: true,
       render: (item) => formatHours(item.avg_time_to_approval_hours),
@@ -138,7 +137,7 @@ export function ContributorsPage(): React.ReactElement {
     {
       key: "avg_pr_lifecycle_hours",
       label: "Lifecycle",
-      tooltip: "Avg hours from open to close",
+      tooltip: "Average hours from PR opened to closed/merged (completed PRs only)",
       align: "right",
       sortable: true,
       render: (item) => formatHours(item.avg_pr_lifecycle_hours),
@@ -147,7 +146,6 @@ export function ContributorsPage(): React.ReactElement {
     {
       key: "total_prs",
       label: "PRs",
-      tooltip: "Total PRs in this repository",
       align: "right",
       sortable: true,
       getValue: (item) => item.total_prs,
@@ -156,7 +154,7 @@ export function ContributorsPage(): React.ReactElement {
 
   // Column definitions for Response Time by Reviewer
   const turnaroundByReviewerColumns: readonly ColumnDef<TurnaroundByReviewer>[] = [
-    { key: "reviewer", label: "Reviewer", tooltip: "GitHub username", sortable: true },
+    { key: "reviewer", label: "Reviewer", sortable: true },
     {
       key: "avg_response_time_hours",
       label: "Avg Response",
@@ -169,7 +167,6 @@ export function ContributorsPage(): React.ReactElement {
     {
       key: "total_reviews",
       label: "Reviews",
-      tooltip: "Total reviews submitted",
       align: "right",
       sortable: true,
       getValue: (item) => item.total_reviews,
@@ -177,7 +174,6 @@ export function ContributorsPage(): React.ReactElement {
     {
       key: "repositories_reviewed",
       label: "Repositories",
-      tooltip: "List of repositories this user has reviewed",
       sortable: false,
       render: (item) => item.repositories_reviewed.join(", "),
     },
@@ -188,7 +184,6 @@ export function ContributorsPage(): React.ReactElement {
     {
       key: "user",
       label: "User",
-      tooltip: "GitHub username",
       sortable: true,
       render: (item) => (
         <button
@@ -206,7 +201,6 @@ export function ContributorsPage(): React.ReactElement {
     {
       key: "total_prs",
       label: "Total PRs",
-      tooltip: "Number of PRs created by this user",
       align: "right",
       sortable: true,
       getValue: (item) => item.total_prs,
@@ -214,7 +208,6 @@ export function ContributorsPage(): React.ReactElement {
     {
       key: "merged_prs",
       label: "Merged",
-      tooltip: "Number of PRs that were merged",
       align: "right",
       sortable: true,
       getValue: (item) => item.merged_prs,
@@ -222,7 +215,7 @@ export function ContributorsPage(): React.ReactElement {
     {
       key: "closed_prs",
       label: "Closed",
-      tooltip: "Number of PRs closed without merge",
+      tooltip: "PRs closed without merge",
       align: "right",
       sortable: true,
       getValue: (item) => item.closed_prs,
@@ -230,7 +223,6 @@ export function ContributorsPage(): React.ReactElement {
     {
       key: "avg_commits_per_pr",
       label: "Avg Commits",
-      tooltip: "Average commits per PR",
       align: "right",
       sortable: true,
       render: (item) =>
@@ -244,7 +236,6 @@ export function ContributorsPage(): React.ReactElement {
     {
       key: "user",
       label: "User",
-      tooltip: "GitHub username",
       sortable: true,
       render: (item) => (
         <button
@@ -262,7 +253,6 @@ export function ContributorsPage(): React.ReactElement {
     {
       key: "total_reviews",
       label: "Reviews",
-      tooltip: "Total reviews submitted",
       align: "right",
       sortable: true,
       getValue: (item) => item.total_reviews,
@@ -270,7 +260,6 @@ export function ContributorsPage(): React.ReactElement {
     {
       key: "prs_reviewed",
       label: "PRs Reviewed",
-      tooltip: "Unique PRs reviewed",
       align: "right",
       sortable: true,
       getValue: (item) => item.prs_reviewed,
@@ -300,7 +289,6 @@ export function ContributorsPage(): React.ReactElement {
     {
       key: "user",
       label: "User",
-      tooltip: "GitHub username",
       sortable: true,
       render: (item) => (
         <button
@@ -326,7 +314,6 @@ export function ContributorsPage(): React.ReactElement {
     {
       key: "prs_approved",
       label: "PRs Approved",
-      tooltip: "Unique PRs approved",
       align: "right",
       sortable: true,
       getValue: (item) => item.prs_approved,
@@ -338,7 +325,6 @@ export function ContributorsPage(): React.ReactElement {
     {
       key: "user",
       label: "User",
-      tooltip: "GitHub username",
       sortable: true,
       render: (item) => (
         <button
@@ -364,7 +350,6 @@ export function ContributorsPage(): React.ReactElement {
     {
       key: "prs_lgtm",
       label: "PRs LGTM'd",
-      tooltip: "Unique PRs with LGTM from this user",
       align: "right",
       sortable: true,
       getValue: (item) => item.prs_lgtm,

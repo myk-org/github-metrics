@@ -232,7 +232,6 @@ export function TeamDynamicsPage(): React.ReactElement {
     {
       key: "user",
       label: "User",
-      tooltip: "GitHub username",
       sortable: true,
       render: (item) => (
         <button
@@ -250,7 +249,6 @@ export function TeamDynamicsPage(): React.ReactElement {
     {
       key: "prs_created",
       label: "PRs Created",
-      tooltip: "Number of PRs opened by this user",
       align: "right",
       sortable: true,
       getValue: (item) => item.prs_created,
@@ -258,7 +256,6 @@ export function TeamDynamicsPage(): React.ReactElement {
     {
       key: "prs_reviewed",
       label: "PRs Reviewed",
-      tooltip: "Number of PRs where user submitted a review",
       align: "right",
       sortable: true,
       getValue: (item) => item.prs_reviewed,
@@ -266,7 +263,6 @@ export function TeamDynamicsPage(): React.ReactElement {
     {
       key: "prs_approved",
       label: "PRs Approved",
-      tooltip: "Number of PRs where user added approved-* label",
       align: "right",
       sortable: true,
       getValue: (item) => item.prs_approved,
@@ -278,7 +274,6 @@ export function TeamDynamicsPage(): React.ReactElement {
     {
       key: "user",
       label: "Reviewer",
-      tooltip: "GitHub username of reviewer",
       sortable: true,
       render: (item) => (
         <button
@@ -314,7 +309,6 @@ export function TeamDynamicsPage(): React.ReactElement {
     {
       key: "total_reviews",
       label: "Reviews",
-      tooltip: "Total reviews submitted by this user",
       align: "right",
       sortable: true,
       getValue: (item) => item.total_reviews,
@@ -326,7 +320,6 @@ export function TeamDynamicsPage(): React.ReactElement {
     {
       key: "approver",
       label: "Approver",
-      tooltip: "User who adds approved-* labels",
       sortable: true,
       render: (item) => (
         <button
@@ -353,7 +346,6 @@ export function TeamDynamicsPage(): React.ReactElement {
     {
       key: "total_approvals",
       label: "Approvals",
-      tooltip: "Total PRs approved by this user",
       align: "right",
       sortable: true,
       getValue: (item) => item.total_approvals,
@@ -365,7 +357,6 @@ export function TeamDynamicsPage(): React.ReactElement {
     {
       key: "pr_number",
       label: "PR",
-      tooltip: "Pull request number",
       sortable: true,
       render: (item) => (
         <a
@@ -382,7 +373,6 @@ export function TeamDynamicsPage(): React.ReactElement {
     {
       key: "repository",
       label: "Repository",
-      tooltip: "GitHub repository",
       sortable: true,
       getValue: (item) => item.repository,
     },
