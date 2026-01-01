@@ -3,7 +3,7 @@ import type { DateFormat } from "@/context/date-format-context";
 /**
  * Format hours into human-readable format.
  *
- * @param hours - Number of hours to format
+ * @param hours - Number of hours to format (accepts string for API backwards compatibility)
  * @returns Formatted string (e.g., "6m", "2.4h", "2.1d")
  *          Negative values are prefixed with "-" (e.g., "-30m" means 30 minutes early)
  *
@@ -15,7 +15,7 @@ import type { DateFormat } from "@/context/date-format-context";
  * formatHours(-0.5) // "-30m" (resolved 30 minutes early)
  * formatHours(null) // "-"
  */
-export function formatHours(hours: number | null | undefined): string {
+export function formatHours(hours: number | string | null | undefined): string {
   // Handle string numbers from API (defensive, for backwards compatibility)
   const numericHours = typeof hours === "string" ? parseFloat(hours) : hours;
 
