@@ -35,6 +35,7 @@ class TestCommentResolutionTimeEndpoint:
                 "thread_node_id": "PRRT_abc123",
                 "repository": "org/repo1",
                 "pr_number": 123,
+                "pr_title": "Add new feature",
                 "file_path": "src/main.py",
                 "first_comment_at": datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC),
                 "second_comment_at": datetime(2024, 1, 15, 10, 30, 0, tzinfo=UTC),
@@ -52,6 +53,7 @@ class TestCommentResolutionTimeEndpoint:
                 "thread_node_id": "PRRT_def456",
                 "repository": "org/repo1",
                 "pr_number": 123,
+                "pr_title": "Add new feature",
                 "file_path": "src/utils.py",
                 "first_comment_at": datetime(2024, 1, 15, 9, 0, 0, tzinfo=UTC),
                 "second_comment_at": datetime(2024, 1, 15, 9, 15, 0, tzinfo=UTC),
@@ -69,6 +71,7 @@ class TestCommentResolutionTimeEndpoint:
                 "thread_node_id": "PRRT_ghi789",
                 "repository": "org/repo2",
                 "pr_number": 456,
+                "pr_title": "Fix bug in API",
                 "file_path": "tests/test_api.py",
                 "first_comment_at": datetime(2024, 1, 16, 8, 0, 0, tzinfo=UTC),
                 "second_comment_at": None,
@@ -101,7 +104,7 @@ class TestCommentResolutionTimeEndpoint:
         ]
 
         with patch("backend.routes.api.comment_resolution.db_manager") as mock_db:
-            # Mock fetch for both queries (asyncio.gather)
+            # Mock fetch for both queries (asyncio.gather) - no start_time so no third query
             mock_db.fetch = AsyncMock(side_effect=[mock_threads_rows, mock_repo_stats_rows])
 
             client = TestClient(app)
@@ -129,6 +132,8 @@ class TestCommentResolutionTimeEndpoint:
             assert summary["avg_comments_per_thread"] == 2.7
             # resolution rate: 2 / 3 * 100 = 66.7
             assert summary["resolution_rate"] == 66.7
+            # No start_time filter, so unresolved_outside_range should be 0
+            assert summary["unresolved_outside_range"] == 0
 
             # Verify by_repository
             assert len(data["by_repository"]) == 2
@@ -144,6 +149,7 @@ class TestCommentResolutionTimeEndpoint:
             assert thread1["thread_node_id"] == "PRRT_abc123"
             assert thread1["repository"] == "org/repo1"
             assert thread1["pr_number"] == 123
+            assert thread1["pr_title"] == "Add new feature"
             assert thread1["resolution_time_hours"] == 2.5
             assert thread1["comment_count"] == 4
             assert thread1["participants"] == ["user1", "user2", "user3"]
@@ -164,6 +170,7 @@ class TestCommentResolutionTimeEndpoint:
                 "thread_node_id": "PRRT_xyz",
                 "repository": "org/specific-repo",
                 "pr_number": 100,
+                "pr_title": "Update README",
                 "file_path": "README.md",
                 "first_comment_at": datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC),
                 "second_comment_at": datetime(2024, 1, 15, 10, 30, 0, tzinfo=UTC),
@@ -186,9 +193,18 @@ class TestCommentResolutionTimeEndpoint:
                 "avg_resolution_time_hours": 2.0,
             },
         ]
+        # Mock unresolved threads outside range (3 older unresolved threads)
+        mock_unresolved_outside_rows = [
+            {
+                "unresolved_outside_count": 3,
+            },
+        ]
 
         with patch("backend.routes.api.comment_resolution.db_manager") as mock_db:
-            mock_db.fetch = AsyncMock(side_effect=[mock_threads_rows, mock_repo_stats_rows])
+            # Three queries now: threads, repo_stats, unresolved_outside (because start_time is provided)
+            mock_db.fetch = AsyncMock(
+                side_effect=[mock_threads_rows, mock_repo_stats_rows, mock_unresolved_outside_rows]
+            )
 
             client = TestClient(app)
             response = client.get(
@@ -203,6 +219,7 @@ class TestCommentResolutionTimeEndpoint:
             assert response.status_code == status.HTTP_200_OK
             data = response.json()
             assert data["summary"]["total_threads_analyzed"] == 1
+            assert data["summary"]["unresolved_outside_range"] == 3
             assert len(data["by_repository"]) == 1
             assert data["by_repository"][0]["repository"] == "org/specific-repo"
 
@@ -214,6 +231,7 @@ class TestCommentResolutionTimeEndpoint:
                 "thread_node_id": f"PRRT_{i}",
                 "repository": "org/repo1",
                 "pr_number": 123,
+                "pr_title": "Test PR",
                 "file_path": f"file{i}.py",
                 "first_comment_at": datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC),
                 "second_comment_at": None,
@@ -265,7 +283,7 @@ class TestCommentResolutionTimeEndpoint:
     def test_get_comment_resolution_time_empty_results(self) -> None:
         """Test comment resolution time with no matching data."""
         with patch("backend.routes.api.comment_resolution.db_manager") as mock_db:
-            # Empty results for both queries
+            # Empty results for both queries (no start_time so only 2 queries)
             mock_db.fetch = AsyncMock(side_effect=[[], []])
 
             client = TestClient(app)
@@ -281,6 +299,7 @@ class TestCommentResolutionTimeEndpoint:
             assert data["summary"]["avg_comments_per_thread"] == 0.0
             assert data["summary"]["total_threads_analyzed"] == 0
             assert data["summary"]["resolution_rate"] == 0.0
+            assert data["summary"]["unresolved_outside_range"] == 0
             assert len(data["by_repository"]) == 0
             assert len(data["threads"]) == 0
 
@@ -291,6 +310,7 @@ class TestCommentResolutionTimeEndpoint:
                 "thread_node_id": "PRRT_1",
                 "repository": "org/repo1",
                 "pr_number": 123,
+                "pr_title": "Feature PR",
                 "file_path": "file1.py",
                 "first_comment_at": datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC),
                 "second_comment_at": datetime(2024, 1, 15, 10, 30, 0, tzinfo=UTC),
@@ -308,6 +328,7 @@ class TestCommentResolutionTimeEndpoint:
                 "thread_node_id": "PRRT_2",
                 "repository": "org/repo1",
                 "pr_number": 456,
+                "pr_title": None,  # NULL pr_title
                 "file_path": None,  # NULL file path
                 "first_comment_at": datetime(2024, 1, 16, 9, 0, 0, tzinfo=UTC),
                 "second_comment_at": None,  # Only 1 comment
@@ -347,6 +368,7 @@ class TestCommentResolutionTimeEndpoint:
 
             # Verify NULL values handled correctly
             thread2 = data["threads"][1]
+            assert thread2["pr_title"] is None
             assert thread2["file_path"] is None
             assert thread2["time_to_first_response_hours"] is None
             assert thread2["resolved_at"] is None
@@ -360,6 +382,7 @@ class TestCommentResolutionTimeEndpoint:
                 "thread_node_id": f"PRRT_{i}",
                 "repository": "org/repo1",
                 "pr_number": 123,
+                "pr_title": "Median test PR",
                 "file_path": f"file{i}.py",
                 "first_comment_at": datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC),
                 "second_comment_at": None,
@@ -403,6 +426,7 @@ class TestCommentResolutionTimeEndpoint:
                 "thread_node_id": f"PRRT_{i}",
                 "repository": "org/repo1",
                 "pr_number": 123,
+                "pr_title": "Median even test PR",
                 "file_path": f"file{i}.py",
                 "first_comment_at": datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC),
                 "second_comment_at": None,
@@ -502,6 +526,7 @@ class TestCommentResolutionTimeEndpoint:
                 "thread_node_id": "PRRT_abc",
                 "repository": "org/repo1",
                 "pr_number": 123,
+                "pr_title": "Test structure PR",
                 "file_path": "file.py",
                 "first_comment_at": datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC),
                 "second_comment_at": datetime(2024, 1, 15, 10, 30, 0, tzinfo=UTC),
@@ -545,6 +570,7 @@ class TestCommentResolutionTimeEndpoint:
                 "avg_comments_per_thread",
                 "total_threads_analyzed",
                 "resolution_rate",
+                "unresolved_outside_range",
             }
 
             # Verify by_repository structure
@@ -564,6 +590,7 @@ class TestCommentResolutionTimeEndpoint:
                     "thread_node_id",
                     "repository",
                     "pr_number",
+                    "pr_title",
                     "first_comment_at",
                     "resolved_at",
                     "resolution_time_hours",
@@ -600,7 +627,7 @@ class TestCommentResolutionTimeEndpoint:
         mock_repo_stats_rows: list[dict[str, Any]] = []
 
         with patch("backend.routes.api.comment_resolution.db_manager") as mock_db:
-            # Simulate both SQL queries returning empty results
+            # Simulate both SQL queries returning empty results (no start_time so 2 queries)
             mock_db.fetch = AsyncMock(side_effect=[mock_threads_rows, mock_repo_stats_rows])
 
             client = TestClient(app)
@@ -623,6 +650,7 @@ class TestCommentResolutionTimeEndpoint:
             assert data["summary"]["avg_comments_per_thread"] == 0.0
             assert data["summary"]["total_threads_analyzed"] == 0
             assert data["summary"]["resolution_rate"] == 0.0
+            assert data["summary"]["unresolved_outside_range"] == 0
 
             # Verify empty lists (not None or missing)
             assert isinstance(data["by_repository"], list)
@@ -635,7 +663,7 @@ class TestCommentResolutionTimeEndpoint:
             assert data["pagination"]["total"] == 0
             assert data["pagination"]["total_pages"] == 0
 
-            # Verify database was queried correctly (both queries executed)
+            # Verify database was queried correctly (2 queries executed, no start_time)
             assert mock_db.fetch.call_count == 2
 
     def test_get_comment_resolution_time_page_2(self) -> None:
@@ -646,6 +674,7 @@ class TestCommentResolutionTimeEndpoint:
                 "thread_node_id": f"PRRT_{i}",
                 "repository": "org/repo1",
                 "pr_number": 123,
+                "pr_title": "Page 2 test PR",
                 "file_path": f"file{i}.py",
                 "first_comment_at": datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC),
                 "second_comment_at": None,
@@ -694,3 +723,189 @@ class TestCommentResolutionTimeEndpoint:
             # Verify threads from page 2
             assert len(data["threads"]) == 25
             assert data["threads"][0]["thread_node_id"] == "PRRT_25"
+
+    def test_get_comment_resolution_handles_malformed_thread_data(self) -> None:
+        """Test that comment resolution handles malformed thread data gracefully."""
+        # Mock threads with malformed data (NULL thread_node_id, missing fields)
+        mock_threads_rows = [
+            {
+                "thread_node_id": None,  # NULL thread_node_id
+                "repository": "org/repo",
+                "pr_number": 1,
+                "pr_title": "Test PR",
+                "file_path": "test.py",
+                "first_comment_at": datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
+                "second_comment_at": None,
+                "time_to_first_response_hours": None,
+                "resolved_at": None,
+                "resolver": None,
+                "resolution_time_hours": None,
+                "comment_count": 1,
+                "participants": [],
+                "can_be_merged_at": None,
+                "time_from_can_be_merged_hours": None,
+                "total_count": 2,
+            },
+            {
+                "thread_node_id": "valid_node_id",
+                "repository": "org/repo",
+                "pr_number": 2,
+                "pr_title": "Valid PR",
+                "file_path": "valid.py",
+                "first_comment_at": datetime(2024, 1, 2, 10, 0, 0, tzinfo=UTC),
+                "second_comment_at": datetime(2024, 1, 2, 10, 30, 0, tzinfo=UTC),
+                "time_to_first_response_hours": 0.5,
+                "resolved_at": datetime(2024, 1, 2, 12, 0, 0, tzinfo=UTC),
+                "resolver": "reviewer",
+                "resolution_time_hours": 2.0,
+                "comment_count": 3,
+                "participants": ["author", "reviewer"],
+                "can_be_merged_at": None,
+                "time_from_can_be_merged_hours": None,
+                "total_count": 2,
+            },
+        ]
+        # Mock repo stats
+        mock_repo_stats_rows = [
+            {
+                "repository": "org/repo",
+                "total_threads": 2,
+                "resolved_threads": 1,
+                "avg_resolution_time_hours": 2.0,
+            }
+        ]
+
+        with patch("backend.routes.api.comment_resolution.db_manager") as mock_db:
+            mock_db.fetch = AsyncMock(side_effect=[mock_threads_rows, mock_repo_stats_rows])
+
+            client = TestClient(app)
+            response = client.get("/api/metrics/comment-resolution-time")
+
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+
+            # Should return both threads, including the one with NULL thread_node_id
+            assert len(data["threads"]) == 2
+            assert data["threads"][0]["thread_node_id"] is None
+            assert data["threads"][1]["thread_node_id"] == "valid_node_id"
+
+            # Verify summary metrics are computed correctly despite malformed data
+            assert data["summary"]["total_threads_analyzed"] == 2
+            assert data["summary"]["resolution_rate"] == 50.0
+            assert data["summary"]["avg_resolution_time_hours"] == 2.0
+
+    def test_comment_resolution_with_duplicate_sha_mappings(self) -> None:
+        """Test that duplicate SHA mappings don't cause duplicate thread entries.
+
+        The pr_shas CTE in the SQL query collects SHAs from 3 sources:
+        - pull_request events (head.sha)
+        - pull_request_review events (pull_request.head.sha)
+        - synchronize events (after.sha)
+
+        This test ensures that when the same SHA appears in multiple webhook events,
+        the thread data is not duplicated in the response.
+        """
+        # Mock threads query with unique threads (despite potential SHA duplicates in DB)
+        mock_threads_rows = [
+            {
+                "thread_node_id": "thread_1",
+                "repository": "org/repo",
+                "pr_number": 1,
+                "pr_title": "Test PR with multiple SHA sources",
+                "first_comment_at": datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
+                "second_comment_at": datetime(2024, 1, 1, 10, 30, 0, tzinfo=UTC),
+                "time_to_first_response_hours": 0.5,
+                "resolved_at": datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
+                "resolution_time_hours": 2.0,
+                "comment_count": 3,
+                "resolver": "reviewer",
+                "participants": ["author", "reviewer"],
+                "file_path": "test.py",
+                "can_be_merged_at": datetime(2024, 1, 1, 11, 0, 0, tzinfo=UTC),
+                "time_from_can_be_merged_hours": 1.0,
+                "total_count": 1,
+            },
+        ]
+        # Mock repo stats
+        mock_repo_stats_rows = [
+            {
+                "repository": "org/repo",
+                "avg_resolution_time_hours": 2.0,
+                "total_threads": 1,
+                "resolved_threads": 1,
+            }
+        ]
+
+        with patch("backend.routes.api.comment_resolution.db_manager") as mock_db:
+            mock_db.fetch = AsyncMock(side_effect=[mock_threads_rows, mock_repo_stats_rows])
+
+            client = TestClient(app)
+            response = client.get("/api/metrics/comment-resolution-time")
+
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+
+            # Should only have 1 thread, not duplicated even if SHA appears multiple times
+            assert len(data["threads"]) == 1
+            assert data["threads"][0]["thread_node_id"] == "thread_1"
+
+            # Summary should reflect single thread
+            assert data["summary"]["total_threads_analyzed"] == 1
+            assert data["summary"]["resolution_rate"] == 100.0
+            assert data["summary"]["avg_resolution_time_hours"] == 2.0
+
+    def test_comment_resolution_handles_negative_times(self) -> None:
+        """Test that negative resolution times are accepted (edge case: clock skew).
+
+        In rare cases, system clock skew between GitHub servers or webhook delivery
+        timing issues could result in timestamps appearing out of order. The API
+        should handle these edge cases gracefully by accepting negative time values
+        rather than filtering them out.
+        """
+        mock_threads_rows = [
+            {
+                "thread_node_id": "thread_1",
+                "repository": "org/repo",
+                "pr_number": 1,
+                "pr_title": "Test PR with clock skew",
+                "first_comment_at": datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
+                "second_comment_at": datetime(2024, 1, 1, 11, 30, 0, tzinfo=UTC),  # Before first comment
+                "time_to_first_response_hours": -0.5,  # Negative due to clock skew
+                "resolved_at": datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),  # Even earlier
+                "resolution_time_hours": -2.0,  # Negative!
+                "comment_count": 2,
+                "resolver": "reviewer",
+                "participants": ["author", "reviewer"],
+                "file_path": "test.py",
+                "can_be_merged_at": None,
+                "time_from_can_be_merged_hours": None,
+                "total_count": 1,
+            },
+        ]
+        mock_repo_stats_rows = [
+            {
+                "repository": "org/repo",
+                "avg_resolution_time_hours": -2.0,
+                "total_threads": 1,
+                "resolved_threads": 1,
+            }
+        ]
+
+        with patch("backend.routes.api.comment_resolution.db_manager") as mock_db:
+            mock_db.fetch = AsyncMock(side_effect=[mock_threads_rows, mock_repo_stats_rows])
+
+            client = TestClient(app)
+            response = client.get("/api/metrics/comment-resolution-time")
+
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+
+            # Negative times should be passed through (not filtered or rejected)
+            assert len(data["threads"]) == 1
+            assert data["threads"][0]["resolution_time_hours"] == -2.0
+            assert data["threads"][0]["time_to_first_response_hours"] == -0.5
+
+            # Summary should include negative values
+            assert data["summary"]["avg_resolution_time_hours"] == -2.0
+            assert data["summary"]["avg_time_to_first_response_hours"] == -0.5
+            assert data["summary"]["median_resolution_time_hours"] == -2.0

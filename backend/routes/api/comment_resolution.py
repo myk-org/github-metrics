@@ -21,7 +21,10 @@ db_manager: DatabaseManager | None = None
 
 
 def _build_can_be_merged_cte(time_filter: str, repository_filter: str) -> str:
-    """Build CTE for finding first successful can-be-merged check run per PR.
+    """Build CTE for finding first successful can-be-merged check run per head_sha.
+
+    Matches check_run events to PRs via head_sha instead of pull_requests array,
+    since the pull_requests array is often empty in check_run webhooks.
 
     Args:
         time_filter: SQL WHERE clause for time filtering
@@ -35,7 +38,7 @@ def _build_can_be_merged_cte(time_filter: str, repository_filter: str) -> str:
     can_be_merged AS (
         SELECT
             w.repository,
-            (w.payload->'check_run'->>'pull_requests')::jsonb->0->>'number' as pr_number_text,
+            w.payload->'check_run'->>'head_sha' as head_sha,
             MIN(w.created_at) as can_be_merged_at
         FROM webhooks w
         WHERE w.event_type = 'check_run'
@@ -45,7 +48,7 @@ def _build_can_be_merged_cte(time_filter: str, repository_filter: str) -> str:
         + time_filter
         + repository_filter
         + """
-        GROUP BY w.repository, (w.payload->'check_run'->>'pull_requests')::jsonb->0->>'number'
+        GROUP BY w.repository, w.payload->'check_run'->>'head_sha'
     )"""
     )
 
@@ -93,7 +96,8 @@ async def get_comment_resolution_time(
         "avg_time_to_first_response_hours": 0.8,
         "avg_comments_per_thread": 3.2,
         "total_threads_analyzed": 150,
-        "resolution_rate": 85.5
+        "resolution_rate": 85.5,
+        "unresolved_outside_range": 12
       },
       "by_repository": [
         {
@@ -108,6 +112,7 @@ async def get_comment_resolution_time(
           "thread_node_id": "PRRT_abc123",
           "repository": "org/repo1",
           "pr_number": 123,
+          "pr_title": "Add new feature X",
           "first_comment_at": "2024-01-15T10:00:00Z",
           "resolved_at": "2024-01-15T12:30:00Z",
           "resolution_time_hours": 2.5,
@@ -138,6 +143,7 @@ async def get_comment_resolution_time(
     - `avg_comments_per_thread`: Average number of comments per thread
     - `total_threads_analyzed`: Total threads in dataset
     - `resolution_rate`: Percentage of threads that have been resolved
+    - `unresolved_outside_range`: Number of unresolved threads older than start_time (0 if no start_time filter)
     - `time_to_first_response_hours`: Time from first to second comment (null if only 1 comment)
     - `time_from_can_be_merged_hours`: Time from can-be-merged success to resolution (null if no can-be-merged)
 
@@ -168,98 +174,215 @@ async def get_comment_resolution_time(
         WITH """
         + _build_can_be_merged_cte(time_filter, repository_filter)
         + """,
-        thread_events AS (
-            -- Get all pull_request_review_thread events
+        -- Collect head SHAs from multiple event types to match can-be-merged check runs to PRs
+        -- Need 3 UNIONs because check_run webhooks often have empty pull_requests array
+        pr_shas AS (
+            -- Source 1: Pull request events (most reliable for PR number → SHA mapping)
+            SELECT
+                repository,
+                pr_number,
+                payload->'pull_request'->'head'->>'sha' as head_sha
+            FROM webhooks
+            WHERE event_type = 'pull_request'
+              AND pr_number IS NOT NULL
+              AND payload->'pull_request'->'head'->>'sha' IS NOT NULL
+              """
+        + time_filter
+        + repository_filter
+        + """
+            UNION
+            -- Source 2: Check run events with PR associations (when pull_requests array is populated)
             SELECT
                 w.repository,
-                w.pr_number,
-                w.action,
-                w.created_at,
-                w.payload->'thread'->>'node_id' as thread_node_id,
-                w.payload->'thread'->>'path' as file_path,
-                w.payload->'thread'->'comments' as comments_array,
-                jsonb_array_length(w.payload->'thread'->'comments') as comment_count,
-                w.payload->'thread'->'comments'->0->>'created_at' as first_comment_at,
-                w.payload->'thread'->'comments'->0->'user'->>'login' as first_commenter,
-                w.payload->'thread'->'comments'->1->>'created_at' as second_comment_at,
-                w.payload->'sender'->>'login' as resolver
-            FROM webhooks w
-            WHERE w.event_type = 'pull_request_review_thread'
-              AND w.pr_number IS NOT NULL
-              AND w.payload->'thread'->>'node_id' IS NOT NULL
+                (pr_elem->>'number')::int as pr_number,
+                w.payload->'check_run'->>'head_sha' as head_sha
+            FROM webhooks w,
+                 jsonb_array_elements(w.payload->'check_run'->'pull_requests') as pr_elem
+            WHERE w.event_type = 'check_run'
+              AND w.payload->'check_run'->>'head_sha' IS NOT NULL
+              AND jsonb_array_length(w.payload->'check_run'->'pull_requests') > 0
+              """
+        + time_filter
+        + repository_filter
+        + """
+            UNION
+            -- Source 3: Check suite events with PR associations (alternative source for SHA → PR mapping)
+            SELECT
+                w.repository,
+                (pr_elem->>'number')::int as pr_number,
+                w.payload->'check_suite'->>'head_sha' as head_sha
+            FROM webhooks w,
+                 jsonb_array_elements(w.payload->'check_suite'->'pull_requests') as pr_elem
+            WHERE w.event_type = 'check_suite'
+              AND w.payload->'check_suite'->>'head_sha' IS NOT NULL
+              AND jsonb_array_length(w.payload->'check_suite'->'pull_requests') > 0
               """
         + time_filter
         + repository_filter
         + """
         ),
-        resolved_threads AS (
-            -- Get resolution events
-            SELECT
-                thread_node_id,
+        -- Match can-be-merged check runs to PRs via head_sha, get earliest success per PR
+        pr_can_be_merged AS (
+            SELECT DISTINCT ON (ps.repository, ps.pr_number)
+                ps.repository,
+                ps.pr_number,
+                cm.can_be_merged_at
+            FROM pr_shas ps
+            JOIN can_be_merged cm ON ps.repository = cm.repository AND ps.head_sha = cm.head_sha
+            ORDER BY ps.repository, ps.pr_number, cm.can_be_merged_at ASC
+        ),
+        -- Get PR titles (latest title for each PR)
+        pr_titles AS (
+            SELECT DISTINCT ON (repository, pr_number)
                 repository,
                 pr_number,
-                created_at as resolved_at,
-                resolver
-            FROM thread_events
-            WHERE action = 'resolved'
+                payload->'pull_request'->>'title' as pr_title
+            FROM webhooks
+            WHERE event_type = 'pull_request'
+              AND pr_number IS NOT NULL
+              AND payload->'pull_request'->>'title' IS NOT NULL
+            ORDER BY repository, pr_number, created_at DESC
         ),
-        thread_metadata AS (
-            -- Get thread metadata from first event (resolved or unresolved)
-            SELECT DISTINCT ON (thread_node_id)
-                thread_node_id,
+        -- Extract thread root comments (first comment in each thread)
+        -- These are comments with in_reply_to_id = NULL
+        comment_threads AS (
+            SELECT
+                w.repository,
+                w.pr_number,
+                w.payload->'comment'->>'id' as root_comment_id,
+                w.payload->'comment'->>'path' as file_path,
+                (w.payload->'comment'->>'created_at')::timestamptz as first_comment_at,
+                w.payload->'comment'->'user'->>'login' as first_commenter,
+                w.created_at
+            FROM webhooks w
+            WHERE w.event_type = 'pull_request_review_comment'
+              AND w.action = 'created'
+              AND w.payload->'comment'->>'in_reply_to_id' IS NULL
+              AND w.pr_number IS NOT NULL
+              """
+        + time_filter
+        + repository_filter
+        + """
+        ),
+        -- Count total comments per thread (replies + root comment)
+        comment_counts AS (
+            SELECT
+                w.payload->'comment'->>'in_reply_to_id' as parent_id,
+                COUNT(*) + 1 as comment_count
+            FROM webhooks w
+            WHERE w.event_type = 'pull_request_review_comment'
+              AND w.payload->'comment'->>'in_reply_to_id' IS NOT NULL
+            GROUP BY w.payload->'comment'->>'in_reply_to_id'
+        ),
+        -- Collect all participants per thread (all users who commented in thread)
+        comment_participants AS (
+            SELECT
+                COALESCE(w.payload->'comment'->>'in_reply_to_id', w.payload->'comment'->>'id') as thread_root_id,
+                jsonb_agg(DISTINCT w.payload->'comment'->'user'->>'login') as participants
+            FROM webhooks w
+            WHERE w.event_type = 'pull_request_review_comment'
+              AND w.payload->'comment'->'user'->>'login' IS NOT NULL
+            GROUP BY COALESCE(w.payload->'comment'->>'in_reply_to_id', w.payload->'comment'->>'id')
+        ),
+        -- Get latest resolution state per thread (resolved or unresolved)
+        -- Uses DISTINCT ON to get most recent state for each thread
+        latest_resolution_state AS (
+            SELECT DISTINCT ON (repository, pr_number, root_comment_id)
                 repository,
                 pr_number,
-                file_path,
-                comment_count,
-                first_comment_at::timestamptz as first_comment_at,
-                second_comment_at::timestamptz as second_comment_at,
-                comments_array
-            FROM thread_events
-            ORDER BY thread_node_id, created_at
+                root_comment_id,
+                thread_node_id,
+                resolved_at,
+                resolver,
+                action
+            FROM (
+                SELECT
+                    repository,
+                    pr_number,
+                    payload->'thread'->'comments'->0->>'id' as root_comment_id,
+                    payload->'thread'->>'node_id' as thread_node_id,
+                    CASE WHEN action = 'resolved' THEN created_at ELSE NULL END as resolved_at,
+                    CASE WHEN action = 'resolved' THEN payload->'sender'->>'login' ELSE NULL END as resolver,
+                    created_at,
+                    action
+                FROM webhooks
+                WHERE event_type = 'pull_request_review_thread'
+                  AND pr_number IS NOT NULL
+                  """
+        + time_filter
+        + repository_filter
+        + """
+            ) sub
+            ORDER BY repository, pr_number, root_comment_id, created_at DESC
         ),
-        thread_participants AS (
-            -- Extract unique participants per thread
+        -- Find earliest reply per thread for response time calculation
+        second_comments AS (
             SELECT
-                tm.thread_node_id,
-                jsonb_agg(DISTINCT comment->'user'->>'login') as participants
-            FROM thread_metadata tm,
-                 jsonb_array_elements(tm.comments_array) as comment
-            WHERE comment->'user'->>'login' IS NOT NULL
-            GROUP BY tm.thread_node_id
+                w.payload->'comment'->>'in_reply_to_id' as thread_root_id,
+                MIN((w.payload->'comment'->>'created_at')::timestamptz) as second_comment_at
+            FROM webhooks w
+            WHERE w.event_type = 'pull_request_review_comment'
+              AND w.payload->'comment'->>'in_reply_to_id' IS NOT NULL
+            GROUP BY w.payload->'comment'->>'in_reply_to_id'
         ),
+        -- Join all thread data: comments + resolution state + counts + participants
+        all_threads AS (
+            SELECT
+                ct.repository,
+                ct.pr_number,
+                ct.root_comment_id,
+                ct.file_path,
+                ct.first_comment_at,
+                ct.first_commenter,
+                lrs.thread_node_id,
+                lrs.resolved_at,
+                lrs.resolver,
+                CASE WHEN lrs.action = 'resolved' THEN true ELSE false END as is_resolved,
+                COALESCE(cc.comment_count, 1) as comment_count,
+                cp.participants,
+                sc.second_comment_at
+            FROM comment_threads ct
+            LEFT JOIN latest_resolution_state lrs
+                ON ct.repository = lrs.repository
+                AND ct.pr_number = lrs.pr_number
+                AND ct.root_comment_id = lrs.root_comment_id
+            LEFT JOIN comment_counts cc ON ct.root_comment_id = cc.parent_id
+            LEFT JOIN comment_participants cp ON ct.root_comment_id = cp.thread_root_id
+            LEFT JOIN second_comments sc ON ct.root_comment_id = sc.thread_root_id
+        ),
+        -- Calculate resolution metrics and join with can-be-merged data
         threads_with_resolution AS (
-            -- Combine all thread data
             SELECT
-                tm.thread_node_id,
-                tm.repository,
-                tm.pr_number,
-                tm.file_path,
-                tm.first_comment_at,
-                tm.second_comment_at,
+                COALESCE(at.thread_node_id, 'comment-' || at.root_comment_id) as thread_node_id,
+                at.repository,
+                at.pr_number,
+                pt.pr_title,
+                at.file_path,
+                at.first_comment_at,
+                at.second_comment_at,
                 CASE
-                    WHEN tm.second_comment_at IS NOT NULL
-                    THEN EXTRACT(EPOCH FROM (tm.second_comment_at - tm.first_comment_at)) / 3600
+                    WHEN at.second_comment_at IS NOT NULL
+                    THEN EXTRACT(EPOCH FROM (at.second_comment_at - at.first_comment_at)) / 3600
                     ELSE NULL
                 END as time_to_first_response_hours,
-                rt.resolved_at,
-                rt.resolver,
+                at.resolved_at,
+                at.resolver,
                 CASE
-                    WHEN rt.resolved_at IS NOT NULL
-                    THEN EXTRACT(EPOCH FROM (rt.resolved_at - tm.first_comment_at)) / 3600
+                    WHEN at.resolved_at IS NOT NULL
+                    THEN EXTRACT(EPOCH FROM (at.resolved_at - at.first_comment_at)) / 3600
                     ELSE NULL
                 END as resolution_time_hours,
-                tm.comment_count,
-                tp.participants,
-                cm.can_be_merged_at,
+                at.comment_count,
+                at.participants,
+                pcm.can_be_merged_at,
                 CASE
-                    WHEN rt.resolved_at IS NOT NULL AND cm.can_be_merged_at IS NOT NULL
-                    THEN EXTRACT(EPOCH FROM (rt.resolved_at - cm.can_be_merged_at)) / 3600
+                    WHEN at.resolved_at IS NOT NULL AND pcm.can_be_merged_at IS NOT NULL
+                    THEN EXTRACT(EPOCH FROM (at.resolved_at - pcm.can_be_merged_at)) / 3600
                     ELSE NULL
                 END as time_from_can_be_merged_hours
-            FROM thread_metadata tm
-            LEFT JOIN resolved_threads rt ON tm.thread_node_id = rt.thread_node_id
-            LEFT JOIN thread_participants tp ON tm.thread_node_id = tp.thread_node_id
-            LEFT JOIN can_be_merged cm ON tm.repository = cm.repository AND tm.pr_number::text = cm.pr_number_text
+            FROM all_threads at
+            LEFT JOIN pr_can_be_merged pcm ON at.repository = pcm.repository AND at.pr_number = pcm.pr_number
+            LEFT JOIN pr_titles pt ON at.repository = pt.repository AND at.pr_number = pt.pr_number
         ),
         counted_threads AS (
             SELECT COUNT(*) as total_count
@@ -280,49 +403,74 @@ async def get_comment_resolution_time(
     # Query 2: Get repository-level statistics
     repo_stats_query = (
         """
-        WITH thread_events AS (
+        WITH comment_threads AS (
             SELECT
                 w.repository,
-                w.action,
-                w.payload->'thread'->>'node_id' as thread_node_id
+                w.pr_number,
+                w.payload->'comment'->>'id' as root_comment_id,
+                (w.payload->'comment'->>'created_at')::timestamptz as first_comment_at
             FROM webhooks w
-            WHERE w.event_type = 'pull_request_review_thread'
+            WHERE w.event_type = 'pull_request_review_comment'
+              AND w.action = 'created'
+              AND w.payload->'comment'->>'in_reply_to_id' IS NULL
               AND w.pr_number IS NOT NULL
-              AND w.payload->'thread'->>'node_id' IS NOT NULL
               """
         + time_filter
         + repository_filter
         + """
+        ),
+        latest_resolution_state AS (
+            SELECT DISTINCT ON (repository, pr_number, root_comment_id)
+                repository,
+                pr_number,
+                root_comment_id,
+                resolved_at,
+                action
+            FROM (
+                SELECT
+                    repository,
+                    pr_number,
+                    payload->'thread'->'comments'->0->>'id' as root_comment_id,
+                    CASE WHEN action = 'resolved' THEN created_at ELSE NULL END as resolved_at,
+                    created_at,
+                    action
+                FROM webhooks
+                WHERE event_type = 'pull_request_review_thread'
+                  AND pr_number IS NOT NULL
+                  """
+        + time_filter
+        + repository_filter
+        + """
+            ) sub
+            ORDER BY repository, pr_number, root_comment_id, created_at DESC
+        ),
+        all_threads AS (
+            SELECT
+                ct.repository,
+                ct.root_comment_id,
+                ct.first_comment_at,
+                lrs.resolved_at,
+                CASE WHEN lrs.action = 'resolved' THEN true ELSE false END as is_resolved
+            FROM comment_threads ct
+            LEFT JOIN latest_resolution_state lrs
+                ON ct.repository = lrs.repository
+                AND ct.pr_number = lrs.pr_number
+                AND ct.root_comment_id = lrs.root_comment_id
         ),
         thread_counts AS (
             SELECT
                 repository,
-                COUNT(DISTINCT thread_node_id) as total_threads,
-                COUNT(DISTINCT CASE WHEN action = 'resolved' THEN thread_node_id END) as resolved_threads
-            FROM thread_events
+                COUNT(*) as total_threads,
+                COUNT(CASE WHEN is_resolved THEN 1 END) as resolved_threads
+            FROM all_threads
             GROUP BY repository
-        ),
-        resolved_times AS (
-            SELECT
-                w.repository,
-                w.payload->'thread'->>'node_id' as thread_node_id,
-                w.payload->'thread'->'comments'->0->>'created_at' as first_comment_at_text,
-                w.created_at as resolved_at
-            FROM webhooks w
-            WHERE w.event_type = 'pull_request_review_thread'
-              AND w.action = 'resolved'
-              AND w.payload->'thread'->>'node_id' IS NOT NULL
-              """
-        + time_filter
-        + repository_filter
-        + """
         ),
         resolution_times_calculated AS (
             SELECT
                 repository,
-                EXTRACT(EPOCH FROM (resolved_at - first_comment_at_text::timestamptz)) / 3600 as resolution_hours
-            FROM resolved_times
-            WHERE first_comment_at_text IS NOT NULL
+                EXTRACT(EPOCH FROM (resolved_at - first_comment_at)) / 3600 as resolution_hours
+            FROM all_threads
+            WHERE resolved_at IS NOT NULL
         )
         SELECT
             tc.repository,
@@ -336,23 +484,116 @@ async def get_comment_resolution_time(
     """
     )
 
+    # Query 3: Count unresolved threads outside time range (only if start_time provided)
+    unresolved_outside_query: str | None = None
+    unresolved_outside_params: list[Any] = []
+    if start_datetime is not None:
+        # Build query to count unresolved threads before start_time
+        unresolved_params = QueryParams()
+        unresolved_repo_filter = build_repository_filter(unresolved_params, repositories)
+
+        unresolved_outside_query = (
+            """
+            WITH comment_threads AS (
+                SELECT
+                    w.repository,
+                    w.pr_number,
+                    w.payload->'comment'->>'id' as root_comment_id,
+                    (w.payload->'comment'->>'created_at')::timestamptz as first_comment_at
+                FROM webhooks w
+                WHERE w.event_type = 'pull_request_review_comment'
+                  AND w.action = 'created'
+                  AND w.payload->'comment'->>'in_reply_to_id' IS NULL
+                  AND w.pr_number IS NOT NULL
+                  """
+            + unresolved_repo_filter
+            + """
+            ),
+            latest_resolution_state AS (
+                SELECT DISTINCT ON (repository, pr_number, root_comment_id)
+                    repository,
+                    pr_number,
+                    root_comment_id,
+                    action
+                FROM (
+                    SELECT
+                        repository,
+                        pr_number,
+                        payload->'thread'->'comments'->0->>'id' as root_comment_id,
+                        created_at,
+                        action
+                    FROM webhooks
+                    WHERE event_type = 'pull_request_review_thread'
+                      AND pr_number IS NOT NULL
+                      """
+            + unresolved_repo_filter
+            + """
+                ) sub
+                ORDER BY repository, pr_number, root_comment_id, created_at DESC
+            ),
+            all_threads AS (
+                SELECT
+                    ct.first_comment_at,
+                    CASE WHEN lrs.action = 'resolved' THEN true ELSE false END as is_resolved
+                FROM comment_threads ct
+                LEFT JOIN latest_resolution_state lrs
+                    ON ct.repository = lrs.repository
+                    AND ct.pr_number = lrs.pr_number
+                    AND ct.root_comment_id = lrs.root_comment_id
+            )
+            SELECT COUNT(*) as unresolved_outside_count
+            FROM all_threads
+            WHERE is_resolved = false
+              AND first_comment_at < """
+            + unresolved_params.add(start_datetime)
+            + """
+        """
+        )
+        unresolved_outside_params = unresolved_params.get_params()
+
     try:
         param_list = base_params.get_params()
 
         # Execute queries in parallel
-        threads_rows, repo_stats_rows = await asyncio.gather(
-            db_manager.fetch(threads_query, *param_list, page_size, offset),
-            db_manager.fetch(repo_stats_query, *param_list),
-        )
+        # Note: unresolved_outside_count is set in both branches to ensure it's always defined
+        if unresolved_outside_query is not None:
+            try:
+                threads_rows, repo_stats_rows, unresolved_outside_rows = await asyncio.gather(
+                    db_manager.fetch(threads_query, *param_list, page_size, offset),
+                    db_manager.fetch(repo_stats_query, *param_list),
+                    db_manager.fetch(unresolved_outside_query, *unresolved_outside_params),
+                )
+            except Exception:
+                LOGGER.exception(
+                    "Failed to execute parallel queries (threads_query, repo_stats_query, unresolved_outside_query)"
+                )
+                raise
+            unresolved_outside_count = (
+                unresolved_outside_rows[0]["unresolved_outside_count"] if unresolved_outside_rows else 0
+            )
+        else:
+            # No start_time filter, so no unresolved threads outside range
+            try:
+                threads_rows, repo_stats_rows = await asyncio.gather(
+                    db_manager.fetch(threads_query, *param_list, page_size, offset),
+                    db_manager.fetch(repo_stats_query, *param_list),
+                )
+            except Exception:
+                LOGGER.exception("Failed to execute parallel queries (threads_query, repo_stats_query)")
+                raise
+            unresolved_outside_count = 0
 
         # Extract total count from first row (or 0 if no rows)
         total_threads = threads_rows[0]["total_count"] if threads_rows else 0
 
-        # Calculate summary statistics
+        # Calculate totals from repo_stats (which has accurate counts across ALL threads)
+        total_threads_from_stats = sum(row["total_threads"] for row in repo_stats_rows)
+        resolved_count_from_stats = sum(row["resolved_threads"] for row in repo_stats_rows)
+
+        # Calculate summary statistics from paginated threads (approximations for avg/median)
         resolution_times: list[float] = []
         response_times: list[float] = []
         comment_counts: list[int] = []
-        resolved_count = 0
 
         for row in threads_rows:
             if row["comment_count"]:
@@ -360,7 +601,6 @@ async def get_comment_resolution_time(
 
             if row["resolution_time_hours"] is not None:
                 resolution_times.append(row["resolution_time_hours"])
-                resolved_count += 1
 
             if row["time_to_first_response_hours"] is not None:
                 response_times.append(row["time_to_first_response_hours"])
@@ -380,7 +620,12 @@ async def get_comment_resolution_time(
         avg_response = round(sum(response_times) / len(response_times), 1) if response_times else 0.0
         avg_comments = round(sum(comment_counts) / len(comment_counts), 1) if comment_counts else 0.0
 
-        resolution_rate = round((resolved_count / total_threads * 100), 1) if total_threads > 0 else 0.0
+        # Use accurate counts from repo_stats for resolution_rate
+        resolution_rate = (
+            round((resolved_count_from_stats / total_threads_from_stats * 100), 1)
+            if total_threads_from_stats > 0
+            else 0.0
+        )
 
         # Format threads for response
         threads_list = [
@@ -388,6 +633,7 @@ async def get_comment_resolution_time(
                 "thread_node_id": row["thread_node_id"],
                 "repository": row["repository"],
                 "pr_number": row["pr_number"],
+                "pr_title": row["pr_title"],
                 "first_comment_at": row["first_comment_at"].isoformat() if row["first_comment_at"] else None,
                 "resolved_at": row["resolved_at"].isoformat() if row["resolved_at"] else None,
                 "resolution_time_hours": round(row["resolution_time_hours"], 1)
@@ -441,6 +687,7 @@ async def get_comment_resolution_time(
                 "avg_comments_per_thread": avg_comments,
                 "total_threads_analyzed": total_threads,
                 "resolution_rate": resolution_rate,
+                "unresolved_outside_range": unresolved_outside_count,
             },
             "by_repository": by_repository,
             "threads": threads_list,

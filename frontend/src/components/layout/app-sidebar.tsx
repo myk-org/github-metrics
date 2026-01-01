@@ -16,7 +16,7 @@ import {
   PanelLeft,
   Users,
   UsersRound,
-  MessageSquare,
+  Activity,
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
@@ -30,7 +30,7 @@ const menuItems: readonly MenuItem[] = [
   { title: "Overview", icon: LayoutDashboard, path: "/" },
   { title: "Contributors", icon: Users, path: "/contributors" },
   { title: "Team Dynamics", icon: UsersRound, path: "/team-dynamics" },
-  { title: "Comment Resolution", icon: MessageSquare, path: "/comment-resolution" },
+  { title: "PR Lifecycle", icon: Activity, path: "/pr-lifecycle" },
 ];
 
 export function AppSidebar(): React.ReactElement {

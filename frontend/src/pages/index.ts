@@ -1,4 +1,4 @@
 export { OverviewPage } from "./overview";
 export { ContributorsPage } from "./contributors";
 export { TeamDynamicsPage } from "./team-dynamics";
-export { CommentResolutionPage } from "./comment-resolution";
+export { PRLifecyclePage } from "./pr-lifecycle";

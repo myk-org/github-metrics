@@ -43,7 +43,9 @@ export interface TrendDataPoint {
 export interface TurnaroundByRepository extends Record<string, unknown> {
   readonly repository: string;
   readonly avg_time_to_first_review_hours: number;
+  readonly avg_time_to_first_changes_requested_hours: number;
   readonly avg_time_to_approval_hours: number;
+  readonly avg_time_to_first_verified_hours: number;
   readonly avg_pr_lifecycle_hours: number;
   readonly total_prs: number;
 }
@@ -57,7 +59,9 @@ export interface TurnaroundByReviewer extends Record<string, unknown> {
 
 export interface TurnaroundSummary {
   readonly avg_time_to_first_review_hours: number;
+  readonly avg_time_to_first_changes_requested_hours: number;
   readonly avg_time_to_approval_hours: number;
+  readonly avg_time_to_first_verified_hours: number;
   readonly avg_pr_lifecycle_hours: number;
   readonly total_prs_analyzed: number;
 }

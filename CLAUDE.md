@@ -22,6 +22,15 @@ docker build -t github-metrics-dev .   # Docker build must succeed
 - ✅ **FIX THE CODE** - If linter complains, the code is wrong
 - If you think a rule is wrong: **ASK** the user for explicit approval
 
+### GitHub API Calls PROHIBITED
+
+- ❌ **NEVER** make direct GitHub API calls (REST or GraphQL)
+- ❌ **NEVER** use `gh api` commands
+- ❌ **NEVER** call `api.github.com` or `github.com/api`
+- ✅ **ALWAYS** rely on webhook data stored in the database
+- This application is a **metrics dashboard** that processes webhook events
+- All GitHub data comes from webhooks, NOT from API polling
+
 ### Code Reuse (Search-First Development)
 
 Before writing ANY new code:

@@ -8,13 +8,14 @@ Aggregates complete PR timeline from webhook payloads including:
 - Labels (added, removed, verified, approved, lgtm)
 - Check runs (CI/CD pipeline status)
 - Comments and review requests
-- Comment thread resolution (resolved, unresolved)
+- Comment thread resolution (resolved, unresolved) with resolution time calculation
 
 Architecture:
 - All data from webhooks table only (single source of truth)
 - Event grouping within 60-second windows for parallel events
 - Collapse same-type events for readability
 - Summary statistics for quick insights
+- Resolution time calculated from first comment to resolution event (timezone-aware)
 
 Example:
     story = await get_pr_story(db_manager, "org/repo", 123)
@@ -256,14 +257,24 @@ def _extract_event_from_payload(
 
     elif event_type == "pull_request_review_thread":
         thread = payload.get("thread", {})
+        comments = thread.get("comments", [])
+
         if action == "resolved":
+            details: dict[str, Any] = {
+                "thread_id": thread.get("id"),
+                "node_id": thread.get("node_id"),
+            }
+
+            # Extract first comment timestamp for resolution time calculation
+            if comments:
+                first_comment_str = comments[0].get("created_at")
+                if first_comment_str:
+                    details["first_comment_at"] = first_comment_str
+
             events.append({
                 "type": "thread_resolved",
                 "actor": actor,
-                "details": {
-                    "thread_id": thread.get("id"),
-                    "node_id": thread.get("node_id"),
-                },
+                "details": details,
                 "delivery_id": delivery_id,
             })
         elif action == "unresolved":
@@ -491,6 +502,10 @@ def _convert_event_for_js(event: dict[str, Any], timestamp: str) -> dict[str, An
         result["truncated"] = details.get("truncated", False)
         result["url"] = details.get("url", "")
 
+    # Add resolution time if available
+    if event_type == "thread_resolved" and "resolution_time_hours" in details:
+        result["resolution_time_hours"] = details["resolution_time_hours"]
+
     return result
 
 
@@ -514,7 +529,10 @@ def _build_event_description(event_type: str, actor: str, details: dict[str, Any
         "approved_label": f"@{actor} approved via label",
         "lgtm": f"@{actor} gave LGTM",
         "check_run": f"{details.get('name', 'Check')} - {details.get('conclusion', 'running')}",
-        "thread_resolved": f"@{actor} resolved a comment thread",
+        "thread_resolved": (
+            f"@{actor} resolved a comment thread"
+            + (f" ({details.get('resolution_time_hours', 0):.1f}h)" if details.get("resolution_time_hours") else "")
+        ),
         "thread_unresolved": f"@{actor} unresolved a comment thread",
     }
     return descriptions.get(event_type, f"{event_type} by @{actor}")
@@ -532,13 +550,18 @@ async def get_pr_story(
     including PR state changes, commits, reviews, labels, check runs, and comments.
     Events are grouped by time windows and collapsed for readability.
 
+    For comment thread resolution events, calculates the time from first comment
+    to resolution using timezone-aware datetime utilities to ensure accurate
+    duration calculations.
+
     Args:
         db_manager: Database connection manager
         repository: Repository in org/repo format
         pr_number: PR number within repository
 
     Returns:
-        Complete PR story dictionary with timeline and summary, or None if PR not found
+        Complete PR story dictionary with timeline and summary, or None if PR not found.
+        Thread resolution events include resolution_time_hours if calculable.
 
     Raises:
         ValueError: If database pool not initialized
@@ -634,6 +657,39 @@ async def get_pr_story(
         )
         for event in events:
             timeline_events.append((row["created_at"], event))
+
+    # Calculate resolution time for thread_resolved events
+    for event_time, event_data in timeline_events:
+        if event_data["type"] == "thread_resolved":
+            first_comment_str: str | None = event_data.get("details", {}).get("first_comment_at")
+            if first_comment_str:
+                try:
+                    # Parse ISO datetime string (GitHub format: YYYY-MM-DDTHH:MM:SSZ)
+                    first_comment_at = datetime.fromisoformat(first_comment_str.replace("Z", "+00:00"))
+                    # Both datetimes are now timezone-aware UTC, safe to subtract
+                    resolution_duration = event_time - first_comment_at
+                    resolution_hours = resolution_duration.total_seconds() / 3600
+
+                    # Validate resolution time (negative values indicate clock skew or data inconsistency)
+                    if resolution_hours < 0:
+                        LOGGER.warning(
+                            "Negative resolution time (%.1f hours) for thread %s - possible clock skew or data issue. "
+                            "First comment: %s, Resolution: %s",
+                            resolution_hours,
+                            event_data.get("details", {}).get("node_id", "unknown"),
+                            first_comment_str,
+                            event_time.isoformat(),
+                        )
+                        # Still store the value - it provides debugging info and may be valid in edge cases
+
+                    event_data["details"]["resolution_time_hours"] = round(resolution_hours, 1)
+                except (ValueError, AttributeError) as e:
+                    # Log parsing failures for debugging, but don't fail the entire request
+                    LOGGER.warning(
+                        "Failed to calculate resolution time for thread %s: %s",
+                        event_data.get("details", {}).get("node_id", "unknown"),
+                        str(e),
+                    )
 
     # Get check_run events and status events for ALL commits in this PR
     # Both check_runs and status events should be grouped by head_sha

@@ -26,6 +26,7 @@ export interface PRStoryEvent {
   readonly truncated?: boolean;
   readonly children?: readonly PRStoryCheckRun[];
   readonly commit?: string;
+  readonly resolution_time_hours?: number;
 }
 
 export interface PRStoryCheckRun {
@@ -54,4 +55,6 @@ export type PREventType =
   | "check_run"
   | "check_run_completed"
   | "ready_for_review"
-  | "converted_to_draft";
+  | "converted_to_draft"
+  | "thread_resolved"
+  | "thread_unresolved";

@@ -5,6 +5,7 @@ export interface CommentResolutionSummary {
   readonly avg_comments_per_thread: number;
   readonly total_threads_analyzed: number;
   readonly resolution_rate: number;
+  readonly unresolved_outside_range: number;
 }
 
 export interface RepositoryCommentMetrics {
@@ -18,6 +19,7 @@ export interface CommentThread {
   readonly thread_node_id: string;
   readonly repository: string;
   readonly pr_number: number;
+  readonly pr_title: string | null;
   readonly first_comment_at: string | null;
   readonly resolved_at: string | null;
   readonly resolution_time_hours: number | null;
