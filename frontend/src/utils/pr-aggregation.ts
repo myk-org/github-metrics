@@ -12,7 +12,7 @@ export interface Thread {
   readonly time_from_can_be_merged_hours: number | string | null;
 }
 
-export interface PRAggregated extends Record<string, unknown> {
+export interface PRAggregated {
   readonly repository: string;
   readonly pr_number: number;
   readonly pr_title: string;

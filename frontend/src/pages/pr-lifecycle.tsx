@@ -14,6 +14,7 @@ import { formatHours } from "@/utils/time-format";
 import { aggregateThreadsByPR, type PRAggregated } from "@/utils/pr-aggregation";
 
 const MAX_AGGREGATION_THREADS = 1000;
+const MODAL_CLOSE_ANIMATION_MS = 200;
 
 export function PRLifecyclePage(): React.ReactElement {
   const { filters } = useFilters();
@@ -33,7 +34,7 @@ export function PRLifecyclePage(): React.ReactElement {
     // Don't clear selectedPR immediately to avoid flashing during close animation
     setTimeout(() => {
       setSelectedPR(null);
-    }, 200);
+    }, MODAL_CLOSE_ANIMATION_MS);
   };
 
   // Combine exclude_users with maintainers if excludeMaintainers is enabled

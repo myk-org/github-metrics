@@ -50,7 +50,7 @@ const stringifyValue = (val: unknown): string => {
   return "";
 };
 
-export function DataTable<T extends Record<string, unknown>>({
+export function DataTable<T extends object>({
   columns,
   data,
   isLoading,
@@ -90,7 +90,8 @@ export function DataTable<T extends Record<string, unknown>>({
       return safeData;
     }
 
-    const getValue = column.getValue ?? ((item: T) => item[column.key]);
+    const getValue =
+      column.getValue ?? ((item: T) => (item as Record<string, unknown>)[column.key]);
 
     return [...safeData].sort((a: T, b: T) => {
       const aVal = getValue(a);
@@ -240,7 +241,9 @@ export function DataTable<T extends Record<string, unknown>>({
                     {column.render
                       ? column.render(item)
                       : (() => {
-                          const value = column.getValue ? column.getValue(item) : item[column.key];
+                          const value = column.getValue
+                            ? column.getValue(item)
+                            : (item as Record<string, unknown>)[column.key];
                           if (value === null || value === undefined) {
                             return "";
                           }
