@@ -8,8 +8,8 @@ export interface Thread {
   readonly pr_number: number;
   readonly pr_title: string | null;
   readonly resolved_at: string | null;
-  readonly resolution_time_hours: number | string | null;
-  readonly time_from_can_be_merged_hours: number | string | null;
+  readonly resolution_time_hours: number | null;
+  readonly time_from_can_be_merged_hours: number | null;
 }
 
 export interface PRAggregated {
@@ -106,14 +106,8 @@ export function aggregateThreadsByPR(threads: readonly Thread[]): PRAggregated[]
 }
 
 /**
- * Parse resolution time from API response (handles both number and string).
+ * Parse resolution time from API response.
  */
-function parseResolutionTime(value: number | string | null | undefined): number | null {
-  if (typeof value === "string") {
-    return parseFloat(value);
-  }
-  if (typeof value === "number") {
-    return value;
-  }
-  return null;
+function parseResolutionTime(value: number | null | undefined): number | null {
+  return typeof value === "number" ? value : null;
 }

@@ -143,7 +143,9 @@ export function TeamDynamicsPage(): React.ReactElement {
         },
         {
           label: "Top Contributor",
-          value: teamData.workload.summary.top_contributor?.user ?? "N/A",
+          value: teamData.workload.summary.top_contributor
+            ? `${teamData.workload.summary.top_contributor.user} (${String(teamData.workload.summary.top_contributor.total_prs)} PRs)`
+            : "N/A",
           tooltip: "User who created the most PRs in the time range. Shows username with PR count.",
         },
         {
