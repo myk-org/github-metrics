@@ -289,7 +289,7 @@ export function PRLifecyclePage(): React.ReactElement {
       render: (item) => (
         <span className="whitespace-nowrap">{formatHours(item.avg_resolution_hours)}</span>
       ),
-      getValue: (item) => item.avg_resolution_hours ?? 0,
+      getValue: (item) => item.avg_resolution_hours,
     },
     {
       key: "time_from_can_be_merged_hours",
@@ -300,7 +300,7 @@ export function PRLifecyclePage(): React.ReactElement {
       render: (item) => (
         <span className="whitespace-nowrap">{formatHours(item.time_from_can_be_merged_hours)}</span>
       ),
-      getValue: (item) => item.time_from_can_be_merged_hours ?? 0,
+      getValue: (item) => item.time_from_can_be_merged_hours,
     },
     {
       key: "actions",

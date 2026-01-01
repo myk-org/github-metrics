@@ -82,8 +82,7 @@ export function aggregateThreadsByPR(threads: readonly Thread[]): PRAggregated[]
       const resolutionTime = parseResolutionTime(thread.resolution_time_hours);
       const mergedTime = parseResolutionTime(thread.time_from_can_be_merged_hours);
 
-      const resolutionHoursOrZero =
-        resolutionTime !== null && !Number.isNaN(resolutionTime) ? resolutionTime : 0;
+      const hasValidResolution = resolutionTime !== null && !Number.isNaN(resolutionTime);
       const validMergedTime = mergedTime !== null && !Number.isNaN(mergedTime) ? mergedTime : null;
 
       prMap.set(key, {
@@ -92,8 +91,8 @@ export function aggregateThreadsByPR(threads: readonly Thread[]): PRAggregated[]
         pr_title: thread.pr_title ?? `PR #${String(thread.pr_number)}`,
         total_threads: 1,
         resolved_threads: thread.resolved_at ? 1 : 0,
-        total_resolution_hours: resolutionHoursOrZero,
-        resolved_count: resolutionTime !== null && !Number.isNaN(resolutionTime) ? 1 : 0,
+        total_resolution_hours: hasValidResolution ? resolutionTime : 0,
+        resolved_count: hasValidResolution ? 1 : 0,
         time_from_can_be_merged_hours: validMergedTime,
       });
     }
