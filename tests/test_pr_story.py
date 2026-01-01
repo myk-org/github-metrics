@@ -1356,3 +1356,67 @@ class TestThreadResolutionEvents:
         # 2 hours 17 minutes = 2.283... hours, rounded to 2.3
         assert resolved_event["resolution_time_hours"] == 2.3
         assert "(2.3h)" in resolved_event["description"]
+
+    @pytest.mark.asyncio
+    async def test_get_pr_story_thread_resolved_zero_duration(self) -> None:
+        """Test PR story handles zero-duration resolution (resolved instantly)."""
+        mock_db = AsyncMock()
+
+        base_time = datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC)
+
+        mock_events = [
+            {
+                "delivery_id": "delivery-1",
+                "event_type": "pull_request",
+                "action": "opened",
+                "created_at": base_time,
+                "payload": {
+                    "sender": {"login": "author"},
+                    "pull_request": {
+                        "number": 123,
+                        "title": "Test PR",
+                        "state": "open",
+                        "user": {"login": "author"},
+                        "head": {"sha": "abc123"},  # pragma: allowlist secret
+                        "created_at": "2024-01-15T10:00:00Z",
+                        "merged_at": None,
+                        "closed_at": None,
+                        "merged": False,
+                    },
+                },
+            },
+            {
+                "delivery_id": "delivery-2",
+                "event_type": "pull_request_review_thread",
+                "action": "resolved",
+                "created_at": base_time,  # Same as first_comment_at
+                "payload": {
+                    "sender": {"login": "resolver"},
+                    "thread": {
+                        "id": 123456,
+                        "node_id": "PRRT_abc123",
+                        "comments": [
+                            {
+                                # first_comment_at equals event created_at
+                                "created_at": "2024-01-15T10:00:00Z",
+                                "user": {"login": "commenter1"},
+                                "body": "First comment",
+                            },
+                        ],
+                    },
+                },
+            },
+        ]
+
+        mock_db.fetch = AsyncMock(side_effect=[mock_events, [], []])
+
+        story = await get_pr_story(mock_db, "testorg/testrepo", 123)
+
+        assert story is not None
+        thread_resolved_events = [e for e in story["events"] if e["event_type"] == "thread_resolved"]
+        assert len(thread_resolved_events) == 1
+
+        resolved_event = thread_resolved_events[0]
+        assert "resolution_time_hours" in resolved_event
+        assert resolved_event["resolution_time_hours"] == 0.0
+        assert "(0.0h)" in resolved_event["description"]

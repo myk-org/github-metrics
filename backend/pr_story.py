@@ -531,7 +531,7 @@ def _build_event_description(event_type: str, actor: str, details: dict[str, Any
         "check_run": f"{details.get('name', 'Check')} - {details.get('conclusion', 'running')}",
         "thread_resolved": (
             f"@{actor} resolved a comment thread"
-            + (f" ({details.get('resolution_time_hours', 0):.1f}h)" if details.get("resolution_time_hours") else "")
+            + (f" ({details['resolution_time_hours']:.1f}h)" if "resolution_time_hours" in details else "")
         ),
         "thread_unresolved": f"@{actor} unresolved a comment thread",
     }
