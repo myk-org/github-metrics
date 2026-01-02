@@ -1,7 +1,8 @@
 """API routes for comment resolution time metrics."""
 
 import asyncio
-from typing import Annotated, Any
+from datetime import datetime
+from typing import Annotated, TypedDict
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi import status as http_status
@@ -9,7 +10,8 @@ from simple_logger.logger import get_logger
 
 from backend.database import DatabaseManager
 from backend.utils.datetime_utils import parse_datetime_string
-from backend.utils.query_builders import QueryParams, build_repository_filter, build_time_filter
+from backend.utils.query_builders import QueryParams, build_pagination_sql, build_repository_filter, build_time_filter
+from backend.utils.response_formatters import PaginationMetadata, format_pagination_metadata
 
 # Module-level logger
 LOGGER = get_logger(name="backend.routes.api.comment_resolution")
@@ -18,6 +20,55 @@ router = APIRouter(prefix="/api/metrics")
 
 # Global database manager (set by app.py during lifespan)
 db_manager: DatabaseManager | None = None
+
+
+class ThreadData(TypedDict):
+    """Thread-level comment resolution data."""
+
+    thread_node_id: str | None
+    repository: str
+    pr_number: int
+    pr_title: str | None
+    first_comment_at: str | None
+    resolved_at: str | None
+    resolution_time_hours: float | None
+    time_to_first_response_hours: float | None
+    comment_count: int
+    resolver: str | None
+    participants: list[str]
+    file_path: str | None
+    can_be_merged_at: str | None
+    time_from_can_be_merged_hours: float | None
+
+
+class RepositoryStats(TypedDict):
+    """Repository-level comment resolution statistics."""
+
+    repository: str
+    avg_resolution_time_hours: float
+    total_threads: int
+    resolved_threads: int
+
+
+class SummaryStats(TypedDict):
+    """Global summary statistics for comment resolution."""
+
+    avg_resolution_time_hours: float
+    median_resolution_time_hours: float
+    avg_time_to_first_response_hours: float
+    avg_comments_per_thread: float
+    total_threads_analyzed: int
+    resolution_rate: float
+    unresolved_outside_range: int
+
+
+class CommentResolutionResponse(TypedDict):
+    """Response structure for comment resolution time endpoint."""
+
+    summary: SummaryStats
+    by_repository: list[RepositoryStats]
+    threads: list[ThreadData]
+    pagination: PaginationMetadata
 
 
 def _build_can_be_merged_cte(time_filter: str, repository_filter: str) -> str:
@@ -86,7 +137,7 @@ async def get_comment_resolution_time(
     repositories: Annotated[list[str] | None, Query(description="Filter by repositories (org/repo format)")] = None,
     page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(default=25, ge=1, description="Items per page for threads list"),
-) -> dict[str, Any]:
+) -> CommentResolutionResponse:
     """Get per-thread comment resolution metrics.
 
     Analyzes individual comment threads from pull_request_review_thread events
@@ -190,9 +241,6 @@ async def get_comment_resolution_time(
     base_params = QueryParams()
     time_filter = build_time_filter(base_params, start_datetime, end_datetime)
     repository_filter = build_repository_filter(base_params, repositories)
-
-    # Calculate offset for pagination
-    offset = (page - 1) * page_size
 
     # Query 1: Get all thread events with extracted metadata
     threads_query = (
@@ -420,10 +468,8 @@ async def get_comment_resolution_time(
         FROM threads_with_resolution twr
         CROSS JOIN counted_threads ct
         ORDER BY twr.first_comment_at DESC
-        LIMIT $"""
-        + str(len(base_params.get_params()) + 1)
-        + """ OFFSET $"""
-        + str(len(base_params.get_params()) + 2)
+        """
+        + build_pagination_sql(base_params, page, page_size)
     )
 
     # Query 2: Get repository-level statistics
@@ -605,7 +651,7 @@ async def get_comment_resolution_time(
 
     # Query 4: Count unresolved threads outside time range (only if start_time provided)
     unresolved_outside_query: str | None = None
-    unresolved_outside_params: list[Any] = []
+    unresolved_outside_params: list[str | int | float | datetime | list[str] | None] = []
     if start_datetime is not None:
         # Build query to count unresolved threads before start_time
         unresolved_params = QueryParams()
@@ -678,9 +724,9 @@ async def get_comment_resolution_time(
         if unresolved_outside_query is not None:
             try:
                 threads_rows, repo_stats_rows, global_stats_rows, unresolved_outside_rows = await asyncio.gather(
-                    db_manager.fetch(threads_query, *param_list, page_size, offset),
-                    db_manager.fetch(repo_stats_query, *param_list),
-                    db_manager.fetch(global_stats_query, *param_list),
+                    db_manager.fetch(threads_query, *param_list),
+                    db_manager.fetch(repo_stats_query, *base_params.get_params_excluding_pagination()),
+                    db_manager.fetch(global_stats_query, *base_params.get_params_excluding_pagination()),
                     db_manager.fetch(unresolved_outside_query, *unresolved_outside_params),
                 )
             except Exception:
@@ -696,9 +742,9 @@ async def get_comment_resolution_time(
             # No start_time filter, so no unresolved threads outside range
             try:
                 threads_rows, repo_stats_rows, global_stats_rows = await asyncio.gather(
-                    db_manager.fetch(threads_query, *param_list, page_size, offset),
-                    db_manager.fetch(repo_stats_query, *param_list),
-                    db_manager.fetch(global_stats_query, *param_list),
+                    db_manager.fetch(threads_query, *param_list),
+                    db_manager.fetch(repo_stats_query, *base_params.get_params_excluding_pagination()),
+                    db_manager.fetch(global_stats_query, *base_params.get_params_excluding_pagination()),
                 )
             except Exception:
                 LOGGER.exception(
@@ -741,8 +787,9 @@ async def get_comment_resolution_time(
         )
 
         # Format threads for response
-        threads_list = [
+        threads_list: list[ThreadData] = [
             {
+                # COALESCE in query should prevent None, but preserve it for malformed test data
                 "thread_node_id": row["thread_node_id"],
                 "repository": row["repository"],
                 "pr_number": row["pr_number"],
@@ -768,7 +815,7 @@ async def get_comment_resolution_time(
         ]
 
         # Format repository stats
-        by_repository = [
+        by_repository: list[RepositoryStats] = [
             {
                 "repository": row["repository"],
                 "avg_resolution_time_hours": float(round(row["avg_resolution_time_hours"], 1)),
@@ -778,8 +825,8 @@ async def get_comment_resolution_time(
             for row in repo_stats_rows
         ]
 
-        # Calculate pagination metadata
-        total_pages = (total_threads + page_size - 1) // page_size if page_size > 0 else 0
+        # Calculate pagination metadata using shared utility
+        pagination: PaginationMetadata = format_pagination_metadata(total_threads, page, page_size)
 
     except asyncio.CancelledError:
         raise
@@ -792,24 +839,21 @@ async def get_comment_resolution_time(
             detail="Failed to fetch comment resolution time metrics",
         ) from ex
     else:
-        return {
-            "summary": {
-                "avg_resolution_time_hours": avg_resolution,
-                "median_resolution_time_hours": median_resolution,
-                "avg_time_to_first_response_hours": avg_response,
-                "avg_comments_per_thread": avg_comments,
-                "total_threads_analyzed": total_threads,
-                "resolution_rate": resolution_rate,
-                "unresolved_outside_range": unresolved_outside_count,
-            },
+        summary: SummaryStats = {
+            "avg_resolution_time_hours": avg_resolution,
+            "median_resolution_time_hours": median_resolution,
+            "avg_time_to_first_response_hours": avg_response,
+            "avg_comments_per_thread": avg_comments,
+            "total_threads_analyzed": total_threads,
+            "resolution_rate": resolution_rate,
+            "unresolved_outside_range": unresolved_outside_count,
+        }
+
+        response: CommentResolutionResponse = {
+            "summary": summary,
             "by_repository": by_repository,
             "threads": threads_list,
-            "pagination": {
-                "total": total_threads,
-                "page": page,
-                "page_size": page_size,
-                "total_pages": total_pages,
-                "has_next": page < total_pages,
-                "has_prev": page > 1,
-            },
+            "pagination": pagination,
         }
+
+        return response

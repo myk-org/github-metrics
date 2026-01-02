@@ -186,6 +186,7 @@ export function PRLifecyclePage(): React.ReactElement {
       align: "right",
       sortable: true,
       render: (item) => formatHours(item.avg_time_to_first_review_hours),
+      // null values sort to end (handled by DataTable component)
       getValue: (item) => item.avg_time_to_first_review_hours,
     },
     {
@@ -195,6 +196,7 @@ export function PRLifecyclePage(): React.ReactElement {
       align: "right",
       sortable: true,
       render: (item) => formatHours(item.avg_time_to_first_changes_requested_hours),
+      // null values sort to end (handled by DataTable component)
       getValue: (item) => item.avg_time_to_first_changes_requested_hours,
     },
     {
@@ -204,6 +206,7 @@ export function PRLifecyclePage(): React.ReactElement {
       align: "right",
       sortable: true,
       render: (item) => formatHours(item.avg_time_to_approval_hours),
+      // null values sort to end (handled by DataTable component)
       getValue: (item) => item.avg_time_to_approval_hours,
     },
     {
@@ -213,6 +216,7 @@ export function PRLifecyclePage(): React.ReactElement {
       align: "right",
       sortable: true,
       render: (item) => formatHours(item.avg_time_to_first_verified_hours),
+      // null values sort to end (handled by DataTable component)
       getValue: (item) => item.avg_time_to_first_verified_hours,
     },
     {
@@ -222,6 +226,7 @@ export function PRLifecyclePage(): React.ReactElement {
       align: "right",
       sortable: true,
       render: (item) => formatHours(item.avg_pr_lifecycle_hours),
+      // null values sort to end (handled by DataTable component)
       getValue: (item) => item.avg_pr_lifecycle_hours,
     },
     {
@@ -284,6 +289,7 @@ export function PRLifecyclePage(): React.ReactElement {
       render: (item) => (
         <span className="whitespace-nowrap">{formatHours(item.avg_resolution_hours)}</span>
       ),
+      // null values sort to end (handled by DataTable component)
       getValue: (item) => item.avg_resolution_hours,
     },
     {
@@ -295,6 +301,7 @@ export function PRLifecyclePage(): React.ReactElement {
       render: (item) => (
         <span className="whitespace-nowrap">{formatHours(item.time_from_can_be_merged_hours)}</span>
       ),
+      // null values sort to end (handled by DataTable component)
       getValue: (item) => item.time_from_can_be_merged_hours,
     },
     {
