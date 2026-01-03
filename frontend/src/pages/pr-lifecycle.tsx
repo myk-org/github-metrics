@@ -16,6 +16,18 @@ import { aggregateThreadsByPR, type PRAggregated } from "@/utils/pr-aggregation"
 const MAX_AGGREGATION_THREADS = 1000;
 const MODAL_CLOSE_ANIMATION_MS = 200;
 
+/**
+ * Safely formats a number to fixed decimal places.
+ * Returns "-" if the value is not a valid number.
+ * This handles edge cases where API might return unexpected types.
+ */
+function safeToFixed(value: unknown, decimals: number): string {
+  if (typeof value === "number" && !Number.isNaN(value)) {
+    return value.toFixed(decimals);
+  }
+  return "-";
+}
+
 export function PRLifecyclePage(): React.ReactElement {
   const { filters } = useFilters();
 
@@ -147,7 +159,7 @@ export function PRLifecyclePage(): React.ReactElement {
         },
         {
           label: "Avg Comments per Thread",
-          value: commentsData.summary.avg_comments_per_thread.toFixed(1),
+          value: safeToFixed(commentsData.summary.avg_comments_per_thread, 1),
           tooltip:
             "Average comments per review thread. Counted from pull_request_review_comment created events.",
         },
@@ -159,7 +171,7 @@ export function PRLifecyclePage(): React.ReactElement {
         },
         {
           label: "Resolution Rate",
-          value: `${commentsData.summary.resolution_rate.toFixed(1)}%`,
+          value: `${safeToFixed(commentsData.summary.resolution_rate, 1)}%`,
           tooltip:
             "Percentage of threads resolved. (Resolved threads / Total threads) × 100. From pull_request_review_thread events.",
         },
