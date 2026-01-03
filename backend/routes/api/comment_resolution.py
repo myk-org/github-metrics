@@ -1,6 +1,7 @@
 """API routes for comment resolution time metrics."""
 
 import asyncio
+import json
 from datetime import datetime
 from typing import Annotated, TypedDict
 
@@ -786,6 +787,21 @@ async def get_comment_resolution_time(
             else 0.0
         )
 
+        # Helper function to parse participants field (handles both list and JSON string)
+        def parse_participants(value: list | str | None) -> list[str]:
+            """Parse participants field from database (handles JSONB array serialization)."""
+            if value is None:
+                return []
+            if isinstance(value, list):
+                return value
+            if isinstance(value, str):
+                try:
+                    parsed = json.loads(value)
+                    return parsed if isinstance(parsed, list) else []
+                except (json.JSONDecodeError, TypeError):
+                    return []
+            return []
+
         # Format threads for response
         threads_list: list[ThreadData] = [
             {
@@ -804,7 +820,7 @@ async def get_comment_resolution_time(
                 else None,
                 "comment_count": row["comment_count"],
                 "resolver": row["resolver"],
-                "participants": row["participants"] if row["participants"] else [],
+                "participants": parse_participants(row["participants"]),
                 "file_path": row["file_path"],
                 "can_be_merged_at": row["can_be_merged_at"].isoformat() if row["can_be_merged_at"] else None,
                 "time_from_can_be_merged_hours": float(round(row["time_from_can_be_merged_hours"], 1))
