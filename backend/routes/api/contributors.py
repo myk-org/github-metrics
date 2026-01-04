@@ -549,7 +549,7 @@ async def get_metrics_contributors(
                 total_prs=row["total_prs"],
                 merged_prs=row["merged_prs"],
                 closed_prs=row["closed_prs"],
-                avg_commits_per_pr=round(row["avg_commits"], 1),
+                avg_commits_per_pr=float(round(row["avg_commits"], 1)),
             )
             for row in pr_creators_rows
         ]
@@ -630,7 +630,7 @@ async def get_metrics_contributors(
                     user=reviewer_item["user"],
                     total_reviews=reviewer_item["total_reviews"],
                     prs_reviewed=prs_reviewed,
-                    avg_reviews_per_pr=round(reviewer_item["total_reviews"] / prs_reviewed, 2),
+                    avg_reviews_per_pr=float(round(reviewer_item["total_reviews"] / prs_reviewed, 2)),
                     cross_team_reviews=reviewer_item["cross_team_reviews"],
                 )
             )

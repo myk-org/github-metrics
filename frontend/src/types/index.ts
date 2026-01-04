@@ -15,3 +15,11 @@ export type { Repository } from "./repositories";
 
 // PR Story types
 export type { PRStory, PRStoryEvent, PRStoryCheckRun, PREventType } from "./pr-story";
+
+// Comment Resolution types
+export type {
+  CommentResolutionResponse,
+  CommentResolutionSummary,
+  RepositoryCommentMetrics,
+  CommentThread,
+} from "./comment-resolution";

@@ -10,6 +10,7 @@ import type { TeamDynamicsResponse } from "@/types/team-dynamics";
 import type { PRStory } from "@/types/pr-story";
 import type { CrossTeamData } from "@/types/cross-team";
 import type { MaintainersResponse } from "@/types/maintainers";
+import type { CommentResolutionResponse } from "@/types/comment-resolution";
 
 const API_BASE = "/api/metrics";
 
@@ -171,6 +172,12 @@ export const queryKeys = {
       pageSize,
     ] as const,
   maintainers: () => ["metrics", "maintainers"] as const,
+  commentResolution: (
+    timeRange?: TimeRange,
+    repositories?: readonly string[],
+    page?: number,
+    pageSize?: number
+  ) => ["metrics", "comment-resolution", timeRange, repositories, page, pageSize] as const,
 };
 
 interface WebhookParams {
@@ -421,6 +428,25 @@ export function useMaintainers() {
     queryKey: queryKeys.maintainers(),
     queryFn: () => fetchApi<MaintainersResponse>("/maintainers"),
     staleTime: 1000 * 60 * 5, // 5 minutes - maintainers don't change often
+  });
+}
+
+export function useCommentResolution(
+  timeRange?: TimeRange,
+  repositories?: readonly string[],
+  page: number = 1,
+  pageSize: number = 25,
+  enabled: boolean = true
+) {
+  const filters: FilterParams = repositories ? { repositories } : {};
+  const params = buildFilterParams(timeRange, filters);
+  params.set("page", String(page));
+  params.set("page_size", String(pageSize));
+
+  return useQuery<CommentResolutionResponse>({
+    queryKey: queryKeys.commentResolution(timeRange, repositories, page, pageSize),
+    queryFn: () => fetchApi<CommentResolutionResponse>("/comment-resolution-time", params),
+    enabled,
   });
 }
 

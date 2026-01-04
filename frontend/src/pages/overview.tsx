@@ -210,11 +210,13 @@ export function OverviewPage(): React.ReactElement {
     {
       key: "event_type",
       label: "Event",
+      tooltip: "GitHub webhook event type (e.g., pull_request, push)",
       sortable: true,
     },
     {
       key: "status",
       label: "Status",
+      tooltip: "Processing status: success, error, or partial",
       align: "center",
       sortable: true,
       render: (item) => (
@@ -232,7 +234,7 @@ export function OverviewPage(): React.ReactElement {
   const prColumns: readonly ColumnDef<UserPR>[] = [
     {
       key: "number",
-      label: "PR #",
+      label: "PR",
       sortable: true,
       render: (item) => (
         <a
@@ -253,7 +255,7 @@ export function OverviewPage(): React.ReactElement {
     },
     {
       key: "owner",
-      label: "Owner",
+      label: "Author",
       sortable: true,
     },
     {

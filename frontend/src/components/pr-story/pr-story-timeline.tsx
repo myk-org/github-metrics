@@ -22,7 +22,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
-import { formatRelativeTime, formatDateTime } from "@/utils/time-format";
+import { formatRelativeTime, formatDateTime, formatHours } from "@/utils/time-format";
 import { useDateFormat } from "@/hooks/use-date-format";
 import type { PRStoryEvent, PREventType } from "@/types/pr-story";
 
@@ -158,6 +158,18 @@ const EVENT_CONFIG: Record<PREventType, EventConfig> = {
     bgColor: "bg-gray-100 dark:bg-gray-800",
     label: "Converted to Draft",
   },
+  thread_resolved: {
+    icon: CheckCircle,
+    color: "text-green-600",
+    bgColor: "bg-green-100 dark:bg-green-900",
+    label: "Thread Resolved",
+  },
+  thread_unresolved: {
+    icon: RotateCw,
+    color: "text-yellow-600",
+    bgColor: "bg-yellow-100 dark:bg-yellow-900",
+    label: "Thread Unresolved",
+  },
 };
 
 function getEventConfig(eventType: string): EventConfig {
@@ -258,7 +270,15 @@ function TimelineEvent({ event, isLast }: TimelineEventProps): React.ReactElemen
         ) : (
           <>
             <div className="flex items-center gap-2 mb-1">
-              <span className="font-semibold">{config.label}</span>
+              <span className="font-semibold">
+                {config.label}
+                {event.event_type === "thread_resolved" &&
+                  event.resolution_time_hours !== undefined && (
+                    <span className="text-muted-foreground ml-2 font-normal">
+                      ({formatHours(event.resolution_time_hours)})
+                    </span>
+                  )}
+              </span>
               <span className="text-sm text-muted-foreground ml-auto">
                 {formatRelativeTime(event.timestamp)}
               </span>

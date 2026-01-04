@@ -26,6 +26,7 @@ from backend.database import DatabaseManager, get_database_manager
 from backend.metrics_tracker import MetricsTracker
 from backend.routes import health, webhooks
 from backend.routes.api import (
+    comment_resolution,
     contributors,
     cross_team,
     maintainers,
@@ -185,6 +186,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     turnaround.db_manager = db_manager
     team_dynamics.db_manager = db_manager
     cross_team.db_manager = db_manager
+    comment_resolution.db_manager = db_manager
 
     # Set webhook-specific globals
     webhooks.metrics_tracker = metrics_tracker
@@ -263,6 +265,7 @@ def create_app() -> FastAPI:
     app.include_router(team_dynamics.router)
     app.include_router(cross_team.router)
     app.include_router(maintainers.router)
+    app.include_router(comment_resolution.router)
 
     return app
 

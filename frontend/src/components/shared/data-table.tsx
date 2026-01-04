@@ -9,12 +9,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ArrowUpDown, ArrowUp, ArrowDown, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export interface ColumnDef<T> {
   readonly key: string;
   readonly label: string;
+  readonly tooltip?: string;
   readonly sortable?: boolean;
   readonly align?: "left" | "center" | "right";
   readonly render?: (item: T) => ReactNode;
@@ -48,7 +50,7 @@ const stringifyValue = (val: unknown): string => {
   return "";
 };
 
-export function DataTable<T extends Record<string, unknown>>({
+export function DataTable<T extends object>({
   columns,
   data,
   isLoading,
@@ -88,7 +90,8 @@ export function DataTable<T extends Record<string, unknown>>({
       return safeData;
     }
 
-    const getValue = column.getValue ?? ((item: T) => item[column.key]);
+    const getValue =
+      column.getValue ?? ((item: T) => (item as Record<string, unknown>)[column.key]);
 
     return [...safeData].sort((a: T, b: T) => {
       const aVal = getValue(a);
@@ -145,105 +148,124 @@ export function DataTable<T extends Record<string, unknown>>({
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          {columns.map((column) => (
-            <TableHead
-              key={column.key}
-              className={getAlignClass(column.align)}
-              aria-sort={
-                column.sortable !== false
-                  ? sortColumn === column.key
-                    ? sortDirection === "asc"
-                      ? "ascending"
-                      : sortDirection === "desc"
-                        ? "descending"
-                        : "none"
-                    : "none"
-                  : undefined
-              }
-            >
-              {column.sortable !== false ? (
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    handleSort(column.key);
-                  }}
-                  className="h-auto p-0 font-semibold hover:bg-transparent"
-                  aria-label={
-                    sortColumn === column.key
-                      ? `Sort by ${column.label}, currently ${sortDirection === "asc" ? "ascending" : "descending"}`
-                      : `Sort by ${column.label}`
-                  }
-                >
-                  {column.label}
-                  <span className="ml-2">
-                    {sortColumn === column.key ? (
-                      sortDirection === "asc" ? (
-                        <ArrowUp className="h-4 w-4" />
-                      ) : (
-                        <ArrowDown className="h-4 w-4" />
-                      )
-                    ) : (
-                      <ArrowUpDown className="h-4 w-4 opacity-50" />
-                    )}
-                  </span>
-                </Button>
-              ) : (
-                column.label
-              )}
-            </TableHead>
-          ))}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {sortedData.length === 0 ? (
+    <TooltipProvider>
+      <Table>
+        <TableHeader>
           <TableRow>
-            <TableCell colSpan={columns.length} className="text-center text-muted-foreground py-8">
-              {emptyMessage}
-            </TableCell>
+            {columns.map((column) => (
+              <TableHead
+                key={column.key}
+                className={getAlignClass(column.align)}
+                aria-sort={
+                  column.sortable !== false
+                    ? sortColumn === column.key
+                      ? sortDirection === "asc"
+                        ? "ascending"
+                        : sortDirection === "desc"
+                          ? "descending"
+                          : "none"
+                      : "none"
+                    : undefined
+                }
+              >
+                <div className="flex items-center gap-1.5">
+                  {column.sortable !== false ? (
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        handleSort(column.key);
+                      }}
+                      className="h-auto p-0 font-semibold hover:bg-transparent"
+                      aria-label={
+                        sortColumn === column.key
+                          ? `Sort by ${column.label}, currently ${sortDirection === "asc" ? "ascending" : "descending"}`
+                          : `Sort by ${column.label}`
+                      }
+                    >
+                      {column.label}
+                      <span className="ml-2">
+                        {sortColumn === column.key ? (
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="h-4 w-4" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4 opacity-50" />
+                        )}
+                      </span>
+                    </Button>
+                  ) : (
+                    <span className="font-semibold">{column.label}</span>
+                  )}
+                  {column.tooltip && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 hover:text-muted-foreground cursor-help flex-shrink-0" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs text-left">
+                        <p>{column.tooltip}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
+              </TableHead>
+            ))}
           </TableRow>
-        ) : (
-          sortedData.map((item) => (
-            <TableRow
-              key={String(keyExtractor(item))}
-              onClick={
-                onRowClick
-                  ? () => {
-                      onRowClick(item);
-                    }
-                  : undefined
-              }
-              className={onRowClick ? "cursor-pointer hover:bg-muted/50" : ""}
-            >
-              {columns.map((column) => (
-                <TableCell key={column.key} className={getAlignClass(column.align)}>
-                  {column.render
-                    ? column.render(item)
-                    : (() => {
-                        const value = column.getValue ? column.getValue(item) : item[column.key];
-                        if (value === null || value === undefined) {
-                          return "";
-                        }
-                        if (typeof value === "object") {
-                          return JSON.stringify(value);
-                        }
-                        if (
-                          typeof value === "string" ||
-                          typeof value === "number" ||
-                          typeof value === "boolean"
-                        ) {
-                          return String(value);
-                        }
-                        return "";
-                      })()}
-                </TableCell>
-              ))}
+        </TableHeader>
+        <TableBody>
+          {sortedData.length === 0 ? (
+            <TableRow>
+              <TableCell
+                colSpan={columns.length}
+                className="text-center text-muted-foreground py-8"
+              >
+                {emptyMessage}
+              </TableCell>
             </TableRow>
-          ))
-        )}
-      </TableBody>
-    </Table>
+          ) : (
+            sortedData.map((item) => (
+              <TableRow
+                key={String(keyExtractor(item))}
+                onClick={
+                  onRowClick
+                    ? () => {
+                        onRowClick(item);
+                      }
+                    : undefined
+                }
+                className={onRowClick ? "cursor-pointer hover:bg-muted/50" : ""}
+              >
+                {columns.map((column) => (
+                  <TableCell key={column.key} className={getAlignClass(column.align)}>
+                    {column.render
+                      ? column.render(item)
+                      : (() => {
+                          const value = column.getValue
+                            ? column.getValue(item)
+                            : (item as Record<string, unknown>)[column.key];
+                          if (value === null || value === undefined) {
+                            return "";
+                          }
+                          if (typeof value === "object") {
+                            return JSON.stringify(value);
+                          }
+                          if (
+                            typeof value === "string" ||
+                            typeof value === "number" ||
+                            typeof value === "boolean"
+                          ) {
+                            return String(value);
+                          }
+                          return "";
+                        })()}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </TooltipProvider>
   );
 }

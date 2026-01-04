@@ -1,8 +1,9 @@
 """API routes for review turnaround time metrics."""
 
 import asyncio
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
+import asyncpg
 from fastapi import APIRouter, HTTPException, Query
 from fastapi import status as http_status
 from simple_logger.logger import get_logger
@@ -62,6 +63,8 @@ async def get_review_turnaround(
       "summary": {
         "avg_time_to_first_review_hours": 2.5,
         "avg_time_to_approval_hours": 8.3,
+        "avg_time_to_first_verified_hours": 10.2,
+        "avg_time_to_first_changes_requested_hours": 4.7,
         "avg_pr_lifecycle_hours": 24.1,
         "total_prs_analyzed": 150
       },
@@ -70,6 +73,8 @@ async def get_review_turnaround(
           "repository": "org/repo1",
           "avg_time_to_first_review_hours": 1.2,
           "avg_time_to_approval_hours": 4.5,
+          "avg_time_to_first_verified_hours": 6.8,
+          "avg_time_to_first_changes_requested_hours": 3.5,
           "avg_pr_lifecycle_hours": 12.0,
           "total_prs": 50
         }
@@ -90,10 +95,14 @@ async def get_review_turnaround(
       (includes all PRs with at least one review, regardless of completion status)
     - `avg_time_to_approval_hours`: Average time from PR creation to first approval
       (includes all PRs with at least one approval, regardless of completion status)
+    - `avg_time_to_first_verified_hours`: Average time from PR creation to first verified label
+      (includes all PRs with at least one verified label, regardless of completion status)
+    - `avg_time_to_first_changes_requested_hours`: Average time from PR creation to first changes_requested review
+      (includes all PRs with at least one changes_requested review, regardless of completion status)
     - `avg_pr_lifecycle_hours`: Average time from PR creation to merge/close
       (ONLY includes completed PRs - merged or closed)
     - `avg_response_time_hours`: Average review response time per reviewer
-    - `total_prs_analyzed`: Number of completed PRs included in lifecycle analysis
+    - `total_prs_analyzed`: Number of ALL PRs opened in time range (includes open, merged, and closed PRs)
     - `total_reviews`: Total number of reviews submitted by reviewer
     - `repositories_reviewed`: List of repositories reviewed by user
 
@@ -220,7 +229,83 @@ async def get_review_turnaround(
     """
     )
 
-    # Query 3: PR lifecycle duration (overall summary)
+    # Query 3: Time to first verified per PR (for overall summary)
+    # Find the first verified label for each PR after it was opened
+    time_to_verified_query = (
+        """
+        WITH pr_opened AS (
+            SELECT
+                repository,
+                pr_number,
+                MIN(created_at) as opened_at
+            FROM webhooks
+            WHERE event_type = 'pull_request'
+              AND action = 'opened'
+              AND pr_number IS NOT NULL
+              """
+        + time_filter
+        + repository_filter
+        + """
+            GROUP BY repository, pr_number
+        ),
+        first_verified AS (
+            SELECT
+                w.repository,
+                w.pr_number,
+                MIN(w.created_at) as first_verified_at
+            FROM webhooks w
+            INNER JOIN pr_opened po ON w.repository = po.repository AND w.pr_number = po.pr_number
+            WHERE w.event_type = 'pull_request'
+              AND w.action = 'labeled'
+              AND LOWER(w.label_name) LIKE '%verified%'
+            GROUP BY w.repository, w.pr_number
+        )
+        SELECT
+            EXTRACT(EPOCH FROM (fv.first_verified_at - po.opened_at)) / 3600 as hours_to_verified
+        FROM pr_opened po
+        INNER JOIN first_verified fv ON po.repository = fv.repository AND po.pr_number = fv.pr_number
+    """
+    )
+
+    # Query 4: Time to first changes_requested per PR (for overall summary)
+    # Find the first changes_requested review for each PR after it was opened
+    time_to_changes_requested_query = (
+        """
+        WITH pr_opened AS (
+            SELECT
+                repository,
+                pr_number,
+                MIN(created_at) as opened_at
+            FROM webhooks
+            WHERE event_type = 'pull_request'
+              AND action = 'opened'
+              AND pr_number IS NOT NULL
+              """
+        + time_filter
+        + repository_filter
+        + """
+            GROUP BY repository, pr_number
+        ),
+        first_changes_requested AS (
+            SELECT
+                w.repository,
+                w.pr_number,
+                MIN(w.created_at) as first_changes_requested_at
+            FROM webhooks w
+            INNER JOIN pr_opened po ON w.repository = po.repository AND w.pr_number = po.pr_number
+            WHERE w.event_type = 'pull_request_review'
+              AND w.action = 'submitted'
+              AND w.payload->'review'->>'state' = 'changes_requested'
+            GROUP BY w.repository, w.pr_number
+        )
+        SELECT
+            EXTRACT(EPOCH FROM (fcr.first_changes_requested_at - po.opened_at)) / 3600 as hours_to_changes_requested
+        FROM pr_opened po
+        INNER JOIN first_changes_requested fcr ON po.repository = fcr.repository AND po.pr_number = fcr.pr_number
+    """
+    )
+
+    # Query 5: PR lifecycle duration (overall summary)
     # Calculate time from PR opened to PR merged/closed
     pr_lifecycle_query = (
         """
@@ -258,7 +343,21 @@ async def get_review_turnaround(
     """
     )
 
-    # Query 4: By repository
+    # Query 6: Count all PRs opened in the time range
+    # This is used for total_prs_analyzed (includes open, merged, and closed PRs)
+    total_prs_query = (
+        """
+        SELECT COUNT(DISTINCT (repository, pr_number)) as total_prs
+        FROM webhooks
+        WHERE event_type = 'pull_request'
+          AND action = 'opened'
+          AND pr_number IS NOT NULL
+          """
+        + time_filter
+        + repository_filter
+    )
+
+    # Query 7: By repository
     by_repository_query = (
         """
         WITH pr_opened AS (
@@ -304,6 +403,30 @@ async def get_review_turnaround(
               AND w.label_name LIKE 'approved-%'
             GROUP BY w.repository, w.pr_number
         ),
+        first_verified AS (
+            SELECT
+                w.repository,
+                w.pr_number,
+                MIN(w.created_at) as first_verified_at
+            FROM webhooks w
+            INNER JOIN pr_opened po ON w.repository = po.repository AND w.pr_number = po.pr_number
+            WHERE w.event_type = 'pull_request'
+              AND w.action = 'labeled'
+              AND LOWER(w.label_name) LIKE '%verified%'
+            GROUP BY w.repository, w.pr_number
+        ),
+        first_changes_requested AS (
+            SELECT
+                w.repository,
+                w.pr_number,
+                MIN(w.created_at) as first_changes_requested_at
+            FROM webhooks w
+            INNER JOIN pr_opened po ON w.repository = po.repository AND w.pr_number = po.pr_number
+            WHERE w.event_type = 'pull_request_review'
+              AND w.action = 'submitted'
+              AND w.payload->'review'->>'state' = 'changes_requested'
+            GROUP BY w.repository, w.pr_number
+        ),
         pr_closed AS (
             SELECT
                 w.repository,
@@ -324,19 +447,27 @@ async def get_review_turnaround(
                 AVG(EXTRACT(EPOCH FROM (fa.first_approval_at - po.opened_at)) / 3600)::numeric, 1
             ) as avg_time_to_approval_hours,
             ROUND(
+                AVG(EXTRACT(EPOCH FROM (fv.first_verified_at - po.opened_at)) / 3600)::numeric, 1
+            ) as avg_time_to_first_verified_hours,
+            ROUND(
+                AVG(EXTRACT(EPOCH FROM (fcr.first_changes_requested_at - po.opened_at)) / 3600)::numeric, 1
+            ) as avg_time_to_first_changes_requested_hours,
+            ROUND(
                 AVG(EXTRACT(EPOCH FROM (pc.closed_at - po.opened_at)) / 3600)::numeric, 1
             ) as avg_pr_lifecycle_hours,
             COUNT(DISTINCT po.pr_number) as total_prs
         FROM pr_opened po
         LEFT JOIN first_review fr ON po.repository = fr.repository AND po.pr_number = fr.pr_number
         LEFT JOIN first_approval fa ON po.repository = fa.repository AND po.pr_number = fa.pr_number
+        LEFT JOIN first_verified fv ON po.repository = fv.repository AND po.pr_number = fv.pr_number
+        LEFT JOIN first_changes_requested fcr ON po.repository = fcr.repository AND po.pr_number = fcr.pr_number
         LEFT JOIN pr_closed pc ON po.repository = pc.repository AND po.pr_number = pc.pr_number
         GROUP BY po.repository
         ORDER BY total_prs DESC
     """
     )
 
-    # Query 5: By reviewer
+    # Query 8: By reviewer
     by_reviewer_query = (
         """
         WITH pr_opened AS (
@@ -382,19 +513,26 @@ async def get_review_turnaround(
 
         # Execute all queries in parallel
         # Note: Some queries use reviewer_params (with user filter), others use base_params
-        (
-            first_review_rows,
-            approval_rows,
-            lifecycle_row,
-            by_repo_rows,
-            by_reviewer_rows,
-        ) = await asyncio.gather(
+        results = await asyncio.gather(
             db_manager.fetch(time_to_first_review_query, *reviewer_param_list),  # Uses user filter
             db_manager.fetch(time_to_approval_query, *base_param_list),  # No user filter
+            db_manager.fetch(time_to_verified_query, *base_param_list),  # No user filter
+            db_manager.fetch(time_to_changes_requested_query, *base_param_list),  # No user filter
             db_manager.fetchrow(pr_lifecycle_query, *base_param_list),  # No user filter
+            db_manager.fetchrow(total_prs_query, *base_param_list),  # No user filter - count all PRs opened
             db_manager.fetch(by_repository_query, *reviewer_param_list),  # Uses user filter
             db_manager.fetch(by_reviewer_query, *reviewer_param_list),  # Uses user filter
         )
+
+        # Explicit type casts to satisfy mypy (asyncio.gather returns mixed types)
+        first_review_rows = cast(list[asyncpg.Record], results[0])
+        approval_rows = cast(list[asyncpg.Record], results[1])
+        verified_rows = cast(list[asyncpg.Record], results[2])
+        changes_requested_rows = cast(list[asyncpg.Record], results[3])
+        lifecycle_row = cast(asyncpg.Record | None, results[4])
+        total_prs_row = cast(asyncpg.Record | None, results[5])
+        by_repo_rows = cast(list[asyncpg.Record], results[6])
+        by_reviewer_rows = cast(list[asyncpg.Record], results[7])
 
         # Calculate overall averages
         avg_first_review = 0.0
@@ -411,15 +549,35 @@ async def get_review_turnaround(
             if approval_times:
                 avg_approval = float(round(sum(approval_times) / len(approval_times), 1))
 
+        avg_verified = 0.0
+        if verified_rows:
+            verified_times = [row["hours_to_verified"] for row in verified_rows if row["hours_to_verified"] is not None]
+            if verified_times:
+                avg_verified = float(round(sum(verified_times) / len(verified_times), 1))
+
+        avg_changes_requested = 0.0
+        if changes_requested_rows:
+            changes_requested_times = [
+                row["hours_to_changes_requested"]
+                for row in changes_requested_rows
+                if row["hours_to_changes_requested"] is not None
+            ]
+            if changes_requested_times:
+                avg_changes_requested = float(round(sum(changes_requested_times) / len(changes_requested_times), 1))
+
         avg_lifecycle = 0.0
-        total_prs = 0
         if lifecycle_row:
             avg_lifecycle = round(float(lifecycle_row["avg_hours"] or 0), 1)
-            total_prs = lifecycle_row["total_prs"] or 0
+
+        total_prs = 0
+        if total_prs_row:
+            total_prs = total_prs_row["total_prs"] or 0
 
         summary = {
             "avg_time_to_first_review_hours": avg_first_review,
             "avg_time_to_approval_hours": avg_approval,
+            "avg_time_to_first_verified_hours": avg_verified,
+            "avg_time_to_first_changes_requested_hours": avg_changes_requested,
             "avg_pr_lifecycle_hours": avg_lifecycle,
             "total_prs_analyzed": total_prs,
         }
@@ -430,6 +588,10 @@ async def get_review_turnaround(
                 "repository": row["repository"],
                 "avg_time_to_first_review_hours": float(row["avg_time_to_first_review_hours"] or 0),
                 "avg_time_to_approval_hours": float(row["avg_time_to_approval_hours"] or 0),
+                "avg_time_to_first_verified_hours": float(row["avg_time_to_first_verified_hours"] or 0),
+                "avg_time_to_first_changes_requested_hours": float(
+                    row["avg_time_to_first_changes_requested_hours"] or 0
+                ),
                 "avg_pr_lifecycle_hours": float(row["avg_pr_lifecycle_hours"] or 0),
                 "total_prs": row["total_prs"],
             }

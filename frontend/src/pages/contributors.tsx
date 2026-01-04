@@ -85,28 +85,41 @@ export function ContributorsPage(): React.ReactElement {
         {
           label: "Avg Time to First Review",
           value: formatHours(turnaround.summary.avg_time_to_first_review_hours),
+          tooltip:
+            "Average hours from PR opened to first review. Calculated from pull_request_review webhook events, excluding self-reviews.",
         },
         {
           label: "Avg Time to Approval",
           value: formatHours(turnaround.summary.avg_time_to_approval_hours),
+          tooltip:
+            "Average hours from PR opened to first approved-* label. Calculated from pull_request labeled webhook events.",
         },
         {
           label: "Avg PR Lifecycle",
           value: formatHours(turnaround.summary.avg_pr_lifecycle_hours),
+          tooltip:
+            "Average hours from PR opened to closed/merged. Only includes completed PRs. Calculated from pull_request closed webhook events.",
         },
         {
           label: "PRs Analyzed",
           value: turnaround.summary.total_prs_analyzed,
+          tooltip:
+            "Total PRs opened in the selected time range. Counted from pull_request opened webhook events.",
         },
       ]
     : [];
 
   // Column definitions for Turnaround by Repository
   const turnaroundByRepoColumns: readonly ColumnDef<TurnaroundByRepository>[] = [
-    { key: "repository", label: "Repository", sortable: true },
+    {
+      key: "repository",
+      label: "Repository",
+      sortable: true,
+    },
     {
       key: "avg_time_to_first_review_hours",
       label: "First Review",
+      tooltip: "Average hours from PR opened to first review",
       align: "right",
       sortable: true,
       render: (item) => formatHours(item.avg_time_to_first_review_hours),
@@ -115,6 +128,7 @@ export function ContributorsPage(): React.ReactElement {
     {
       key: "avg_time_to_approval_hours",
       label: "Approval",
+      tooltip: "Average hours from PR opened to first approved-* label",
       align: "right",
       sortable: true,
       render: (item) => formatHours(item.avg_time_to_approval_hours),
@@ -123,6 +137,7 @@ export function ContributorsPage(): React.ReactElement {
     {
       key: "avg_pr_lifecycle_hours",
       label: "Lifecycle",
+      tooltip: "Average hours from PR opened to closed/merged (completed PRs only)",
       align: "right",
       sortable: true,
       render: (item) => formatHours(item.avg_pr_lifecycle_hours),
@@ -143,6 +158,7 @@ export function ContributorsPage(): React.ReactElement {
     {
       key: "avg_response_time_hours",
       label: "Avg Response",
+      tooltip: "Average hours from PR opened to review by this user",
       align: "right",
       sortable: true,
       render: (item) => formatHours(item.avg_response_time_hours),
@@ -150,7 +166,7 @@ export function ContributorsPage(): React.ReactElement {
     },
     {
       key: "total_reviews",
-      label: "Total Reviews",
+      label: "Reviews",
       align: "right",
       sortable: true,
       getValue: (item) => item.total_reviews,
@@ -199,13 +215,14 @@ export function ContributorsPage(): React.ReactElement {
     {
       key: "closed_prs",
       label: "Closed",
+      tooltip: "PRs closed without merge",
       align: "right",
       sortable: true,
       getValue: (item) => item.closed_prs,
     },
     {
       key: "avg_commits_per_pr",
-      label: "Avg Commits/PR",
+      label: "Avg Commits",
       align: "right",
       sortable: true,
       render: (item) =>
@@ -235,7 +252,7 @@ export function ContributorsPage(): React.ReactElement {
     },
     {
       key: "total_reviews",
-      label: "Total Reviews",
+      label: "Reviews",
       align: "right",
       sortable: true,
       getValue: (item) => item.total_reviews,
@@ -249,7 +266,8 @@ export function ContributorsPage(): React.ReactElement {
     },
     {
       key: "avg_reviews_per_pr",
-      label: "Avg Reviews/PR",
+      label: "Avg per PR",
+      tooltip: "Average reviews per PR (re-reviews count)",
       align: "right",
       sortable: true,
       render: (item) =>
@@ -259,6 +277,7 @@ export function ContributorsPage(): React.ReactElement {
     {
       key: "cross_team_reviews",
       label: "Cross-Team",
+      tooltip: "Reviews on PRs from different sig team",
       align: "right",
       sortable: true,
       getValue: (item) => item.cross_team_reviews,
@@ -286,7 +305,8 @@ export function ContributorsPage(): React.ReactElement {
     },
     {
       key: "total_approvals",
-      label: "Total Approvals",
+      label: "Approvals",
+      tooltip: "Total /approve commands issued",
       align: "right",
       sortable: true,
       getValue: (item) => item.total_approvals,
@@ -321,14 +341,15 @@ export function ContributorsPage(): React.ReactElement {
     },
     {
       key: "total_lgtm",
-      label: "Total LGTM",
+      label: "LGTMs",
+      tooltip: "Total /lgtm commands issued",
       align: "right",
       sortable: true,
       getValue: (item) => item.total_lgtm,
     },
     {
       key: "prs_lgtm",
-      label: "PRs with LGTM",
+      label: "PRs LGTM'd",
       align: "right",
       sortable: true,
       getValue: (item) => item.prs_lgtm,

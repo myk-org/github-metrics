@@ -3,16 +3,27 @@
 Provides consistent response structures across all API routes.
 """
 
-from typing import Any
+from typing import Any, TypedDict
 
 from backend.utils.query_builders import calculate_total_pages
+
+
+class PaginationMetadata(TypedDict):
+    """Pagination metadata structure."""
+
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    has_next: bool
+    has_prev: bool
 
 
 def format_pagination_metadata(
     total: int,
     page: int,
     page_size: int,
-) -> dict[str, Any]:
+) -> PaginationMetadata:
     """Format pagination metadata for API responses.
 
     Args:

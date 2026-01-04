@@ -1,6 +1,7 @@
 """API route modules for GitHub Metrics service."""
 
 from backend.routes.api import (
+    comment_resolution,
     contributors,
     pr_story,
     repositories,
@@ -12,6 +13,7 @@ from backend.routes.api import (
 )
 
 __all__ = [
+    "comment_resolution",
     "contributors",
     "pr_story",
     "repositories",

@@ -2470,15 +2470,28 @@ class TestReviewTurnaroundEndpoint:
             {"hours_to_approval": 8.0},
             {"hours_to_approval": 9.0},
         ]
+        mock_verified_rows = [
+            {"hours_to_verified": 10.0},
+            {"hours_to_verified": 11.0},
+        ]
+        mock_changes_requested_rows = [
+            {"hours_to_changes_requested": 4.5},
+            {"hours_to_changes_requested": 5.0},
+        ]
         mock_lifecycle_row = {
             "avg_hours": 24.5,
-            "total_prs": 150,
+            "total_prs": 50,  # Completed PRs only
+        }
+        mock_total_prs_row = {
+            "total_prs": 150,  # All PRs opened in time range
         }
         mock_by_repo_rows = [
             {
                 "repository": "org/repo1",
                 "avg_time_to_first_review_hours": 1.2,
                 "avg_time_to_approval_hours": 4.5,
+                "avg_time_to_first_verified_hours": 6.0,
+                "avg_time_to_first_changes_requested_hours": 3.5,
                 "avg_pr_lifecycle_hours": 12.0,
                 "total_prs": 50,
             },
@@ -2486,6 +2499,8 @@ class TestReviewTurnaroundEndpoint:
                 "repository": "org/repo2",
                 "avg_time_to_first_review_hours": 2.8,
                 "avg_time_to_approval_hours": 10.5,
+                "avg_time_to_first_verified_hours": 12.5,
+                "avg_time_to_first_changes_requested_hours": 6.0,
                 "avg_pr_lifecycle_hours": 30.0,
                 "total_prs": 100,
             },
@@ -2510,11 +2525,18 @@ class TestReviewTurnaroundEndpoint:
                 side_effect=[
                     mock_first_review_rows,
                     mock_approval_rows,
+                    mock_verified_rows,
+                    mock_changes_requested_rows,
                     mock_by_repo_rows,
                     mock_by_reviewer_rows,
                 ]
             )
-            mock_db.fetchrow = AsyncMock(return_value=mock_lifecycle_row)
+            mock_db.fetchrow = AsyncMock(
+                side_effect=[
+                    mock_lifecycle_row,
+                    mock_total_prs_row,
+                ]
+            )
 
             client = TestClient(app)
             response = client.get("/api/metrics/turnaround")
@@ -2526,6 +2548,8 @@ class TestReviewTurnaroundEndpoint:
             assert "summary" in data
             assert data["summary"]["avg_time_to_first_review_hours"] == 2.8
             assert data["summary"]["avg_time_to_approval_hours"] == 8.5
+            assert data["summary"]["avg_time_to_first_verified_hours"] == 10.5
+            assert data["summary"]["avg_time_to_first_changes_requested_hours"] == 4.8
             assert data["summary"]["avg_pr_lifecycle_hours"] == 24.5
             assert data["summary"]["total_prs_analyzed"] == 150
 
@@ -2534,6 +2558,8 @@ class TestReviewTurnaroundEndpoint:
             assert len(data["by_repository"]) == 2
             assert data["by_repository"][0]["repository"] == "org/repo1"
             assert data["by_repository"][0]["avg_time_to_first_review_hours"] == 1.2
+            assert data["by_repository"][0]["avg_time_to_first_verified_hours"] == 6.0
+            assert data["by_repository"][0]["avg_time_to_first_changes_requested_hours"] == 3.5
 
             # Check by_reviewer
             assert "by_reviewer" in data
@@ -2546,12 +2572,17 @@ class TestReviewTurnaroundEndpoint:
         """Test review turnaround metrics with time and repository filters."""
         mock_first_review_rows = [{"hours_to_first_review": 1.5}]
         mock_approval_rows = [{"hours_to_approval": 4.0}]
-        mock_lifecycle_row = {"avg_hours": 10.0, "total_prs": 25}
+        mock_verified_rows = [{"hours_to_verified": 5.5}]
+        mock_changes_requested_rows = [{"hours_to_changes_requested": 3.0}]
+        mock_lifecycle_row = {"avg_hours": 10.0, "total_prs": 10}  # Completed PRs only
+        mock_total_prs_row = {"total_prs": 25}  # All PRs opened
         mock_by_repo_rows = [
             {
                 "repository": "org/specific-repo",
                 "avg_time_to_first_review_hours": 1.5,
                 "avg_time_to_approval_hours": 4.0,
+                "avg_time_to_first_verified_hours": 5.5,
+                "avg_time_to_first_changes_requested_hours": 3.0,
                 "avg_pr_lifecycle_hours": 10.0,
                 "total_prs": 25,
             }
@@ -2570,11 +2601,18 @@ class TestReviewTurnaroundEndpoint:
                 side_effect=[
                     mock_first_review_rows,
                     mock_approval_rows,
+                    mock_verified_rows,
+                    mock_changes_requested_rows,
                     mock_by_repo_rows,
                     mock_by_reviewer_rows,
                 ]
             )
-            mock_db.fetchrow = AsyncMock(return_value=mock_lifecycle_row)
+            mock_db.fetchrow = AsyncMock(
+                side_effect=[
+                    mock_lifecycle_row,
+                    mock_total_prs_row,
+                ]
+            )
 
             client = TestClient(app)
             response = client.get(
@@ -2596,12 +2634,17 @@ class TestReviewTurnaroundEndpoint:
         """Test review turnaround metrics filtered by reviewer."""
         mock_first_review_rows = [{"hours_to_first_review": 2.0}]
         mock_approval_rows = [{"hours_to_approval": 6.0}]
-        mock_lifecycle_row = {"avg_hours": 15.0, "total_prs": 40}
+        mock_verified_rows = [{"hours_to_verified": 7.5}]
+        mock_changes_requested_rows = [{"hours_to_changes_requested": 4.0}]
+        mock_lifecycle_row = {"avg_hours": 15.0, "total_prs": 20}  # Completed PRs only
+        mock_total_prs_row = {"total_prs": 40}  # All PRs opened
         mock_by_repo_rows = [
             {
                 "repository": "org/repo1",
                 "avg_time_to_first_review_hours": 2.0,
                 "avg_time_to_approval_hours": 6.0,
+                "avg_time_to_first_verified_hours": 7.5,
+                "avg_time_to_first_changes_requested_hours": 4.0,
                 "avg_pr_lifecycle_hours": 15.0,
                 "total_prs": 40,
             }
@@ -2620,11 +2663,18 @@ class TestReviewTurnaroundEndpoint:
                 side_effect=[
                     mock_first_review_rows,
                     mock_approval_rows,
+                    mock_verified_rows,
+                    mock_changes_requested_rows,
                     mock_by_repo_rows,
                     mock_by_reviewer_rows,
                 ]
             )
-            mock_db.fetchrow = AsyncMock(return_value=mock_lifecycle_row)
+            mock_db.fetchrow = AsyncMock(
+                side_effect=[
+                    mock_lifecycle_row,
+                    mock_total_prs_row,
+                ]
+            )
 
             client = TestClient(app)
             response = client.get("/api/metrics/turnaround", params={"user": "specific-reviewer"})
@@ -2637,8 +2687,13 @@ class TestReviewTurnaroundEndpoint:
     def test_get_review_turnaround_empty_results(self) -> None:
         """Test review turnaround metrics with no data."""
         with patch("backend.routes.api.turnaround.db_manager") as mock_db:
-            mock_db.fetch = AsyncMock(side_effect=[[], [], [], []])
-            mock_db.fetchrow = AsyncMock(return_value={"avg_hours": None, "total_prs": 0})
+            mock_db.fetch = AsyncMock(side_effect=[[], [], [], [], [], []])
+            mock_db.fetchrow = AsyncMock(
+                side_effect=[
+                    {"avg_hours": None, "total_prs": 0},  # lifecycle_row
+                    {"total_prs": 0},  # total_prs_row
+                ]
+            )
 
             client = TestClient(app)
             response = client.get("/api/metrics/turnaround")
@@ -2647,6 +2702,8 @@ class TestReviewTurnaroundEndpoint:
             data = response.json()
             assert data["summary"]["avg_time_to_first_review_hours"] == 0.0
             assert data["summary"]["avg_time_to_approval_hours"] == 0.0
+            assert data["summary"]["avg_time_to_first_verified_hours"] == 0.0
+            assert data["summary"]["avg_time_to_first_changes_requested_hours"] == 0.0
             assert data["summary"]["avg_pr_lifecycle_hours"] == 0.0
             assert data["summary"]["total_prs_analyzed"] == 0
             assert len(data["by_repository"]) == 0
@@ -2656,12 +2713,17 @@ class TestReviewTurnaroundEndpoint:
         """Test review turnaround metrics handles NULL values gracefully."""
         mock_first_review_rows = [{"hours_to_first_review": None}, {"hours_to_first_review": 3.0}]
         mock_approval_rows = [{"hours_to_approval": None}]
-        mock_lifecycle_row = {"avg_hours": None, "total_prs": 10}
+        mock_verified_rows = [{"hours_to_verified": None}]
+        mock_changes_requested_rows = [{"hours_to_changes_requested": None}]
+        mock_lifecycle_row = {"avg_hours": None, "total_prs": 5}  # Completed PRs only
+        mock_total_prs_row = {"total_prs": 10}  # All PRs opened
         mock_by_repo_rows = [
             {
                 "repository": "org/repo1",
                 "avg_time_to_first_review_hours": None,
                 "avg_time_to_approval_hours": None,
+                "avg_time_to_first_verified_hours": None,
+                "avg_time_to_first_changes_requested_hours": None,
                 "avg_pr_lifecycle_hours": None,
                 "total_prs": 10,
             }
@@ -2680,11 +2742,18 @@ class TestReviewTurnaroundEndpoint:
                 side_effect=[
                     mock_first_review_rows,
                     mock_approval_rows,
+                    mock_verified_rows,
+                    mock_changes_requested_rows,
                     mock_by_repo_rows,
                     mock_by_reviewer_rows,
                 ]
             )
-            mock_db.fetchrow = AsyncMock(return_value=mock_lifecycle_row)
+            mock_db.fetchrow = AsyncMock(
+                side_effect=[
+                    mock_lifecycle_row,
+                    mock_total_prs_row,
+                ]
+            )
 
             client = TestClient(app)
             response = client.get("/api/metrics/turnaround")
@@ -2695,8 +2764,12 @@ class TestReviewTurnaroundEndpoint:
             # Should handle NULL values and still compute averages
             assert data["summary"]["avg_time_to_first_review_hours"] == 3.0
             assert data["summary"]["avg_time_to_approval_hours"] == 0.0
+            assert data["summary"]["avg_time_to_first_verified_hours"] == 0.0
+            assert data["summary"]["avg_time_to_first_changes_requested_hours"] == 0.0
             assert data["summary"]["avg_pr_lifecycle_hours"] == 0.0
             assert data["by_repository"][0]["avg_time_to_first_review_hours"] == 0.0
+            assert data["by_repository"][0]["avg_time_to_first_verified_hours"] == 0.0
+            assert data["by_repository"][0]["avg_time_to_first_changes_requested_hours"] == 0.0
             assert data["by_reviewer"][0]["avg_response_time_hours"] == 0.0
 
     def test_get_review_turnaround_invalid_datetime(self) -> None:

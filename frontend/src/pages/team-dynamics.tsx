@@ -129,6 +129,8 @@ export function TeamDynamicsPage(): React.ReactElement {
         {
           label: "Total Contributors",
           value: teamData.workload.summary.total_contributors,
+          tooltip:
+            "Unique users who created PRs in the time range. Counted from pull_request opened webhook events.",
         },
         {
           label: "Avg PRs per Contributor",
@@ -136,10 +138,15 @@ export function TeamDynamicsPage(): React.ReactElement {
             typeof teamData.workload.summary.avg_prs_per_contributor === "number"
               ? teamData.workload.summary.avg_prs_per_contributor.toFixed(1)
               : "-",
+          tooltip:
+            "Average PRs created per contributor. Calculated as total PRs / total contributors.",
         },
         {
           label: "Top Contributor",
-          value: teamData.workload.summary.top_contributor?.user ?? "N/A",
+          value: teamData.workload.summary.top_contributor
+            ? `${teamData.workload.summary.top_contributor.user} (${String(teamData.workload.summary.top_contributor.total_prs)} PRs)`
+            : "N/A",
+          tooltip: "User who created the most PRs in the time range. Shows username with PR count.",
         },
         {
           label: "Workload Gini Coefficient",
@@ -147,6 +154,8 @@ export function TeamDynamicsPage(): React.ReactElement {
             typeof teamData.workload.summary.workload_gini === "number"
               ? teamData.workload.summary.workload_gini.toFixed(2)
               : "-",
+          tooltip:
+            "Gini coefficient (0-1) measuring workload distribution. 0 = perfectly equal, 1 = one person does all work. Calculated from PR counts per contributor.",
         },
       ]
     : [];
@@ -157,14 +166,20 @@ export function TeamDynamicsPage(): React.ReactElement {
         {
           label: "Avg Review Time",
           value: formatHours(teamData.review_efficiency.summary.avg_review_time_hours),
+          tooltip:
+            "Average hours from PR opened to first review. Calculated from pull_request_review webhook events.",
         },
         {
           label: "Median Review Time",
           value: formatHours(teamData.review_efficiency.summary.median_review_time_hours),
+          tooltip:
+            "Median hours to first review (50th percentile). Less affected by outliers than average.",
         },
         {
           label: "Fastest Reviewer",
           value: teamData.review_efficiency.summary.fastest_reviewer?.user ?? "N/A",
+          tooltip:
+            "Reviewer with lowest average response time. Requires minimum review threshold to qualify.",
           ...(teamData.review_efficiency.summary.fastest_reviewer?.low_sample_size && {
             warning: `Sample size: ${String(teamData.review_efficiency.summary.fastest_reviewer.total_reviews)} reviews (below ${String(teamData.review_efficiency.summary.min_reviews_threshold)} threshold)`,
           }),
@@ -172,6 +187,8 @@ export function TeamDynamicsPage(): React.ReactElement {
         {
           label: "Slowest Reviewer",
           value: teamData.review_efficiency.summary.slowest_reviewer?.user ?? "N/A",
+          tooltip:
+            "Reviewer with highest average response time. Requires minimum review threshold to qualify.",
           ...(teamData.review_efficiency.summary.slowest_reviewer?.low_sample_size && {
             warning: `Sample size: ${String(teamData.review_efficiency.summary.slowest_reviewer.total_reviews)} reviews (below ${String(teamData.review_efficiency.summary.min_reviews_threshold)} threshold)`,
           }),
@@ -188,6 +205,8 @@ export function TeamDynamicsPage(): React.ReactElement {
         {
           label: "Total Cross-Team Reviews",
           value: crossTeamData.summary.total_cross_team_reviews,
+          tooltip:
+            "Reviews where reviewer's team differs from PR's sig label. Calculated from pull_request_review events matched with sig-* labels.",
         },
         {
           label: "Top Reviewer Team",
@@ -195,6 +214,8 @@ export function TeamDynamicsPage(): React.ReactElement {
             Object.entries(crossTeamData.summary.by_reviewer_team).sort(
               ([, a], [, b]) => b - a
             )[0]?.[0] ?? "N/A",
+          tooltip:
+            "Team that performed the most cross-team reviews. Based on reviewer's sig-* label membership.",
         },
         {
           label: "Top PR Team",
@@ -202,6 +223,8 @@ export function TeamDynamicsPage(): React.ReactElement {
             Object.entries(crossTeamData.summary.by_pr_team).sort(
               ([, a], [, b]) => b - a
             )[0]?.[0] ?? "N/A",
+          tooltip:
+            "Team whose PRs received the most cross-team reviews. Based on PR's sig-* label.",
         },
       ]
     : [];
@@ -269,7 +292,8 @@ export function TeamDynamicsPage(): React.ReactElement {
     },
     {
       key: "avg_review_time_hours",
-      label: "Avg Review Time",
+      label: "Avg Time",
+      tooltip: "Average hours from PR opened to this reviewer's review",
       align: "right",
       sortable: true,
       render: (item) => formatHours(item.avg_review_time_hours),
@@ -277,7 +301,8 @@ export function TeamDynamicsPage(): React.ReactElement {
     },
     {
       key: "median_review_time_hours",
-      label: "Median Review Time",
+      label: "Median Time",
+      tooltip: "Median review response time (50th percentile)",
       align: "right",
       sortable: true,
       render: (item) => formatHours(item.median_review_time_hours),
@@ -285,7 +310,7 @@ export function TeamDynamicsPage(): React.ReactElement {
     },
     {
       key: "total_reviews",
-      label: "Total Reviews",
+      label: "Reviews",
       align: "right",
       sortable: true,
       getValue: (item) => item.total_reviews,
@@ -314,6 +339,7 @@ export function TeamDynamicsPage(): React.ReactElement {
     {
       key: "avg_approval_hours",
       label: "Avg Approval Time",
+      tooltip: "Average hours from PR opened to approval by this user",
       align: "right",
       sortable: true,
       render: (item) => formatHours(item.avg_approval_hours),
@@ -321,7 +347,7 @@ export function TeamDynamicsPage(): React.ReactElement {
     },
     {
       key: "total_approvals",
-      label: "Total Approvals",
+      label: "Approvals",
       align: "right",
       sortable: true,
       getValue: (item) => item.total_approvals,
@@ -332,7 +358,7 @@ export function TeamDynamicsPage(): React.ReactElement {
   const crossTeamColumns: readonly ColumnDef<CrossTeamReviewRow>[] = [
     {
       key: "pr_number",
-      label: "PR#",
+      label: "PR",
       sortable: true,
       render: (item) => (
         <a
@@ -355,6 +381,7 @@ export function TeamDynamicsPage(): React.ReactElement {
     {
       key: "reviewer",
       label: "Reviewer",
+      tooltip: "User who reviewed a PR from different team",
       sortable: true,
       render: (item) => (
         <button
@@ -379,12 +406,14 @@ export function TeamDynamicsPage(): React.ReactElement {
     {
       key: "pr_sig_label",
       label: "PR Team",
+      tooltip: "sig-* label on the PR being reviewed",
       sortable: true,
       getValue: (item) => item.pr_sig_label,
     },
     {
       key: "review_type",
       label: "Review Type",
+      tooltip: "Type of review: approved, changes_requested, commented, or lgtm",
       sortable: true,
       getValue: (item) => item.review_type,
     },

@@ -3,29 +3,41 @@ import type { DateFormat } from "@/context/date-format-context";
 /**
  * Format hours into human-readable format.
  *
- * @param hours - Number of hours to format
+ * @param hours - Number of hours to format (accepts string for API backwards compatibility)
  * @returns Formatted string (e.g., "6m", "2.4h", "2.1d")
+ *          Negative values are prefixed with "-" (e.g., "-30m" means 30 minutes early)
  *
  * @example
  * formatHours(0.1) // "6m"
  * formatHours(2.4) // "2.4h"
  * formatHours(39.4) // "1.6d"
+ * formatHours(-1) // "-1.0h" (resolved 1 hour before CI check)
+ * formatHours(-0.5) // "-30m" (resolved 30 minutes early)
  * formatHours(null) // "-"
  */
-export function formatHours(hours: number | null | undefined): string {
-  if (typeof hours !== "number") {
+export function formatHours(hours: number | string | null | undefined): string {
+  // Handle string numbers from API (defensive, for backwards compatibility)
+  const numericHours = typeof hours === "string" ? parseFloat(hours) : hours;
+
+  if (typeof numericHours !== "number" || Number.isNaN(numericHours)) {
     return "-";
   }
-  if (hours < 1) {
-    const minutes = Math.round(hours * 60);
-    return `${String(minutes)}m`;
+
+  // Handle negative values - show as negative time
+  const isNegative = numericHours < 0;
+  const absHours = Math.abs(numericHours);
+  const prefix = isNegative ? "-" : "";
+
+  if (absHours < 1) {
+    const minutes = Math.round(absHours * 60);
+    return `${prefix}${String(minutes)}m`;
   }
-  if (hours < 24) {
-    const formattedHours = hours.toFixed(1);
-    return `${formattedHours}h`;
+  if (absHours < 24) {
+    const formattedHours = absHours.toFixed(1);
+    return `${prefix}${formattedHours}h`;
   }
-  const days = (hours / 24).toFixed(1);
-  return `${days}d`;
+  const days = (absHours / 24).toFixed(1);
+  return `${prefix}${days}d`;
 }
 
 /**
