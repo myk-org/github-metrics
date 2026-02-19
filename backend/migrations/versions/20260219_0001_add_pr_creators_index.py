@@ -42,5 +42,18 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Drop the composite index."""
-    op.drop_index("ix_webhooks_repo_pr_number_created_at", table_name="webhooks")
+    """Drop the composite index.
+
+    Uses CONCURRENTLY to avoid locking the table during index removal.
+    Must run outside a transaction (autocommit mode).
+    """
+    conn = op.get_bind()
+    # CONCURRENTLY requires autocommit (no transaction)
+    with conn.execution_options(isolation_level="AUTOCOMMIT"):
+        conn.execute(
+            text(
+                """
+                DROP INDEX CONCURRENTLY IF EXISTS ix_webhooks_repo_pr_number_created_at
+                """
+            )
+        )

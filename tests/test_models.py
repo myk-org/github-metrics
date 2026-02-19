@@ -20,6 +20,13 @@ INDEX_NAME = "ix_webhooks_repo_pr_number_created_at"
 class TestWebhookCompositeIndex:
     """Tests for the composite index on the Webhook model."""
 
+    @staticmethod
+    def _find_index(name: str) -> Index:
+        for arg in Webhook.__table_args__:
+            if isinstance(arg, Index) and arg.name == name:
+                return arg
+        raise AssertionError(f"Index {name} not found in __table_args__")
+
     def test_table_args_contains_composite_index(self) -> None:
         """Test that Webhook.__table_args__ includes the composite index."""
         index_names = [arg.name for arg in Webhook.__table_args__ if isinstance(arg, Index)]
@@ -27,26 +34,14 @@ class TestWebhookCompositeIndex:
 
     def test_composite_index_columns(self) -> None:
         """Test that the composite index covers repository, pr_number, and created_at."""
-        target_index = None
-        for arg in Webhook.__table_args__:
-            if isinstance(arg, Index) and arg.name == INDEX_NAME:
-                target_index = arg
-                break
-
-        assert target_index is not None, f"Index {INDEX_NAME} not found in __table_args__"
+        target_index = self._find_index(INDEX_NAME)
 
         column_names = [col.name for col in target_index.columns]
         assert column_names == ["repository", "pr_number", "created_at"]
 
     def test_composite_index_has_partial_where_clause(self) -> None:
         """Test that the composite index has a WHERE pr_number IS NOT NULL clause."""
-        target_index = None
-        for arg in Webhook.__table_args__:
-            if isinstance(arg, Index) and arg.name == INDEX_NAME:
-                target_index = arg
-                break
-
-        assert target_index is not None, f"Index {INDEX_NAME} not found in __table_args__"
+        target_index = self._find_index(INDEX_NAME)
 
         dialect_options = target_index.dialect_options.get("postgresql", {})
         where_clause = dialect_options.get("where")
@@ -150,10 +145,12 @@ class TestPrCreatorsIndexMigration:
         """Test that downgrade drops the ix_webhooks_repo_pr_number_created_at index."""
         migration = self._load_migration()
 
-        with patch.object(migration.op, "drop_index") as mock_drop:
+        mock_bind = MagicMock()
+
+        with patch.object(migration.op, "get_bind", return_value=mock_bind):
             migration.downgrade()
 
-        mock_drop.assert_called_once_with(
-            INDEX_NAME,
-            table_name="webhooks",
-        )
+        mock_bind.execution_options.assert_called_once_with(isolation_level="AUTOCOMMIT")
+        executed_sql = str(mock_bind.execute.call_args[0][0].text).strip()
+        assert "DROP INDEX CONCURRENTLY" in executed_sql
+        assert INDEX_NAME in executed_sql
