@@ -82,6 +82,13 @@ class Webhook(Base):
     __table_args__ = (
         Index("ix_webhooks_repository_created_at", "repository", "created_at"),
         Index("ix_webhooks_repository_event_type", "repository", "event_type"),
+        Index(
+            "ix_webhooks_repo_pr_number_created_at",
+            "repository",
+            "pr_number",
+            "created_at",
+            postgresql_where=text("pr_number IS NOT NULL"),
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
